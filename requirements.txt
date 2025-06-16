@@ -40,7 +40,7 @@ librosa
 pydub
 yt-dlp
 opencv-python
-moviepy-editor
+moviepy
 Pillow
 ffmpeg-python
 
