@@ -1,0 +1,14 @@
+# Minimal Core Dependencies for Fast Development Builds
+langchain==0.3.25
+langgraph==0.4.8
+langchain-core==0.3.65
+langchain-groq==0.3.2
+langchain-tavily==0.2.2
+tavily-python==0.7.6
+gradio==5.25.2
+python-dotenv==1.1.0
+groq==0.28.0
+numpy==2.2.6
+requests==2.32.4
+scikit-learn==1.7.0
+sentence-transformers==4.1.0 
