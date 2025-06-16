@@ -586,11 +586,9 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
                 value=False, 
                 info="Clear cached answers to force fresh processing"
             )
-            cache_info = gr.Textbox(
-                label="Cache Status", 
-                value=f"Enabled: {CACHE_ENABLED}, Current size: {len(question_cache.cache)}", 
-                interactive=False
-            )
+            # Simplified cache info without auto-update
+            cache_stats = question_cache.stats()
+            gr.Markdown(f"**Cache Status**: Enabled: {cache_stats['enabled']}, Max Size: {cache_stats['max_size']}")
 
     with gr.Row():
         run_button = gr.Button(
@@ -611,14 +609,6 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
         wrap=True,
         show_label=True
     )
-
-    # Update cache info every few seconds
-    def update_cache_info():
-        stats = question_cache.stats()
-        return f"Enabled: {stats['enabled']}, Size: {stats['size']}/{stats['max_size']}"
-    
-    # Auto-update cache info
-    cache_info.change(fn=update_cache_info, outputs=[cache_info], every=5)
 
     run_button.click(
         fn=run_and_submit_all,
