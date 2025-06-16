@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class RateLimiter:
     """Simple rate limiter for API calls."""
     
-    def __init__(self, max_requests_per_minute=50):  # Conservative limit
+    def __init__(self, max_requests_per_minute=60):  # Conservative limit for faster model
         self.max_requests = max_requests_per_minute
         self.requests = []
         
@@ -36,7 +36,7 @@ class RateLimiter:
         self.requests.append(now)
 
 # Global rate limiter
-rate_limiter = RateLimiter(max_requests_per_minute=45)  # Conservative limit
+rate_limiter = RateLimiter(max_requests_per_minute=60)  # Increased for faster model
 
 def exponential_backoff_retry(func, max_retries=3):
     """Retry function with exponential backoff for rate limit errors."""
@@ -92,10 +92,10 @@ class ReActAgent:
 
     def _get_llm(self):
         """Initializes and returns the Groq LLM with rate-limit friendly settings."""
-        # Use a smaller, faster model to reduce token usage and increase speed
+        # Use the faster, cheaper Llama 3.1 8B Instant model
         return ChatGroq(
             temperature=0, 
-            model_name="llama3-8b-8192",  # Smaller model = faster + fewer tokens
+            model_name="llama-3.1-8b-instant",  # Upgraded: 750 tok/s, $0.05-0.08, 128k context
             max_tokens=1024,  # Limit response length to avoid context issues
             max_retries=1,    # Let our custom retry logic handle this
             request_timeout=30  # Shorter timeout for faster failure detection
