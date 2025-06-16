@@ -23,11 +23,32 @@ from src.database import get_vector_store
 try:
     from sentence_transformers import SentenceTransformer
     from sklearn.metrics.pairwise import cosine_similarity
-    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+    import torch
+    
+    # GPU Acceleration for embeddings
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f"🎮 GPU Acceleration: Using device '{device}' for embeddings")
+    
+    # Load model with GPU acceleration if available
+    embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device=device)
+    
+    # For high-VRAM systems, use a larger, more accurate model
+    if device == 'cuda':
+        try:
+            # Try loading a larger, more accurate model for better semantic search
+            print("🚀 Loading high-performance embedding model for GPU...")
+            embedding_model_large = SentenceTransformer('all-mpnet-base-v2', device=device)
+            embedding_model = embedding_model_large  # Use the larger model
+            print("✅ High-performance GPU embedding model loaded successfully")
+        except Exception as e:
+            print(f"⚠️ Could not load large model, using standard model: {e}")
+    
     SEMANTIC_SEARCH_AVAILABLE = True
+    print(f"✅ Semantic search initialized with device: {device}")
 except ImportError as e:
     logging.warning(f"Semantic search dependencies not available: {e}")
     SEMANTIC_SEARCH_AVAILABLE = False
+    device = 'cpu'
 
 # Initialize multimedia processing libraries
 try:
@@ -318,6 +339,8 @@ def semantic_search_tool(query: str, filename: str, top_k: int = 3) -> str:
     a.csv with embeddings). Use this when you need to find information related to a
     concept or question, not just a keyword. `filename` must be a file known to
     contain embeddings, like 'supabase_docs.csv'.
+    
+    NOW WITH GPU ACCELERATION for ultra-fast semantic search!
 
     Args:
         query (str): The natural language query to search for.
@@ -331,6 +354,9 @@ def semantic_search_tool(query: str, filename: str, top_k: int = 3) -> str:
         return "Error: Semantic search dependencies (sentence-transformers, scikit-learn) not available."
     
     try:
+        import time
+        start_time = time.time()
+        
         df = pd.read_csv(filename)
         
         # Check if the required columns exist
@@ -340,22 +366,52 @@ def semantic_search_tool(query: str, filename: str, top_k: int = 3) -> str:
         # The embedding column is stored as a string representation of a list.
         # This line safely converts it back to a numpy array for calculation.
         df['embedding'] = df['embedding'].apply(lambda x: np.fromstring(x.strip('[]'), sep=','))
-
-        query_embedding = embedding_model.encode([query])
+        
+        # GPU-accelerated query embedding generation
+        embedding_start = time.time()
+        query_embedding = embedding_model.encode([query], device=device, show_progress_bar=False)
+        embedding_time = time.time() - embedding_start
+        
         knowledge_embeddings = np.vstack(df['embedding'].values)
 
-        sim_scores = cosine_similarity(query_embedding, knowledge_embeddings)[0]
+        # Use GPU-accelerated similarity computation if available
+        if device == 'cuda' and hasattr(torch, 'cuda'):
+            try:
+                # Convert to tensors for GPU computation
+                query_tensor = torch.tensor(query_embedding, device=device)
+                knowledge_tensor = torch.tensor(knowledge_embeddings, device=device)
+                
+                # GPU-accelerated cosine similarity
+                similarities = torch.cosine_similarity(query_tensor, knowledge_tensor, dim=1)
+                sim_scores = similarities.cpu().numpy()
+            except Exception as e:
+                print(f"GPU similarity computation failed, falling back to CPU: {e}")
+                sim_scores = cosine_similarity(query_embedding, knowledge_embeddings)[0]
+        else:
+            sim_scores = cosine_similarity(query_embedding, knowledge_embeddings)[0]
+        
         top_indices = np.argsort(sim_scores)[-top_k:][::-1]
 
-        results = []
-        for idx in top_indices:
-            results.append(f"Retrieved Content (Score: {sim_scores[idx]:.4f}):\n{df.loc[idx, 'content']}")
+        total_time = time.time() - start_time
         
-        return "\n---\n".join(results)
+        results = []
+        results.append(f"🎮 GPU-Accelerated Semantic Search Results (Device: {device})")
+        results.append(f"⚡ Performance: Query processed in {total_time:.3f}s (Embedding: {embedding_time:.3f}s)")
+        results.append(f"📊 Searched {len(knowledge_embeddings)} documents, returning top {top_k}")
+        results.append("=" * 60)
+        
+        for i, idx in enumerate(top_indices):
+            results.append(f"🔍 Result #{i+1} (Relevance Score: {sim_scores[idx]:.4f}):")
+            results.append(f"{df.loc[idx, 'content']}")
+            if i < len(top_indices) - 1:
+                results.append("-" * 40)
+        
+        return "\n".join(results)
+        
     except FileNotFoundError:
         return f"Error: Knowledge base file '{filename}' not found."
     except Exception as e:
-        return f"Error during semantic search: {str(e)}"
+        return f"Error during GPU-accelerated semantic search: {str(e)}"
 
 @tool
 def python_interpreter(code: str) -> str:

@@ -126,7 +126,6 @@ def build_gradio_interface():
                 chatbot = gr.Chatbot(
                     [],
                     label="Conversation",
-                    bubble_fill=False,
                     height=600,
                 )
                 message_box = gr.Textbox(

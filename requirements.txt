@@ -34,6 +34,14 @@ pandas==2.2.3
 scikit-learn==1.7.0
 sentence-transformers==4.1.0
 
+# Async I/O for Ultra-Fast Processing
+aiohttp==3.12.13
+aiofiles==24.1.0
+
+# GPU Acceleration
+torch>=2.0.0
+torchvision>=0.15.0
+
 # Multimedia Processing
 openai-whisper==20240930
 librosa==0.11.0

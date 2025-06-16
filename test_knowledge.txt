@@ -1,0 +1,12 @@
+Project Orion Test Data
+
+This is a test file to validate that the file_reader tool is working correctly.
+
+Key Information:
+- Project Status: Active
+- Team Size: 5 engineers  
+- Target Completion: Q3 2024
+- Primary Technology: Python and LangGraph
+- Success Metric: Agent can read and process this file content
+
+If you can see this text, the context blindness issue has been resolved! 
