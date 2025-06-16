@@ -661,7 +661,7 @@ if __name__ == "__main__":
 
     # Performance optimizations status
     print("\n" + "🔧 OPTIMIZATION STATUS:" + "="*50)
-    print(f"⚡ Parallel Workers: {MAX_PARALLEL_WORKERS} (optimized for 192 vCPU)")
+    print(f"⚡ Parallel Workers: {MAX_PARALLEL_WORKERS} (optimized for API rate limits)")
     print(f"🧠 Intelligent Caching: {'✅ ENABLED' if CACHE_ENABLED else '❌ DISABLED'}")
     print(f"🚀 Async I/O Processing: ✅ ENABLED")
     
@@ -684,9 +684,17 @@ if __name__ == "__main__":
     
     print("\n🎯 EXPECTED PERFORMANCE:")
     print("• Sequential (original): ~15-20 minutes for 20 questions")
-    print("• This optimized version: ~30-90 seconds for 20 questions") 
-    print("• Speedup: 10-30x faster with full optimizations")
+    print("• This optimized version: ~2-5 minutes for 20 questions") 
+    print("• Speedup: 5-8x faster with rate limit protection")
     print("="*80)
 
     print("\nLaunching Ultra-Fast Gradio Interface...")
-    demo.launch(debug=True, share=False) 
+    # Configure for Hugging Face Spaces - SINGLE LAUNCH ONLY
+    demo.launch(
+        server_name="0.0.0.0",  # Bind to all interfaces for HF Spaces
+        server_port=7860,       # Default HF Spaces port
+        debug=True,
+        share=False,
+        show_error=True,
+        quiet=False
+    )
