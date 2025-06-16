@@ -1,0 +1,27 @@
+# Core LangChain/LangGraph
+langchain==0.2.5
+langgraph==0.0.66
+langchain-core==0.2.9
+langchain-groq==0.1.5
+langchain-openai==0.1.8 # For embeddings
+
+# LlamaIndex and Supabase for Knowledge Base
+llama-index==0.10.50
+llama-index-core==0.10.50
+llama-index-embeddings-openai==0.1.10
+llama-index-vector-stores-supabase==0.1.7
+
+# Tools
+tavily-python==0.3.3
+langchain-experimental==0.0.61 # For PythonREPLTool
+
+# Database Connector
+supabase==2.5.0
+psycopg2-binary==2.9.9
+
+# UI and Environment
+gradio==4.36.1
+python-dotenv==1.0.1
+
+# Utilities
+ipython # For code interpreter display 

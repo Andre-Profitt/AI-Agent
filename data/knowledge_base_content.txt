@@ -1,0 +1,17 @@
+Project "Orion" - Q2 2024 Engineering Report Summary
+
+1.  **Objective**: The primary goal for Project Orion in Q2 was to refactor the legacy authentication service to improve security and reduce latency. The target was to achieve a P95 latency of under 200ms.
+
+2.  **Key Results**:
+    *   The team successfully migrated the authentication flow from the monolithic service to a new microservice named "Cerberus".
+    *   End-to-end testing showed a P95 latency of 185ms, achieving the quarter's primary goal.
+    *   Security posture was improved by implementing OAuth 2.0 with PKCE flow, replacing the previous session token-based system.
+
+3.  **Challenges Encountered**:
+    *   Initial deployment to staging caused a 1-day outage due to a misconfiguration in the database connection pool settings.
+    *   Integration with the mobile client required an unscheduled patch release (v3.4.1) to handle the new authentication tokens correctly.
+
+4.  **Next Steps for Q3**:
+    *   The "Cerberus" microservice will be monitored for stability.
+    *   The team will begin work on Project "Pegasus", which focuses on building a new real-time notification system.
+    *   Decommissioning of the old legacy authentication endpoints is scheduled for August 15th. 
