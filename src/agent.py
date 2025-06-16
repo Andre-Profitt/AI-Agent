@@ -1,5 +1,7 @@
 import operator
 import logging
+import time
+import random
 from typing import Annotated, List, TypedDict
 from uuid import UUID
 
@@ -10,6 +12,57 @@ from langgraph.prebuilt import ToolNode
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# --- Rate Limiting Configuration ---
+class RateLimiter:
+    """Simple rate limiter for API calls."""
+    
+    def __init__(self, max_requests_per_minute=50):  # Conservative limit
+        self.max_requests = max_requests_per_minute
+        self.requests = []
+        
+    def wait_if_needed(self):
+        """Wait if we're approaching rate limits."""
+        now = time.time()
+        # Remove requests older than 1 minute
+        self.requests = [req_time for req_time in self.requests if now - req_time < 60]
+        
+        if len(self.requests) >= self.max_requests:
+            sleep_time = 60 - (now - self.requests[0]) + 1  # Wait until oldest request expires + 1 second
+            if sleep_time > 0:
+                logger.warning(f"Rate limit approaching, sleeping for {sleep_time:.1f} seconds")
+                time.sleep(sleep_time)
+        
+        self.requests.append(now)
+
+# Global rate limiter
+rate_limiter = RateLimiter(max_requests_per_minute=45)  # Conservative limit
+
+def exponential_backoff_retry(func, max_retries=3):
+    """Retry function with exponential backoff for rate limit errors."""
+    for attempt in range(max_retries):
+        try:
+            rate_limiter.wait_if_needed()  # Proactive rate limiting
+            return func()
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "rate_limit_exceeded" in error_str:
+                if attempt < max_retries - 1:
+                    wait_time = (2 ** attempt) + random.uniform(0, 1)  # Exponential backoff with jitter
+                    logger.warning(f"Rate limit hit, waiting {wait_time:.1f}s before retry {attempt + 1}/{max_retries}")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    logger.error(f"Max retries reached for rate limit error: {e}")
+                    raise
+            elif "context_length_exceeded" in error_str:
+                logger.error(f"Context length exceeded: {e}")
+                raise
+            else:
+                # For other errors, don't retry
+                raise
+    
+    return None
 
 # --- Agent State Definition ---
 
@@ -38,70 +91,29 @@ class ReActAgent:
         self.graph = self._build_graph()
 
     def _get_llm(self):
-        """Initializes and returns the Groq LLM."""
-        return ChatGroq(temperature=0, model_name="llama3-70b-8192")
+        """Initializes and returns the Groq LLM with rate-limit friendly settings."""
+        # Use a smaller, faster model to reduce token usage and increase speed
+        return ChatGroq(
+            temperature=0, 
+            model_name="llama3-8b-8192",  # Smaller model = faster + fewer tokens
+            max_tokens=1024,  # Limit response length to avoid context issues
+            max_retries=1,    # Let our custom retry logic handle this
+            request_timeout=30  # Shorter timeout for faster failure detection
+        )
     
     def _get_system_prompt(self):
-        """Returns the enhanced system prompt for the agent."""
-        return """You are Orion, a highly capable AI research assistant with advanced multimedia and analysis capabilities. Your primary mission is to provide accurate, factual answers by intelligently utilizing a comprehensive suite of powerful tools to interact with your environment. You must always ground your answers in the information retrieved from these tools. Never answer from memory if a tool can provide a more accurate, up-to-date answer.
+        """Returns a more concise system prompt to reduce token usage."""
+        return """You are Orion, an AI research assistant. Use available tools to provide accurate answers.
 
-You will operate using a strict Thought, Action, Observation loop. For every step, you must first externalize your reasoning in a <thought> block. Based on your thought, you will then choose a single tool to execute in an <action> block. You will then be given the result in an <observation> block. You must repeat this process until you have sufficient information to provide the final answer.
+PROCESS: Think → Act → Observe → Repeat until you have enough info for a final answer.
 
-AVAILABLE TOOLS:
+AVAILABLE TOOLS: file_reader, semantic_search_tool, web_researcher, python_interpreter, tavily_search, and others.
 
-You have access to the following comprehensive tools. Use them as needed to fulfill the user's request.
-
-**FILE ACCESS & READING:**
-file_reader(filename: str, lines: int = -1) -> str:
-"Reads the content of text files (.txt), scripts (.py), or structured files (.csv,.json). Use lines parameter to read only first N lines."
-
-advanced_file_reader(filename: str) -> str:
-"Advanced file reader for Excel (.xlsx), PDF (.pdf), Word (.docx) documents. Automatically detects file type and extracts content appropriately."
-
-**MULTIMEDIA PROCESSING:**
-audio_transcriber(filename: str) -> str:
-"Transcribes audio files (MP3, WAV, M4A, etc.) to text using OpenAI Whisper. Perfect for voice memos, recordings, and audio content analysis."
-
-video_analyzer(url: str, action: str = "download_info") -> str:
-"Analyzes YouTube videos or local video files. Actions: 'download_info' for metadata, 'transcribe' for audio transcription, 'analyze_frames' for visual analysis."
-
-image_analyzer(filename: str, task: str = "describe") -> str:
-"Analyzes images for various tasks. Tasks: 'describe' for basic info, 'chess' for chess positions, 'objects' for detection, 'text' for OCR."
-
-**WEB RESEARCH & SEARCH:**
-web_researcher(query: str, source: str = "wikipedia") -> str:
-"Performs research using Wikipedia or other sources. Use for finding specific articles, biographical information, or factual data."
-
-TavilySearch(max_results: int = 3) -> str:
-"Real-time web search engine optimized for AI agents. Use for current events, recent information, and general web searches."
-
-**DATA ANALYSIS & COMPUTATION:**
-semantic_search_tool(query: str, filename: str, top_k: int = 3) -> str:
-"Performs semantic search on CSV files with embeddings. Use for finding conceptually related information in knowledge bases."
-
-python_interpreter(code: str) -> str:
-"Executes Python code for calculations, data manipulation, analysis. Must include print() statements to return results."
-
-knowledge_base_retriever(query: str) -> str:
-"Searches internal knowledge base for company policies, project documentation, and historical data."
-
-GUIDING PRINCIPLES:
-
-**Decomposition**: Break complex requests into smaller, manageable steps. Formulate a clear plan in your first thought.
-
-**File First**: If the user mentions any filename (text, audio, video, image, Excel, PDF), your first action must be to inspect that file using the appropriate reader tool.
-
-**Multimedia Priority**: For audio files (.mp3, .wav), use audio_transcriber. For videos (YouTube URLs), use video_analyzer. For images, use image_analyzer.
-
-**Research Strategy**: Use web_researcher for Wikipedia articles and biographical info. Use TavilySearch for current events and general web searches.
-
-**Tool Selection**: Choose the most specialized tool for each task. For Excel files, use advanced_file_reader. For semantic searches, use semantic_search_tool.
-
-**Error Handling**: If a tool returns an error, analyze the error message and try a different approach or tool. Do not give up after a single failure.
-
-**Persistence**: Continue the reasoning loop until you have sufficient information to provide a complete and accurate answer.
-
-Answer questions concisely using available tools. For the GAIA testing framework, provide only the final answer without showing your reasoning process."""
+RULES:
+- Read files first if mentioned
+- Use tools to gather info before answering
+- Be concise but accurate
+- For GAIA testing: provide only the final answer"""
 
     def _build_graph(self):
         """
@@ -128,7 +140,14 @@ Answer questions concisely using available tools. For the GAIA testing framework
             if not messages or not isinstance(messages[0], SystemMessage):
                 messages = [SystemMessage(content=self._get_system_prompt())] + messages
 
-            response = model_with_tools.invoke(messages)
+            # Trim messages if too long to avoid context length errors
+            if len(messages) > 10:  # Keep only recent messages
+                messages = messages[:1] + messages[-9:]  # Keep system prompt + last 9 messages
+
+            def make_llm_call():
+                return model_with_tools.invoke(messages)
+
+            response = exponential_backoff_retry(make_llm_call, max_retries=3)
             return {"messages": [response]}
 
         # Use the pre-built ToolNode for executing tools
