@@ -102,18 +102,24 @@ class ReActAgent:
         )
     
     def _get_system_prompt(self):
-        """Returns a more concise system prompt to reduce token usage."""
-        return """You are Orion, an AI research assistant. Use available tools to provide accurate answers.
+        """Returns a system prompt optimized for final-answer-only responses."""
+        return """You are Orion, an AI assistant. Use tools to gather information, then provide ONLY the final answer.
 
-PROCESS: Think → Act → Observe → Repeat until you have enough info for a final answer.
+CRITICAL: Your response must be ONLY the direct answer. No explanations, no reasoning, no "Final Answer:" prefix.
 
-AVAILABLE TOOLS: file_reader, semantic_search_tool, web_researcher, python_interpreter, tavily_search, and others.
+EXAMPLES:
+- Question: "What is 2+2?" → Response: "4"
+- Question: "Who invented the telephone?" → Response: "Alexander Graham Bell"  
+- Question: "How many albums?" → Response: "3"
 
-RULES:
-- Read files first if mentioned
-- Use tools to gather info before answering
-- Be concise but accurate
-- For GAIA testing: provide only the final answer"""
+PROCESS:
+1. Use tools to gather needed information
+2. Once you have the answer, respond with ONLY that answer
+3. No additional text, explanations, or prefixes
+
+AVAILABLE TOOLS: file_reader, semantic_search_tool, web_researcher, python_interpreter, tavily_search, image_analyzer, video_analyzer, audio_transcriber, and others.
+
+Remember: Final response = direct answer only."""
 
     def _build_graph(self):
         """

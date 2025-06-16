@@ -150,9 +150,8 @@ class AsyncParallelAgent:
             result = graph.invoke({"messages": messages})
             answer = result['messages'][-1].content
             
-            # Remove "Final Answer: " prefix if present
-            if answer.startswith("Final Answer: "):
-                answer = answer[14:]
+            # Clean and extract final answer only
+            answer = self._clean_final_answer(answer)
             
             # Cache the result
             self.cache.set(question, answer)
@@ -163,6 +162,50 @@ class AsyncParallelAgent:
             error_msg = f"ERROR: {str(e)}"
             self.cache.set(question, error_msg)  # Cache errors too to avoid retry
             return error_msg
+
+    def _clean_final_answer(self, answer: str) -> str:
+        """Clean the answer to extract only the final answer without extra text."""
+        if not answer:
+            return ""
+        
+        # Remove common prefixes
+        prefixes_to_remove = [
+            "Final Answer: ",
+            "Final answer: ",
+            "FINAL ANSWER: ",
+            "Answer: ",
+            "The answer is: ",
+            "The answer is ",
+            "Based on my analysis, ",
+            "According to my research, ",
+        ]
+        
+        for prefix in prefixes_to_remove:
+            if answer.startswith(prefix):
+                answer = answer[len(prefix):]
+                break
+        
+        # Remove common suffixes and extra explanations
+        lines = answer.split('\n')
+        if lines:
+            # Take the first non-empty line as the final answer
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith(("Based on", "According to", "Note:", "Remember:")):
+                    answer = line
+                    break
+        
+        # Remove any remaining explanatory text
+        if "." in answer and len(answer) > 50:
+            # If it's a long sentence, try to extract just the core answer
+            parts = answer.split('.')
+            if len(parts) > 1:
+                # Take the first part if it looks like a direct answer
+                first_part = parts[0].strip()
+                if len(first_part) < 50:
+                    answer = first_part
+        
+        return answer.strip()
 
     async def process_single_question_async(self, item_with_index, session=None):
         """Process a single question asynchronously with rate limiting."""
@@ -273,9 +316,8 @@ class ParallelAgent:
             messages = [HumanMessage(content=question)]
             result = graph.invoke({"messages": messages})
             answer = result['messages'][-1].content
-            # Remove "Final Answer: " prefix if present
-            if answer.startswith("Final Answer: "):
-                answer = answer[14:]
+            # Clean and extract final answer only
+            answer = self._clean_final_answer(answer)
             
             # Cache the result
             self.cache.set(question, answer)
@@ -352,6 +394,50 @@ class ParallelAgent:
         
         return results_log
 
+    def _clean_final_answer(self, answer: str) -> str:
+        """Clean the answer to extract only the final answer without extra text."""
+        if not answer:
+            return ""
+        
+        # Remove common prefixes
+        prefixes_to_remove = [
+            "Final Answer: ",
+            "Final answer: ",
+            "FINAL ANSWER: ",
+            "Answer: ",
+            "The answer is: ",
+            "The answer is ",
+            "Based on my analysis, ",
+            "According to my research, ",
+        ]
+        
+        for prefix in prefixes_to_remove:
+            if answer.startswith(prefix):
+                answer = answer[len(prefix):]
+                break
+        
+        # Remove common suffixes and extra explanations
+        lines = answer.split('\n')
+        if lines:
+            # Take the first non-empty line as the final answer
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith(("Based on", "According to", "Note:", "Remember:")):
+                    answer = line
+                    break
+        
+        # Remove any remaining explanatory text
+        if "." in answer and len(answer) > 50:
+            # If it's a long sentence, try to extract just the core answer
+            parts = answer.split('.')
+            if len(parts) > 1:
+                # Take the first part if it looks like a direct answer
+                first_part = parts[0].strip()
+                if len(first_part) < 50:
+                    answer = first_part
+        
+        return answer.strip()
+
 # --- Basic Agent Definition (Backward Compatibility) ---
 class BasicAgent:
     """A langgraph agent."""
@@ -365,7 +451,52 @@ class BasicAgent:
         messages = [HumanMessage(content=question)]
         messages = self.graph.invoke({"messages": messages})
         answer = messages['messages'][-1].content
-        return answer[14:] if answer.startswith("Final Answer: ") else answer
+        # Clean and extract final answer only
+        return self._clean_final_answer(answer)
+
+    def _clean_final_answer(self, answer: str) -> str:
+        """Clean the answer to extract only the final answer without extra text."""
+        if not answer:
+            return ""
+        
+        # Remove common prefixes
+        prefixes_to_remove = [
+            "Final Answer: ",
+            "Final answer: ",
+            "FINAL ANSWER: ",
+            "Answer: ",
+            "The answer is: ",
+            "The answer is ",
+            "Based on my analysis, ",
+            "According to my research, ",
+        ]
+        
+        for prefix in prefixes_to_remove:
+            if answer.startswith(prefix):
+                answer = answer[len(prefix):]
+                break
+        
+        # Remove common suffixes and extra explanations
+        lines = answer.split('\n')
+        if lines:
+            # Take the first non-empty line as the final answer
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith(("Based on", "According to", "Note:", "Remember:")):
+                    answer = line
+                    break
+        
+        # Remove any remaining explanatory text
+        if "." in answer and len(answer) > 50:
+            # If it's a long sentence, try to extract just the core answer
+            parts = answer.split('.')
+            if len(parts) > 1:
+                # Take the first part if it looks like a direct answer
+                first_part = parts[0].strip()
+                if len(first_part) < 50:
+                    answer = first_part
+        
+        return answer.strip()
 
 def run_and_submit_all(use_parallel: bool = True, use_async: bool = True, clear_cache: bool = False):
     """
