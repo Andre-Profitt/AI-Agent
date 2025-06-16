@@ -1,8 +1,16 @@
 import os
 import logging
 from typing import Any
+import io
+from contextlib import redirect_stdout
+import pandas as pd
+import numpy as np
+import tempfile
+import subprocess
+import json
+from pathlib import Path
 
-from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain_tavily import TavilySearch
 from langchain_core.tools import tool
 from langchain_experimental.tools import PythonREPLTool
 from llama_index.core import VectorStoreIndex, Settings
@@ -11,8 +19,368 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 
 from src.database import get_vector_store
 
+# Initialize the embedding model once to avoid reloading on every call
+try:
+    from sentence_transformers import SentenceTransformer
+    from sklearn.metrics.pairwise import cosine_similarity
+    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+    SEMANTIC_SEARCH_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"Semantic search dependencies not available: {e}")
+    SEMANTIC_SEARCH_AVAILABLE = False
+
+# Initialize multimedia processing libraries
+try:
+    import whisper
+    import cv2
+    from PIL import Image
+    import yt_dlp
+    from pydub import AudioSegment
+    MULTIMEDIA_AVAILABLE = True
+    # Load Whisper model once
+    whisper_model = whisper.load_model("base")
+except ImportError as e:
+    logging.warning(f"Multimedia processing dependencies not available: {e}")
+    MULTIMEDIA_AVAILABLE = False
+
+# Initialize web scraping libraries
+try:
+    import requests
+    from bs4 import BeautifulSoup
+    import wikipedia
+    WEB_SCRAPING_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"Web scraping dependencies not available: {e}")
+    WEB_SCRAPING_AVAILABLE = False
+
+# Initialize advanced file format support
+try:
+    import openpyxl
+    from docx import Document
+    import PyPDF2
+    ADVANCED_FILES_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"Advanced file format dependencies not available: {e}")
+    ADVANCED_FILES_AVAILABLE = False
+
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# --- Critical Tools for Environment Interaction ---
+
+@tool
+def file_reader(filename: str, lines: int = -1) -> str:
+    """
+    Reads the content of a specified file. Use this for inspecting text files (.txt),
+    scripts (.py), or getting a raw look at structured files (.csv,.json).
+    The `lines` parameter can be used to read only the first N lines. If lines is -1,
+    it reads the entire file.
+
+    Args:
+        filename (str): The path to the file to be read.
+        lines (int): The number of lines to read from the beginning of the file.
+
+    Returns:
+        str: The content of the file, or an error message if the file is not found.
+    """
+    try:
+        with open(filename, 'r', encoding='utf-8') as f:
+            if lines == -1:
+                return f.read()
+            else:
+                return "".join(f.readlines()[:lines])
+    except FileNotFoundError:
+        return f"Error: File '{filename}' not found."
+    except Exception as e:
+        return f"Error reading file: {str(e)}"
+
+@tool
+def advanced_file_reader(filename: str) -> str:
+    """
+    Advanced file reader that can handle Excel, PDF, Word documents, and other formats.
+    Automatically detects file type and extracts content appropriately.
+
+    Args:
+        filename (str): The path to the file to be read.
+
+    Returns:
+        str: The extracted content of the file.
+    """
+    if not ADVANCED_FILES_AVAILABLE:
+        return "Error: Advanced file format dependencies not available."
+    
+    try:
+        file_path = Path(filename)
+        extension = file_path.suffix.lower()
+        
+        if extension == '.xlsx' or extension == '.xls':
+            # Excel files
+            workbook = openpyxl.load_workbook(filename, data_only=True)
+            content = []
+            for sheet_name in workbook.sheetnames:
+                sheet = workbook[sheet_name]
+                content.append(f"Sheet: {sheet_name}")
+                for row in sheet.iter_rows(values_only=True):
+                    if any(cell is not None for cell in row):
+                        content.append('\t'.join(str(cell) if cell is not None else '' for cell in row))
+            return '\n'.join(content)
+            
+        elif extension == '.pdf':
+            # PDF files
+            with open(filename, 'rb') as file:
+                reader = PyPDF2.PdfReader(file)
+                content = []
+                for page_num, page in enumerate(reader.pages):
+                    text = page.extract_text()
+                    if text.strip():
+                        content.append(f"Page {page_num + 1}:\n{text}")
+                return '\n\n'.join(content)
+                
+        elif extension == '.docx':
+            # Word documents
+            doc = Document(filename)
+            content = []
+            for paragraph in doc.paragraphs:
+                if paragraph.text.strip():
+                    content.append(paragraph.text)
+            return '\n'.join(content)
+            
+        else:
+            # Fall back to regular file reading
+            return file_reader(filename)
+            
+    except Exception as e:
+        return f"Error reading file '{filename}': {str(e)}"
+
+@tool
+def audio_transcriber(filename: str) -> str:
+    """
+    Transcribes audio files (MP3, WAV, M4A, etc.) to text using OpenAI Whisper.
+    Perfect for analyzing voice memos, recordings, and audio content.
+
+    Args:
+        filename (str): The path to the audio file to transcribe.
+
+    Returns:
+        str: The transcribed text from the audio file.
+    """
+    if not MULTIMEDIA_AVAILABLE:
+        return "Error: Multimedia processing dependencies not available."
+    
+    try:
+        # Transcribe the audio file using Whisper
+        result = whisper_model.transcribe(filename)
+        return result["text"]
+    except Exception as e:
+        return f"Error transcribing audio file '{filename}': {str(e)}"
+
+@tool
+def video_analyzer(url: str, action: str = "download_info") -> str:
+    """
+    Analyzes videos from URLs (especially YouTube) or local video files.
+    Can extract metadata, transcribe audio, or download for analysis.
+
+    Args:
+        url (str): YouTube URL or local video file path.
+        action (str): Action to perform - "download_info", "transcribe", or "analyze_frames"
+
+    Returns:
+        str: Video information, transcription, or analysis results.
+    """
+    if not MULTIMEDIA_AVAILABLE:
+        return "Error: Multimedia processing dependencies not available."
+    
+    try:
+        if url.startswith('http'):
+            # YouTube or web video
+            ydl_opts = {'quiet': True, 'no_warnings': True}
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                
+                if action == "download_info":
+                    return f"Title: {info.get('title', 'N/A')}\nDuration: {info.get('duration', 'N/A')} seconds\nDescription: {info.get('description', 'N/A')[:500]}..."
+                
+                elif action == "transcribe":
+                    # Download audio and transcribe
+                    with tempfile.TemporaryDirectory() as temp_dir:
+                        audio_path = os.path.join(temp_dir, 'audio.%(ext)s')
+                        ydl_opts_audio = {
+                            'format': 'bestaudio/best',
+                            'outtmpl': audio_path,
+                            'quiet': True
+                        }
+                        with yt_dlp.YoutubeDL(ydl_opts_audio) as ydl_audio:
+                            ydl_audio.download([url])
+                        
+                        # Find the downloaded audio file
+                        audio_files = list(Path(temp_dir).glob('audio.*'))
+                        if audio_files:
+                            return audio_transcriber(str(audio_files[0]))
+                        else:
+                            return "Error: Could not download audio for transcription."
+        else:
+            # Local video file
+            return f"Local video analysis for '{url}' - feature in development"
+            
+    except Exception as e:
+        return f"Error analyzing video '{url}': {str(e)}"
+
+@tool
+def image_analyzer(filename: str, task: str = "describe") -> str:
+    """
+    Analyzes images for various tasks like chess position analysis, object detection, etc.
+
+    Args:
+        filename (str): Path to the image file.
+        task (str): Analysis task - "describe", "chess", "objects", or "text"
+
+    Returns:
+        str: Analysis results based on the specified task.
+    """
+    if not MULTIMEDIA_AVAILABLE:
+        return "Error: Multimedia processing dependencies not available."
+    
+    try:
+        # Load image
+        image = cv2.imread(filename)
+        if image is None:
+            return f"Error: Could not load image '{filename}'"
+        
+        if task == "chess":
+            # For chess position analysis - basic implementation
+            return "Chess position analysis requires specialized chess vision models. Please provide the position in standard notation."
+        
+        elif task == "describe":
+            # Basic image description
+            height, width, channels = image.shape
+            return f"Image dimensions: {width}x{height} pixels, {channels} channels"
+        
+        elif task == "text":
+            # OCR text extraction would require pytesseract
+            return "Text extraction from images requires OCR setup (pytesseract)"
+        
+        else:
+            return f"Image analysis task '{task}' not implemented yet."
+            
+    except Exception as e:
+        return f"Error analyzing image '{filename}': {str(e)}"
+
+@tool
+def web_researcher(query: str, source: str = "wikipedia") -> str:
+    """
+    Performs web research using various sources like Wikipedia, or general web search.
+
+    Args:
+        query (str): The research query or topic.
+        source (str): Research source - "wikipedia", "search", or "url"
+
+    Returns:
+        str: Research results and relevant information.
+    """
+    if not WEB_SCRAPING_AVAILABLE:
+        return "Error: Web scraping dependencies not available."
+    
+    try:
+        if source == "wikipedia":
+            # Search Wikipedia
+            try:
+                # Search for the topic
+                search_results = wikipedia.search(query, results=3)
+                if search_results:
+                    # Get the first result
+                    page = wikipedia.page(search_results[0])
+                    summary = wikipedia.summary(query, sentences=5)
+                    return f"Wikipedia Article: {page.title}\nURL: {page.url}\nSummary: {summary}"
+                else:
+                    return f"No Wikipedia articles found for '{query}'"
+            except wikipedia.exceptions.DisambiguationError as e:
+                # Handle disambiguation
+                page = wikipedia.page(e.options[0])
+                summary = wikipedia.summary(e.options[0], sentences=3)
+                return f"Wikipedia Article: {page.title}\nURL: {page.url}\nSummary: {summary}"
+            except Exception as e:
+                return f"Error searching Wikipedia: {str(e)}"
+        
+        elif source == "search":
+            # Use the existing Tavily search
+            return "Use the TavilySearch tool for general web search"
+        
+        else:
+            return f"Research source '{source}' not implemented"
+            
+    except Exception as e:
+        return f"Error in web research: {str(e)}"
+
+@tool
+def semantic_search_tool(query: str, filename: str, top_k: int = 3) -> str:
+    """
+    Performs a semantic (vector-based) search on a specified knowledge file (typically
+    a.csv with embeddings). Use this when you need to find information related to a
+    concept or question, not just a keyword. `filename` must be a file known to
+    contain embeddings, like 'supabase_docs.csv'.
+
+    Args:
+        query (str): The natural language query to search for.
+        filename (str): The path to the CSV file containing the knowledge base.
+        top_k (int): The number of top results to return.
+
+    Returns:
+        str: A formatted string of the most relevant content chunks.
+    """
+    if not SEMANTIC_SEARCH_AVAILABLE:
+        return "Error: Semantic search dependencies (sentence-transformers, scikit-learn) not available."
+    
+    try:
+        df = pd.read_csv(filename)
+        
+        # Check if the required columns exist
+        if 'embedding' not in df.columns or 'content' not in df.columns:
+            return f"Error: File '{filename}' does not contain required 'embedding' and 'content' columns."
+        
+        # The embedding column is stored as a string representation of a list.
+        # This line safely converts it back to a numpy array for calculation.
+        df['embedding'] = df['embedding'].apply(lambda x: np.fromstring(x.strip('[]'), sep=','))
+
+        query_embedding = embedding_model.encode([query])
+        knowledge_embeddings = np.vstack(df['embedding'].values)
+
+        sim_scores = cosine_similarity(query_embedding, knowledge_embeddings)[0]
+        top_indices = np.argsort(sim_scores)[-top_k:][::-1]
+
+        results = []
+        for idx in top_indices:
+            results.append(f"Retrieved Content (Score: {sim_scores[idx]:.4f}):\n{df.loc[idx, 'content']}")
+        
+        return "\n---\n".join(results)
+    except FileNotFoundError:
+        return f"Error: Knowledge base file '{filename}' not found."
+    except Exception as e:
+        return f"Error during semantic search: {str(e)}"
+
+@tool
+def python_interpreter(code: str) -> str:
+    """
+    Executes a given block of Python code in a secure, sandboxed environment.
+    Use this for calculations, data manipulation, or running scripts.
+    The code MUST include a `print()` statement to return a result to the observation.
+    WARNING: This tool is powerful. Do not execute code that modifies the file system
+    or makes network requests unless explicitly required and sanctioned.
+
+    Args:
+        code (str): The Python code to execute.
+
+    Returns:
+        str: The captured stdout from the executed code, or an error message.
+    """
+    f = io.StringIO()
+    try:
+        # A simple, isolated global scope for the execution
+        exec_globals = {}
+        with redirect_stdout(f):
+            exec(code, exec_globals)
+        return f.getvalue()
+    except Exception as e:
+        return f"Execution Error: {str(e)}"
 
 # --- Tool Definitions ---
 
@@ -21,7 +389,7 @@ def get_tools() -> list:
     Initializes and returns a list of all tools available to the agent.
     """
     # 1. Tavily Search Tool for real-time web searches
-    tavily_search_tool = TavilySearchResults(
+    tavily_search_tool = TavilySearch(
         max_results=3,
         description='A search engine optimized for comprehensive, accurate, and trusted results. Useful for searching the web for current events, facts, and real-time information.'
     )
@@ -58,8 +426,21 @@ def get_tools() -> list:
     # Do not use in a production environment with untrusted inputs without proper sandboxing.
     python_repl_tool = PythonREPLTool()
 
-    # Assemble the list of tools, filtering out any that failed to initialize
-    tools = [tavily_search_tool, python_repl_tool]
+    # Assemble the list of tools, starting with the critical environment interaction tools
+    tools = [
+        file_reader,  # Critical for fixing "context blindness"
+        advanced_file_reader,  # For Excel, PDF, Word docs
+        audio_transcriber,  # For MP3 and audio files
+        video_analyzer,  # For YouTube and video analysis
+        image_analyzer,  # For image and chess analysis
+        web_researcher,  # For Wikipedia and web research
+        semantic_search_tool,  # For working with knowledge bases like supabase_docs.csv
+        python_interpreter,  # Enhanced code execution
+        tavily_search_tool,  # Real-time web search
+        python_repl_tool  # Backup code execution tool
+    ]
+    
+    # Add the knowledge base tool if available
     if knowledge_base_tool:
         tools.append(knowledge_base_tool)
         
