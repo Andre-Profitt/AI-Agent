@@ -2,7 +2,12 @@ import os
 import uuid
 import logging
 import re
-from typing import List, Tuple
+import json
+import time
+import datetime
+from typing import List, Tuple, Dict, Any
+from pathlib import Path
+import pandas as pd
 
 import gradio as gr
 from dotenv import load_dotenv
@@ -64,6 +69,61 @@ except Exception as e:
     print("Full traceback:")
     traceback.print_exc()
     exit("Critical error: Agent could not be initialized. Check logs above for details.")
+
+# --- Advanced State Management ---
+class SessionManager:
+    """Manages user sessions, conversation history, and analytics."""
+    
+    def __init__(self):
+        self.sessions = {}
+        self.tool_analytics = {tool.name: {"calls": 0, "successes": 0, "failures": 0, "avg_time": 0.0} for tool in tools}
+        self.performance_metrics = {
+            "total_queries": 0,
+            "avg_response_time": 0.0,
+            "total_tool_calls": 0,
+            "uptime_start": time.time()
+        }
+    
+    def create_session(self, session_id: str = None):
+        """Create a new session."""
+        if session_id is None:
+            session_id = str(uuid.uuid4())
+        
+        self.sessions[session_id] = {
+            "created_at": datetime.datetime.now(),
+            "messages": [],
+            "total_queries": 0,
+            "total_response_time": 0.0,
+            "tool_usage": {tool.name: 0 for tool in tools}
+        }
+        return session_id
+    
+    def update_tool_analytics(self, tool_name: str, success: bool, execution_time: float):
+        """Update tool performance analytics."""
+        if tool_name in self.tool_analytics:
+            analytics = self.tool_analytics[tool_name]
+            analytics["calls"] += 1
+            if success:
+                analytics["successes"] += 1
+            else:
+                analytics["failures"] += 1
+            
+            # Update average time
+            total_time = analytics["avg_time"] * (analytics["calls"] - 1) + execution_time
+            analytics["avg_time"] = total_time / analytics["calls"]
+    
+    def get_analytics_summary(self) -> Dict[str, Any]:
+        """Get comprehensive analytics summary."""
+        uptime = time.time() - self.performance_metrics["uptime_start"]
+        return {
+            "performance": self.performance_metrics,
+            "tool_analytics": self.tool_analytics,
+            "active_sessions": len(self.sessions),
+            "uptime_hours": uptime / 3600
+        }
+
+# Global session manager
+session_manager = SessionManager()
 
 # --- Gradio Interface Logic ---
 
@@ -194,13 +254,50 @@ def extract_final_answer(response: str) -> str:
     
     return response.strip()
 
+def process_uploaded_file(file_obj) -> str:
+    """Process uploaded files and return analysis."""
+    if file_obj is None:
+        return "No file uploaded."
+    
+    try:
+        file_path = file_obj.name
+        file_extension = Path(file_path).suffix.lower()
+        
+        # Determine file type and processing method
+        if file_extension in ['.txt', '.md', '.py', '.js', '.html', '.css']:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            return f"📄 Text File Analysis:\n\nFile: {Path(file_path).name}\nSize: {len(content)} characters\nLines: {len(content.splitlines())}\n\nContent preview:\n{content[:500]}..."
+        
+        elif file_extension in ['.pdf', '.docx', '.xlsx']:
+            return f"📄 Document uploaded: {Path(file_path).name}\nUse the 'advanced_file_reader' tool to analyze this file."
+        
+        elif file_extension in ['.jpg', '.jpeg', '.png', '.gif']:
+            return f"🖼️ Image uploaded: {Path(file_path).name}\nUse the 'image_analyzer' tool to analyze this image."
+        
+        elif file_extension in ['.mp3', '.wav', '.m4a']:
+            return f"🎵 Audio uploaded: {Path(file_path).name}\nUse the 'audio_transcriber' tool to transcribe this audio."
+        
+        elif file_extension in ['.mp4', '.mov', '.avi']:
+            return f"🎬 Video uploaded: {Path(file_path).name}\nUse the 'video_analyzer' tool to analyze this video."
+        
+        else:
+            return f"📁 File uploaded: {Path(file_path).name}\nFile type: {file_extension}\nUse appropriate tools to analyze this file."
+    
+    except Exception as e:
+        return f"❌ Error processing file: {str(e)}"
 
-def chat_interface_logic(message: str, history: List[List[str]], log_to_db: bool):
+def chat_interface_logic(message: str, history: List[List[str]], log_to_db: bool, session_id: str = None):
     """
     The core logic for the Gradio chat interface with sophisticated reasoning 
     and clean final answer extraction.
     """
+    start_time = time.time()
     logger.info(f"Received new message: '{message}'")
+    
+    # Create session if needed
+    if session_id is None or session_id not in session_manager.sessions:
+        session_id = session_manager.create_session()
     
     # Format history and add new message
     formatted_history = format_chat_history(history)
@@ -223,6 +320,7 @@ def chat_interface_logic(message: str, history: List[List[str]], log_to_db: bool
     intermediate_steps = ""
     reasoning_chain = ""
     step_count = 0
+    tool_calls_made = []
     
     try:
         for chunk in agent_graph.stream(agent_input, stream_mode="values"):
@@ -238,19 +336,23 @@ def chat_interface_logic(message: str, history: List[List[str]], log_to_db: bool
                     f"  - **{tc['name']}**: {tc['args']}" for tc in last_message.tool_calls
                 )
                 
+                # Track tool calls
+                for tc in last_message.tool_calls:
+                    tool_calls_made.append(tc['name'])
+                
                 intermediate_steps += f"**Step {step_count}** (Confidence: {current_confidence:.0%})\n"
                 intermediate_steps += f"🤔 **Reasoning:** {thought}\n\n"
                 intermediate_steps += f"🛠️ **Action:**\n{tool_call_str}\n\n"
                 
                 reasoning_chain += f"Step {step_count}: {thought}\n"
-                yield intermediate_steps, full_response
+                yield intermediate_steps, full_response, session_id
 
             # Handle tool outputs (observations)
             elif isinstance(last_message, ToolMessage):
                 observation = last_message.content[:200] + "..." if len(last_message.content) > 200 else last_message.content
                 intermediate_steps += f"👀 **Observation:** {observation}\n\n"
                 reasoning_chain += f"Observation: {last_message.content}\n"
-                yield intermediate_steps, full_response
+                yield intermediate_steps, full_response, session_id
 
             # Handle reasoning and final answers
             elif isinstance(last_message, AIMessage):
@@ -281,70 +383,314 @@ def chat_interface_logic(message: str, history: List[List[str]], log_to_db: bool
                     intermediate_steps += f"🧠 **Reasoning:** {content}\n\n"
                     reasoning_chain += f"Step {step_count}: {content}\n"
                 
-                yield intermediate_steps, full_response
+                yield intermediate_steps, full_response, session_id
+        
+        # Update analytics
+        execution_time = time.time() - start_time
+        session_manager.performance_metrics["total_queries"] += 1
+        session_manager.performance_metrics["total_tool_calls"] += len(tool_calls_made)
+        
+        # Update session data
+        if session_id in session_manager.sessions:
+            session = session_manager.sessions[session_id]
+            session["total_queries"] += 1
+            session["total_response_time"] += execution_time
+            for tool_name in tool_calls_made:
+                if tool_name in session["tool_usage"]:
+                    session["tool_usage"][tool_name] += 1
 
     except Exception as e:
         logger.error(f"An error occurred during agent execution for run_id {run_id}: {e}", exc_info=True)
-        yield intermediate_steps, f"An error occurred: {e}"
+        error_message = f"❌ **Error occurred:** {e}\n\n🔧 **Troubleshooting:**\n- Check your internet connection\n- Verify API keys are configured\n- Try a simpler query\n- Contact support if the issue persists"
+        yield intermediate_steps + error_message, f"An error occurred: {e}", session_id
 
+def create_analytics_display():
+    """Create analytics dashboard content."""
+    analytics = session_manager.get_analytics_summary()
+    
+    # Performance metrics
+    perf_html = f"""
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 10px; color: white; margin: 10px 0;">
+        <h3>🚀 Performance Metrics</h3>
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+            <div><strong>Total Queries:</strong> {analytics['performance']['total_queries']}</div>
+            <div><strong>Active Sessions:</strong> {analytics['active_sessions']}</div>
+            <div><strong>Total Tool Calls:</strong> {analytics['performance']['total_tool_calls']}</div>
+            <div><strong>Uptime:</strong> {analytics['uptime_hours']:.1f} hours</div>
+        </div>
+    </div>
+    """
+    
+    # Tool analytics
+    tool_html = "<div style='background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0;'><h3>🛠️ Tool Performance</h3>"
+    for tool_name, stats in analytics['tool_analytics'].items():
+        if stats['calls'] > 0:
+            success_rate = (stats['successes'] / stats['calls']) * 100
+            tool_html += f"""
+            <div style="margin: 5px 0; padding: 8px; background: white; border-radius: 5px;">
+                <strong>{tool_name}:</strong> {stats['calls']} calls, {success_rate:.1f}% success rate, {stats['avg_time']:.2f}s avg
+            </div>
+            """
+    tool_html += "</div>"
+    
+    return perf_html + tool_html
+
+def export_conversation(history: List[List[str]], session_id: str = None):
+    """Export conversation history."""
+    try:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"conversation_export_{timestamp}.json"
+        
+        export_data = {
+            "timestamp": timestamp,
+            "session_id": session_id,
+            "conversation": history,
+            "analytics": session_manager.get_analytics_summary() if session_id in session_manager.sessions else None
+        }
+        
+        with open(filename, 'w') as f:
+            json.dump(export_data, f, indent=2, default=str)
+        
+        return f"✅ Conversation exported to {filename}"
+    except Exception as e:
+        return f"❌ Export failed: {str(e)}"
+
+def reset_session():
+    """Reset the current session."""
+    session_id = session_manager.create_session()
+    return [], "", "🔄 Session reset successfully!", session_id
 
 def build_gradio_interface():
-    """Builds and returns the Gradio chat interface."""
-    with gr.Blocks(theme=gr.themes.Default(primary_hue="blue"), title="Multi-Model AI Agent") as demo:
-        gr.Markdown("# 🤖 Multi-Model AI Agent")
-        gr.Markdown(
-            "Powered by multiple Groq models, LangGraph, LlamaIndex, Tavily, and Supabase. "
-            "Features adaptive model selection for optimal performance across different types of questions. "
-            "Ask me anything that requires web search, knowledge base retrieval, code execution, or complex reasoning."
-        )
-
+    """Builds and returns the advanced Gradio chat interface."""
+    
+    # Custom CSS for enhanced styling
+    custom_css = """
+    .container { max-width: 1200px; margin: auto; }
+    .header-text { text-align: center; color: #2c3e50; }
+    .metrics-panel { background: linear-gradient(45deg, #1e3c72, #2a5298); color: white; padding: 15px; border-radius: 10px; }
+    .tool-indicator { display: inline-block; padding: 2px 8px; background: #3498db; color: white; border-radius: 12px; font-size: 0.8em; margin: 2px; }
+    .confidence-bar { height: 6px; background: linear-gradient(to right, #e74c3c, #f39c12, #27ae60); border-radius: 3px; }
+    .status-good { color: #27ae60; }
+    .status-warning { color: #f39c12; }
+    .status-error { color: #e74c3c; }
+    """
+    
+    with gr.Blocks(
+        theme=gr.themes.Soft(primary_hue="blue", secondary_hue="indigo"), 
+        title="🚀 Cutting-Edge Multi-Model AI Agent",
+        css=custom_css
+    ) as demo:
+        
+        # Header
+        gr.HTML("""
+        <div class="header-text">
+            <h1>🚀 Cutting-Edge Multi-Model AI Agent</h1>
+            <p>Advanced ReAct reasoning • Multi-modal processing • Real-time analytics • GPU acceleration</p>
+        </div>
+        """)
+        
+        # Session state
+        session_state = gr.State(session_manager.create_session())
+        
         with gr.Row():
-            with gr.Column(scale=2):
+            # Main chat interface
+            with gr.Column(scale=3):
                 chatbot = gr.Chatbot(
                     [],
-                    label="Conversation",
-                    height=600,
+                    label="🤖 AI Agent Conversation",
+                    height=500,
+                    show_label=True,
+                    container=True,
+                    bubble_full_width=False
                 )
-                message_box = gr.Textbox(
-                    placeholder="e.g., What is the result of 123 * 456?",
-                    label="Your Message",
-                    show_label=False,
-                    lines=2,
-                )
-            with gr.Column(scale=1):
-                gr.Markdown("### Agent Trajectory")
-                gr.Markdown("Intermediate thoughts, actions, and observations from the agent will appear here.")
-                intermediate_steps_display = gr.Markdown(label="Intermediate Steps")
-                log_to_db_checkbox = gr.Checkbox(
-                    label="Log Trajectory to Supabase",
-                    value=True,
-                    visible=LOGGING_ENABLED
-                )
-
-        def on_submit(message, chat_history, log_to_db):
+                
+                with gr.Row():
+                    message_box = gr.Textbox(
+                        placeholder="Ask me anything! I can search the web, analyze files, execute code, and more...",
+                        label="Your Message",
+                        show_label=False,
+                        lines=2,
+                        scale=4
+                    )
+                    
+                    with gr.Column(scale=1):
+                        send_btn = gr.Button("🚀 Send", variant="primary")
+                        clear_btn = gr.Button("🔄 Reset", variant="secondary")
+                
+                # File upload section
+                with gr.Row():
+                    file_upload = gr.File(
+                        label="📎 Upload File (PDF, DOC, Excel, Images, Audio, Video)",
+                        file_count="single",
+                        file_types=["image", "video", "audio", ".pdf", ".docx", ".xlsx", ".txt", ".py", ".js"]
+                    )
+                    upload_btn = gr.Button("📄 Analyze File")
+                
+                # Quick actions
+                with gr.Row():
+                    gr.Examples(
+                        examples=[
+                            "What's the weather like in Tokyo today?",
+                            "Explain quantum computing in simple terms",
+                            "Calculate the compound interest on $10,000 at 5% for 10 years",
+                            "Analyze the uploaded image for objects",
+                            "Search for recent AI research papers",
+                            "Generate a Python script to sort a list"
+                        ],
+                        inputs=message_box,
+                        label="💡 Quick Examples"
+                    )
+            
+            # Advanced monitoring panel
+            with gr.Column(scale=2):
+                with gr.Tabs():
+                    # Agent trajectory tab
+                    with gr.TabItem("🧠 Agent Reasoning"):
+                        intermediate_display = gr.Markdown(
+                            "Agent reasoning steps will appear here...",
+                            label="Real-time Agent Trajectory"
+                        )
+                    
+                    # Performance analytics tab
+                    with gr.TabItem("📊 Analytics"):
+                        analytics_display = gr.HTML(
+                            create_analytics_display(),
+                            label="Performance Dashboard"
+                        )
+                        refresh_analytics_btn = gr.Button("🔄 Refresh Analytics")
+                    
+                    # Configuration tab
+                    with gr.TabItem("⚙️ Settings"):
+                        with gr.Group():
+                            log_to_db_checkbox = gr.Checkbox(
+                                label="📝 Log Trajectory to Database",
+                                value=True,
+                                visible=LOGGING_ENABLED,
+                                info="Enable detailed logging for debugging and analysis"
+                            )
+                            
+                            model_preference = gr.Radio(
+                                choices=["fast", "balanced", "quality"],
+                                value="balanced",
+                                label="🎯 Model Performance Preference",
+                                info="Fast: Quick responses, Balanced: Good speed/quality, Quality: Best results"
+                            )
+                            
+                            max_reasoning_steps = gr.Slider(
+                                minimum=5,
+                                maximum=25,
+                                value=15,
+                                step=1,
+                                label="🔢 Max Reasoning Steps",
+                                info="Maximum number of reasoning steps the agent can take"
+                            )
+                    
+                    # Session management tab
+                    with gr.TabItem("💾 Session"):
+                        session_info = gr.Textbox(
+                            value=f"Session: {session_manager.create_session()}",
+                            label="Current Session ID",
+                            interactive=False
+                        )
+                        
+                        export_btn = gr.Button("💾 Export Conversation")
+                        export_status = gr.Textbox(label="Export Status", interactive=False)
+                        
+                        gr.Markdown("""
+                        ### 🔧 Session Features:
+                        - **Persistent Conversations**: Your chat history is maintained
+                        - **Performance Tracking**: Monitor response times and tool usage
+                        - **Export Capability**: Save conversations for later reference
+                        - **Analytics**: Track tool performance and success rates
+                        """)
+        
+        # Tool status display
+        with gr.Row():
+            tool_status = gr.HTML(f"""
+            <div style="background: #ecf0f1; padding: 10px; border-radius: 5px; text-align: center;">
+                <strong>🛠️ Available Tools:</strong> 
+                {' '.join([f'<span class="tool-indicator">{tool.name}</span>' for tool in tools])}
+            </div>
+            """)
+        
+        # Event handlers
+        def on_submit(message, chat_history, log_to_db, session_id):
+            if not message.strip():
+                return chat_history, "", session_id
+            
             chat_history.append([message, None])
             
             # Use a generator to stream responses
-            response_generator = chat_interface_logic(message, chat_history, log_to_db)
+            response_generator = chat_interface_logic(message, chat_history, log_to_db, session_id)
             
-            for steps, response in response_generator:
+            for steps, response, updated_session_id in response_generator:
                 chat_history[-1] = [message, response]
-                yield chat_history, steps
-
-        message_box.submit(
+                yield chat_history, steps, updated_session_id
+        
+        def on_file_upload(file_obj):
+            if file_obj is not None:
+                analysis = process_uploaded_file(file_obj)
+                return analysis
+            return "No file selected."
+        
+        def on_analytics_refresh():
+            return create_analytics_display()
+        
+        def on_export(chat_history, session_id):
+            return export_conversation(chat_history, session_id)
+        
+        def on_reset():
+            return reset_session()
+        
+        # Wire up the events
+        submit_event = message_box.submit(
             on_submit,
-            [message_box, chatbot, log_to_db_checkbox],
-            [chatbot, intermediate_steps_display]
+            [message_box, chatbot, log_to_db_checkbox, session_state],
+            [chatbot, intermediate_display, session_state]
         ).then(
             lambda: gr.update(value=""), None, [message_box], queue=False
+        )
+        
+        send_btn.click(
+            on_submit,
+            [message_box, chatbot, log_to_db_checkbox, session_state],
+            [chatbot, intermediate_display, session_state]
+        ).then(
+            lambda: gr.update(value=""), None, [message_box], queue=False
+        )
+        
+        upload_btn.click(
+            on_file_upload,
+            [file_upload],
+            [intermediate_display]
+        )
+        
+        refresh_analytics_btn.click(
+            on_analytics_refresh,
+            [],
+            [analytics_display]
+        )
+        
+        export_btn.click(
+            on_export,
+            [chatbot, session_state],
+            [export_status]
+        )
+        
+        clear_btn.click(
+            on_reset,
+            [],
+            [chatbot, intermediate_display, export_status, session_state]
         )
 
     return demo
 
 if __name__ == "__main__":
     app = build_gradio_interface()
-    app.queue().launch(
+    app.queue(max_size=20).launch(
         server_name="0.0.0.0",
         server_port=7860,
-        share=os.getenv("GRADIO_SHARE", "false").lower() == "true"
+        share=os.getenv("GRADIO_SHARE", "false").lower() == "true",
+        show_api=False,
+        show_error=True
     ) 
