@@ -161,6 +161,7 @@ class AdvancedGAIAAgent:
             
             # Process with advanced reasoning with error handling
             try:
+                # Use default recursion settings and rely on improved termination logic
                 result = self.graph.invoke(enhanced_state)
                 
                 # Extract clean answer
@@ -869,6 +870,7 @@ def chat_interface_logic_sync(message: str, history: List[List[str]], log_to_db:
     tool_calls_made = []
     
     try:
+        # Use default recursion settings and rely on improved termination logic  
         for chunk in agent_graph.stream(agent_input, stream_mode="values"):
             # Check if chunk is valid
             if not chunk or "messages" not in chunk or not chunk["messages"]:

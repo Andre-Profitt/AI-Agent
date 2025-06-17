@@ -735,12 +735,7 @@ Respond ONLY with the JSON plan.
             }
         )
 
-        return graph_builder.compile(
-            # Add recursion limit to prevent infinite loops
-            recursion_limit=50,  # Increased from default 25 for complex reasoning
-            # Enable debugging for better error tracking
-            debug=False
-        )
+        return graph_builder.compile()
 
     # --- Helper Methods for Advanced Features ---
     
