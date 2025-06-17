@@ -159,15 +159,33 @@ class AdvancedGAIAAgent:
                 "cross_validation_sources": []
             }
             
-            # Process with advanced reasoning
-            result = self.graph.invoke(enhanced_state)
-            
-            # Extract clean answer
-            final_message = result['messages'][-1]
-            raw_answer = final_message.content if hasattr(final_message, 'content') else str(final_message)
-            
-            # Clean answer for GAIA submission
-            clean_answer = self._extract_clean_answer(raw_answer)
+            # Process with advanced reasoning with error handling
+            try:
+                result = self.graph.invoke(enhanced_state)
+                
+                # Extract clean answer
+                if result and 'messages' in result and result['messages']:
+                    final_message = result['messages'][-1]
+                    raw_answer = final_message.content if hasattr(final_message, 'content') else str(final_message)
+                else:
+                    raw_answer = "No answer generated - agent did not produce a response"
+                
+                # Clean answer for GAIA submission
+                clean_answer = self._extract_clean_answer(raw_answer)
+                
+            except Exception as graph_error:
+                logger.error(f"Graph execution error: {graph_error}")
+                
+                # Handle specific error types
+                error_str = str(graph_error).lower()
+                if "recursion limit" in error_str:
+                    clean_answer = "Error: Question too complex - recursion limit reached"
+                elif "model_decommissioned" in error_str or "llama-3.2-11b-vision-preview" in error_str:
+                    clean_answer = "Error: Model configuration issue - vision model decommissioned"
+                elif "__end__" in error_str:
+                    clean_answer = "Error: Agent termination issue - unable to complete reasoning"
+                else:
+                    clean_answer = f"Error: {str(graph_error)[:200]}"
             
             # Update performance stats
             processing_time = time.time() - start_time
@@ -852,6 +870,11 @@ def chat_interface_logic_sync(message: str, history: List[List[str]], log_to_db:
     
     try:
         for chunk in agent_graph.stream(agent_input, stream_mode="values"):
+            # Check if chunk is valid
+            if not chunk or "messages" not in chunk or not chunk["messages"]:
+                logger.warning("Received empty chunk from agent_graph.stream")
+                continue
+                
             last_message = chunk["messages"][-1]
             current_confidence = chunk.get("confidence", 0.0)
             current_step = chunk.get("step_count", 0)
@@ -931,8 +954,26 @@ def chat_interface_logic_sync(message: str, history: List[List[str]], log_to_db:
 
     except Exception as e:
         logger.error(f"An error occurred during agent execution for run_id {run_id}: {e}", exc_info=True)
-        error_message = f"❌ **Error occurred:** {e}\n\n🔧 **Troubleshooting:**\n- Check your internet connection\n- Verify API keys are configured\n- Try a simpler query\n- Contact support if the issue persists"
-        yield intermediate_steps + error_message, f"An error occurred: {e}", session_id
+        
+        # Handle specific error types
+        error_str = str(e).lower()
+        if "recursion limit" in error_str:
+            error_message = f"❌ **Recursion Limit Reached**\n\nThe question was too complex and exceeded the reasoning limit.\n\n🔧 **Suggestions:**\n- Try breaking your question into smaller parts\n- Ask for a simpler explanation\n- Restart the conversation"
+            final_answer = "Question too complex - please try a simpler approach"
+        elif "model_decommissioned" in error_str or "llama-3.2-11b-vision-preview" in error_str:
+            error_message = f"❌ **Model Configuration Error**\n\nA vision model has been decommissioned.\n\n🔧 **This is being fixed:**\n- Model configurations are being updated\n- Try again in a few moments\n- For now, avoid image-related questions"
+            final_answer = "Model configuration issue - please try again"
+        elif "__end__" in error_str:
+            error_message = f"❌ **Agent Termination Error**\n\nThe agent had difficulty completing its reasoning.\n\n🔧 **Suggestions:**\n- Try rephrasing your question\n- Ask for a more direct answer\n- Restart the conversation"
+            final_answer = "Agent termination issue - please try rephrasing"
+        elif "429" in error_str or "rate limit" in error_str:
+            error_message = f"❌ **Rate Limit Error**\n\nToo many requests to the AI service.\n\n🔧 **Please:**\n- Wait a moment before trying again\n- The system will retry automatically"
+            final_answer = "Rate limit reached - please wait and try again"
+        else:
+            error_message = f"❌ **Error occurred:** {e}\n\n🔧 **Troubleshooting:**\n- Check your internet connection\n- Verify API keys are configured\n- Try a simpler query\n- Contact support if the issue persists"
+            final_answer = f"An error occurred: {e}"
+        
+        yield intermediate_steps + error_message, final_answer, session_id
 
 def chat_interface_logic_parallel(message: str, history: List[List[str]], log_to_db: bool, session_id: str = None):
     """

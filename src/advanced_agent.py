@@ -110,10 +110,10 @@ class ModelConfig:
         "creative": "gemma2-9b-it"             # Creative responses
     }
     
-    # Vision models - for image analysis
+    # Vision models - for image analysis  
     VISION_MODELS = {
-        "primary": "llama-3.2-11b-vision-preview",  # Vision capabilities
-        "fast": "llama-3.2-3b-preview"              # Fast vision processing
+        "primary": "meta-llama/llama-4-scout-17b-16e-instruct",  # Latest vision capabilities
+        "fast": "llama-3.1-8b-instant"                          # Fast fallback for simple tasks
     }
     
     # Grading/evaluation models - for answer validation
@@ -206,7 +206,7 @@ class AdvancedReActAgent:
     def __init__(self, tools: list, log_handler: logging.Handler = None, model_preference: str = "balanced"):
         self.tools = tools
         self.log_handler = log_handler
-        self.max_reasoning_steps = 20
+        self.max_reasoning_steps = 15  # Reduced to prevent recursion issues
         self.tool_registry = {tool.name: tool for tool in tools}
         self.model_preference = model_preference  # "fast", "balanced", "quality"
         
@@ -652,37 +652,58 @@ Respond ONLY with the JSON plan.
             }
 
         def advanced_decision_node(state: EnhancedAgentState):
-            """Sophisticated decision logic for next actions."""
-            last_message = state["messages"][-1]
+            """Sophisticated decision logic for next actions with proper termination."""
+            last_message = state["messages"][-1] if state["messages"] else None
             step_count = state.get("step_count", 0)
             confidence = state.get("confidence", 0.0)
             reasoning_complete = state.get("reasoning_complete", False)
             verification_level = state.get("verification_level", "basic")
             error_attempts = state.get("error_recovery_attempts", 0)
             
-            # Continue if there are tool calls to execute
-            if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
-                return "enhanced_tools"
-            
-            # Stop if max steps reached
-            if step_count >= self.max_reasoning_steps:
-                logger.warning(f"Max reasoning steps reached")
+            # Safety: Always terminate if no message or step count too high
+            if not last_message or step_count >= self.max_reasoning_steps:
+                logger.warning(f"Terminating: step_count={step_count}, max_steps={self.max_reasoning_steps}")
                 return END
             
-            # Sophisticated completion logic
-            if reasoning_complete:
-                if verification_level == "basic" and confidence > 0.7:
-                    return END
-                elif verification_level == "thorough" and confidence > 0.8:
-                    return END
-                elif verification_level == "exhaustive" and confidence > 0.9:
+            # Continue if there are tool calls to execute
+            if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+                logger.debug(f"Step {step_count}: Executing tools")
+                return "enhanced_tools"
+            
+            # Enhanced completion logic with fallback termination
+            if reasoning_complete or step_count >= 15:  # Force completion after 15 steps
+                confidence_threshold = {
+                    "basic": 0.6,      # Lowered thresholds for better termination
+                    "thorough": 0.7,
+                    "exhaustive": 0.8
+                }.get(verification_level, 0.6)
+                
+                if confidence >= confidence_threshold or step_count >= 15:
+                    logger.info(f"Terminating: reasoning_complete={reasoning_complete}, confidence={confidence:.2f}, step_count={step_count}")
                     return END
             
-            # Reflection trigger points
-            if (step_count % 4 == 0 and step_count > 0) or error_attempts >= 3:
+            # Smart reflection triggers - avoid excessive reflection
+            if error_attempts >= 2:  # Reduced from 3 to 2
+                if step_count < self.max_reasoning_steps - 5:  # Leave room for final reasoning
+                    logger.debug(f"Step {step_count}: Triggering reflection due to errors")
+                    return "reflection"
+                else:
+                    # Too close to max steps, force termination
+                    logger.warning(f"Step {step_count}: Forcing termination due to error attempts near max steps")
+                    return END
+            
+            # Periodic reflection, but not too frequent
+            if step_count % 6 == 0 and step_count > 0 and step_count < self.max_reasoning_steps - 3:
+                logger.debug(f"Step {step_count}: Periodic reflection")
                 return "reflection"
             
+            # Check for stagnation - if no progress in reasoning
+            if step_count >= 10 and confidence < 0.4:
+                logger.warning(f"Step {step_count}: Low confidence ({confidence:.2f}), forcing termination")
+                return END
+            
             # Continue reasoning
+            logger.debug(f"Step {step_count}: Continuing reasoning")
             return "advanced_reasoning"
 
         # Build the advanced graph
@@ -702,19 +723,24 @@ Respond ONLY with the JSON plan.
         graph_builder.add_edge("enhanced_tools", "advanced_reasoning")
         graph_builder.add_edge("reflection", "advanced_reasoning")
         
-        # Add conditional edges from reasoning
+        # Add conditional edges from reasoning with proper END handling
         graph_builder.add_conditional_edges(
             "advanced_reasoning",
             advanced_decision_node,
             {
                 "enhanced_tools": "enhanced_tools",
-                "reflection": "reflection",
+                "reflection": "reflection", 
                 "advanced_reasoning": "advanced_reasoning",
-                "end": END
+                END: END  # Use END constant instead of string
             }
         )
 
-        return graph_builder.compile()
+        return graph_builder.compile(
+            # Add recursion limit to prevent infinite loops
+            recursion_limit=50,  # Increased from default 25 for complex reasoning
+            # Enable debugging for better error tracking
+            debug=False
+        )
 
     # --- Helper Methods for Advanced Features ---
     
