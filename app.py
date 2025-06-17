@@ -18,9 +18,11 @@ import gradio as gr
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
-from src.advanced_agent import AdvancedReActAgent
+# Import the new FSM agent instead of the old one
+from src.advanced_agent_fsm import FSMReActAgent
 from src.database import get_supabase_client, SupabaseLogHandler
-from src.tools import get_tools
+# Import enhanced tools for GAIA
+from src.tools_enhanced import get_enhanced_tools
 
 # Import GAIA agent functionality
 try:
@@ -55,14 +57,14 @@ except Exception as e:
 
 # Initialize tools and agent
 try:
-    tools = get_tools()
-    # Use the more sophisticated AdvancedReActAgent which includes strategic planning,
-    # reflection nodes, and robust error handling improvements.
-    agent_graph = AdvancedReActAgent(
+    # Use enhanced tools optimized for GAIA
+    tools = get_enhanced_tools()
+    # Use the new FSM-based agent with deterministic control flow
+    agent_graph = FSMReActAgent(
         tools=tools,
         log_handler=supabase_handler if LOGGING_ENABLED else None
     ).graph
-    logger.info("AdvancedReAct Agent initialized successfully.")
+    logger.info("FSM-based ReAct Agent initialized successfully.")
 except Exception as e:
     logger.critical(f"Failed to initialize agent: {e}", exc_info=True)
     # Instead of exiting, try to provide more specific error details
@@ -71,7 +73,7 @@ except Exception as e:
     
     # Check if tools were initialized successfully
     try:
-        tools = get_tools()
+        tools = get_enhanced_tools()
         print(f"✅ Tools initialized successfully: {len(tools)} tools available")
         print(f"Tool names: {[tool.name for tool in tools]}")
     except Exception as tool_error:
