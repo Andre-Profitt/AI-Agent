@@ -60,10 +60,11 @@ try:
     # Use enhanced tools optimized for GAIA
     tools = get_enhanced_tools()
     # Use the new FSM-based agent with deterministic control flow
-    agent_graph = FSMReActAgent(
+    fsm_agent = FSMReActAgent(
         tools=tools,
-        log_handler=supabase_handler if LOGGING_ENABLED else None
-    ).graph
+        log_handler=supabase_handler if LOGGING_ENABLED else None,
+        model_preference="balanced"
+    )
     logger.info("FSM-based ReAct Agent initialized successfully.")
 except Exception as e:
     logger.critical(f"Failed to initialize agent: {e}", exc_info=True)
@@ -94,121 +95,33 @@ API_RATE_LIMIT_BUFFER = 5  # Extra seconds between API calls for safety
 GROQ_TPM_LIMIT = 6000  # Groq tokens per minute limit
 REQUEST_SPACING = 0.5  # Minimum seconds between requests
 
-# --- Advanced GAIA Agent ---
+# --- Advanced GAIA Agent (FSM version) ---------------------------
 class AdvancedGAIAAgent:
     """
-    GAIA Agent with all advanced features:
-    - Strategic planning and reflection
-    - Cross-validation and verification  
-    - Adaptive model selection
-    - Tool orchestration
-    - Performance monitoring
+    GAIA wrapper that delegates every question to the FSM-based agent,
+    guaranteeing deterministic execution and GAIA-ready tools.
     """
-    
     def __init__(self):
-        logger.info("🚀 Initializing Advanced GAIA Agent...")
-        
-        if not GAIA_AVAILABLE:
-            raise RuntimeError("GAIA agent functionality not available - agent.py not found")
-        
-        try:
-            self.graph = build_graph()
-            self.session_count = 0
-            self.performance_stats = {
-                "total_questions": 0,
-                "successful_answers": 0,
-                "avg_processing_time": 0.0,
-                "tool_usage": {tool.name: 0 for tool in tools},
-                "start_time": time.time()
-            }
-            logger.info("✅ Advanced GAIA Agent initialized successfully")
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize Advanced GAIA Agent: {e}")
-            raise RuntimeError(f"Agent initialization failed: {e}")
-    
+        tools = get_enhanced_tools()
+        self.fsm_agent = FSMReActAgent(
+            tools           = tools,
+            log_handler     = supabase_handler if LOGGING_ENABLED else None,
+            model_preference= "balanced"
+        )
+        self.performance_stats = {
+            "total_questions": 0,
+            "successful_answers": 0,
+            "avg_processing_time": 0.0,
+            "tool_usage": {tool.name: 0 for tool in tools},
+            "start_time": time.time()
+        }
+
     def __call__(self, question: str) -> str:
-        """Process GAIA question with advanced reasoning."""
-        start_time = time.time()
-        self.session_count += 1
-        
-        try:
-            logger.info(f"🎯 Processing GAIA question #{self.session_count}")
-            logger.debug(f"Question preview: {question[:100]}...")
-            
-            # Enhanced state for comprehensive processing
-            messages = [HumanMessage(content=question)]
-            enhanced_state = {
-                "messages": messages,
-                "run_id": uuid.uuid4(),
-                "log_to_db": LOGGING_ENABLED,
-                # Strategic planning
-                "master_plan": [],
-                "current_step": 0,
-                "plan_revisions": 0,
-                # Reflection capabilities
-                "reflections": [],
-                "confidence_history": [],
-                "error_recovery_attempts": 0,
-                # Adaptive intelligence
-                "step_count": 0,
-                "confidence": 0.3,
-                "reasoning_complete": False,
-                "verification_level": "thorough",  # Enhanced verification for GAIA accuracy
-                # Tool performance
-                "tool_success_rates": {},
-                "tool_results": [],
-                "cross_validation_sources": [],
-                # New state flags for directives
-                "answer_synthesized": False,
-                "fact_checked": False,
-                "logic_reviewed": False,
-                "plan_debugging_requested": False,
-                "plan_failures": []
-            }
-            
-            # Process with advanced reasoning with error handling
-            try:
-                # Use default recursion settings and rely on improved termination logic
-                result = self.graph.invoke(enhanced_state)
-                
-                # Extract clean answer
-                if result and 'messages' in result and result['messages']:
-                    final_message = result['messages'][-1]
-                    raw_answer = final_message.content if hasattr(final_message, 'content') else str(final_message)
-                else:
-                    raw_answer = "No answer generated - agent did not produce a response"
-                
-                # Clean answer for GAIA submission
-                clean_answer = self._extract_clean_answer(raw_answer)
-                
-            except Exception as graph_error:
-                logger.error(f"Graph execution error: {graph_error}")
-                
-                # Handle specific error types
-                error_str = str(graph_error).lower()
-                if "recursion limit" in error_str:
-                    clean_answer = "Error: Question too complex - recursion limit reached"
-                elif "model_decommissioned" in error_str or "llama-3.2-11b-vision-preview" in error_str:
-                    clean_answer = "Error: Model configuration issue - vision model decommissioned"
-                elif "__end__" in error_str:
-                    clean_answer = "Error: Agent termination issue - unable to complete reasoning"
-                else:
-                    clean_answer = f"Error: {str(graph_error)[:200]}"
-            
-            # Update performance stats
-            processing_time = time.time() - start_time
-            self._update_stats(processing_time, True)
-            
-            logger.info(f"✅ Question processed in {processing_time:.2f}s")
-            return clean_answer
-            
-        except Exception as e:
-            processing_time = time.time() - start_time
-            self._update_stats(processing_time, False)
-            error_msg = f"Error processing question: {str(e)}"
-            logger.error(f"❌ {error_msg}")
-            return error_msg
+        start = time.time()
+        result = self.fsm_agent.run({"input": question})   # ✅ FSM
+        answer = self._extract_clean_answer(result["output"])
+        self._update_stats(time.time() - start, success=True)
+        return answer
     
     def _extract_clean_answer(self, response: str) -> str:
         """Extract clean answer for GAIA submission - no formatting, just the answer."""
@@ -882,86 +795,54 @@ def chat_interface_logic_sync(message: str, history: List[List[str]], log_to_db:
         "cross_validation_sources": []
     }
 
-    # Stream the agent's response
-    full_response = ""
+    # Execute the FSM agent and get response
     intermediate_steps = ""
-    reasoning_chain = ""
-    step_count = 0
-    tool_calls_made = []
+    full_response = ""
     
     try:
-        # Use default recursion settings and rely on improved termination logic  
-        for chunk in agent_graph.stream(agent_input, stream_mode="values"):
-            # Check if chunk is valid
-            if not chunk or "messages" not in chunk or not chunk["messages"]:
-                logger.warning("Received empty chunk from agent_graph.stream")
-                continue
-                
-            last_message = chunk["messages"][-1]
-            current_confidence = chunk.get("confidence", 0.0)
-            current_step = chunk.get("step_count", 0)
-
-            # Handle intermediate tool calls and thoughts
-            if isinstance(last_message, AIMessage) and last_message.tool_calls:
-                step_count = current_step
-                thought = last_message.content if last_message.content else "Planning next action..."
-                tool_call_str = "\n".join(
-                    f"  - **{tc['name']}**: {tc['args']}" for tc in last_message.tool_calls
-                )
-                
-                # Track tool calls
-                for tc in last_message.tool_calls:
-                    tool_calls_made.append(tc['name'])
-                
-                intermediate_steps += f"**Step {step_count}** (Confidence: {current_confidence:.0%})\n"
-                intermediate_steps += f"🤔 **Reasoning:** {thought}\n\n"
-                intermediate_steps += f"🛠️ **Action:**\n{tool_call_str}\n\n"
-                
-                reasoning_chain += f"Step {step_count}: {thought}\n"
-                yield intermediate_steps, full_response, session_id
-
-            # Handle tool outputs (observations)
-            elif isinstance(last_message, ToolMessage):
-                observation = last_message.content[:200] + "..." if len(last_message.content) > 200 else last_message.content
-                intermediate_steps += f"👀 **Observation:** {observation}\n\n"
-                reasoning_chain += f"Observation: {last_message.content}\n"
-                yield intermediate_steps, full_response, session_id
-
-            # Handle reasoning and final answers
-            elif isinstance(last_message, AIMessage):
-                step_count = current_step
-                content = last_message.content
-                
-                # Check if this is likely a final answer
-                is_final = (
-                    current_confidence > 0.7 or 
-                    chunk.get("reasoning_complete", False) or
-                    any(indicator in content.lower() for indicator in [
-                        "final answer", "the answer is", "therefore", "conclusion", "result:"
-                    ])
-                )
-                
-                if is_final:
-                    # Extract clean final answer
-                    clean_answer = extract_final_answer(content)
-                    full_response = clean_answer
-                    
-                    intermediate_steps += f"**Final Step {step_count}** (Confidence: {current_confidence:.0%})\n"
-                    intermediate_steps += f"✅ **Final Answer:** {clean_answer}\n\n"
-                    
-                    logger.info(f"Final answer extracted: '{clean_answer}' from raw response: '{content[:100]}...'")
-                else:
-                    # This is intermediate reasoning
-                    intermediate_steps += f"**Step {step_count}** (Confidence: {current_confidence:.0%})\n"
-                    intermediate_steps += f"🧠 **Reasoning:** {content}\n\n"
-                    reasoning_chain += f"Step {step_count}: {content}\n"
-                
-                yield intermediate_steps, full_response, session_id
+        # Show initial processing message
+        intermediate_steps = "🚀 **Processing with FSM Agent** (No recursion limits!)\n\n"
+        yield intermediate_steps, "", session_id
+        
+        # Use the FSM agent's run method (no recursion issues)
+        logger.info(f"🔄 Running FSM agent for query: {message[:50]}...")
+        
+        # Convert formatted_history to simple string for FSM agent
+        conversation_context = ""
+        if formatted_history:
+            for msg in formatted_history:
+                if hasattr(msg, 'content'):
+                    role = "Human" if isinstance(msg, HumanMessage) else "Assistant"
+                    conversation_context += f"{role}: {msg.content}\n"
+        
+        # Prepare input for FSM agent
+        fsm_input = {
+            "input": message,
+            "chat_history": conversation_context
+        }
+        
+        # Execute FSM agent (guaranteed no recursion issues)
+        result = fsm_agent.run(fsm_input)
+        
+        # Extract the response
+        if isinstance(result, dict):
+            raw_response = result.get("output", result.get("response", str(result)))
+        else:
+            raw_response = str(result)
+        
+        # Clean and format the response
+        clean_answer = extract_final_answer(raw_response)
+        full_response = clean_answer
+        
+        intermediate_steps += f"✅ **FSM Agent Completed Successfully**\n\n"
+        intermediate_steps += f"🧠 **Final Answer:** {clean_answer}\n\n"
+        
+        logger.info(f"✅ FSM agent completed successfully. Answer: '{clean_answer[:100]}...'")
+        yield intermediate_steps, full_response, session_id
         
         # Update analytics
         execution_time = time.time() - start_time
         session_manager.performance_metrics["total_queries"] += 1
-        session_manager.performance_metrics["total_tool_calls"] += len(tool_calls_made)
         session_manager.update_performance_metrics(parallel_execution=True)
         
         # Update session data
@@ -970,9 +851,6 @@ def chat_interface_logic_sync(message: str, history: List[List[str]], log_to_db:
             session["total_queries"] += 1
             session["total_response_time"] += execution_time
             session["parallel_tasks"] += 1
-            for tool_name in tool_calls_made:
-                if tool_name in session["tool_usage"]:
-                    session["tool_usage"][tool_name] += 1
 
     except Exception as e:
         logger.error(f"An error occurred during agent execution for run_id {run_id}: {e}", exc_info=True)

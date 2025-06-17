@@ -170,11 +170,12 @@ class FSMReActAgent:
     proactive state-passing, and production-ready reliability.
     """
     
-    def __init__(self, tools: list, log_handler: logging.Handler = None, model_preference: str = "balanced"):
+    def __init__(self, tools: list, log_handler: logging.Handler = None, model_preference: str = "balanced", use_crew: bool = False):
         self.tools = tools
         self.log_handler = log_handler
         self.tool_registry = {tool.name: tool for tool in tools}
         self.model_preference = model_preference
+        self.use_crew = use_crew
         
         # FSM Configuration
         self.max_stagnation = 3  # Maximum allowed stagnation before error
@@ -244,6 +245,15 @@ class FSMReActAgent:
             
             try:
                 # Get planning-optimized LLM
+                if self.use_crew and state.get("step_count", 0) == 0:
+                    from src.crew_workflow import run_crew_workflow
+                    crew_result = run_crew_workflow(state["query"], self.tool_registry)
+                    return {
+                        "final_answer": crew_result.get("output", ""),
+                        "tool_calls": crew_result.get("intermediate_steps", []),
+                        "current_fsm_state": FSMState.FINISHED,
+                        "stagnation_counter": 0
+                    }
                 llm = self._get_llm(task_type="reasoning")
                 
                 # Hydrate prompt with previous results (Directive 2)
@@ -298,7 +308,20 @@ class FSMReActAgent:
                 tool_input = next_tool_info["input"]
                 step_number = next_tool_info["step"]
                 
+                # --- NEW: LOOP-DETECTION & STAGNATION GUARDRAIL ---
+                # If we have already made this exact tool call with the same input, treat as stagnation and re-plan
+                for previous_call in state.get("tool_calls", []):
+                    if previous_call.get("tool_name") == tool_name and previous_call.get("tool_input") == tool_input:
+                        logger.warning("Duplicate tool call detected – triggering re-planning to avoid infinite loop")
+                        return {
+                            "current_fsm_state": FSMState.PLANNING,
+                            "stagnation_counter": state.get("stagnation_counter", 0) + 1,
+                            "errors": ["Duplicate tool call detected"],
+                            "step_count": state.get("step_count", 0) + 1
+                        }
+                
                 # Execute the tool
+                tool_output = None
                 if tool_name in self.tool_registry:
                     logger.info(f"Executing tool: {tool_name} with input: {tool_input}")
                     tool = self.tool_registry[tool_name]
@@ -308,9 +331,16 @@ class FSMReActAgent:
                         tool_output = tool.invoke(tool_input)
                     except Exception as tool_error:
                         logger.error(f"Tool execution failed: {tool_error}")
-                        tool_output = f"Error: {str(tool_error)}"
+                        # Treat validation / schema errors specially – bump stagnation so we do not retry unchanged
+                        return {
+                            "current_fsm_state": FSMState.PLANNING,
+                            "stagnation_counter": state.get("stagnation_counter", 0) + 1,
+                            "errors": [f"Tool execution failed: {str(tool_error)}"],
+                            "step_count": state.get("step_count", 0) + 1
+                        }
                 else:
                     tool_output = f"Error: Tool '{tool_name}' not found"
+                    logger.error(tool_output)
                 
                 # --- CRITICAL STATE UPDATE (Directive 2) ---
                 # Persist the tool output in step_outputs
