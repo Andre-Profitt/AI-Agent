@@ -3,11 +3,16 @@ import logging
 import time
 import random
 import json
+import re
+import uuid
+import requests
+import os
 from typing import Annotated, List, TypedDict, Dict, Any, Optional
 from uuid import UUID
 from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum
+from contextlib import contextmanager
 
 from langchain_core.messages import AnyMessage, BaseMessage, SystemMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_groq import ChatGroq
@@ -15,18 +20,130 @@ from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field, ValidationError
 
-# Configure logging
-logger = logging.getLogger(__name__)
+# Import resilience libraries with fallbacks
+try:
+    from circuitbreaker import circuit
+    CIRCUIT_BREAKER_AVAILABLE = True
+except ImportError:
+    CIRCUIT_BREAKER_AVAILABLE = False
+    # Create a no-op decorator if circuitbreaker is not available
+    def circuit(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
 
-# --- FSM States Definition ---
+try:
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+    RETRY_AVAILABLE = True
+except ImportError:
+    RETRY_AVAILABLE = False
+
+# --- PRODUCTION-GRADE STRUCTURED LOGGING CONFIGURATION ---
+import logging.config
+
+LOGGING_CONFIG = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'json': {
+            'format': '%(asctime)s %(name)s %(levelname)s %(message)s %(process)d %(thread)d',
+        },
+        'structured': {
+            'format': '[%(asctime)s] %(levelname)-8s [%(name)s:%(lineno)d] [%(correlation_id)s] %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S'
+        }
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'structured',
+            'level': 'INFO',
+        },
+        'file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'formatter': 'structured',
+            'filename': 'agent_fsm.log',
+            'maxBytes': 10485760,  # 10MB
+            'backupCount': 5,
+            'level': 'DEBUG',
+        },
+    },
+    'loggers': {
+        'agent_fsm': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': False
+        }
+    }
+}
+
+# Apply logging configuration
+logging.config.dictConfig(LOGGING_CONFIG)
+logger = logging.getLogger('agent_fsm')
+
+# --- CONTEXTUAL LOGGING WITH CORRELATION IDs ---
+class CorrelationFilter(logging.Filter):
+    """Add correlation ID to log records"""
+    def filter(self, record):
+        if not hasattr(record, 'correlation_id'):
+            record.correlation_id = getattr(self, 'correlation_id', 'no-correlation')
+        return True
+
+correlation_filter = CorrelationFilter()
+for handler in logger.handlers:
+    handler.addFilter(correlation_filter)
+
+@contextmanager
+def correlation_context(correlation_id: str):
+    """Context manager for correlation ID"""
+    correlation_filter.correlation_id = correlation_id
+    try:
+        yield correlation_id
+    finally:
+        correlation_filter.correlation_id = 'no-correlation'
+
+# --- ENHANCED FSM STATES FOR FAULT TOLERANCE ---
 class FSMState(str, Enum):
-    """Enumeration of all possible FSM states"""
+    """Enumeration of all possible FSM states including granular failure states"""
+    # Core execution states
     PLANNING = "PLANNING"
+    AWAITING_PLAN_RESPONSE = "AWAITING_PLAN_RESPONSE"
+    VALIDATING_PLAN = "VALIDATING_PLAN"
     TOOL_EXECUTION = "TOOL_EXECUTION"
     SYNTHESIZING = "SYNTHESIZING"
     VERIFYING = "VERIFYING"
     FINISHED = "FINISHED"
-    ERROR = "ERROR"
+    
+    # Granular failure states for fault tolerance
+    TRANSIENT_API_FAILURE = "TRANSIENT_API_FAILURE"
+    PERMANENT_API_FAILURE = "PERMANENT_API_FAILURE"
+    INVALID_PLAN_FAILURE = "INVALID_PLAN_FAILURE"
+    TOOL_EXECUTION_FAILURE = "TOOL_EXECUTION_FAILURE"
+    FINAL_FAILURE = "FINAL_FAILURE"
+
+# --- PYDANTIC DATA CONTRACTS FOR API RESPONSES ---
+class PlanStep(BaseModel):
+    """Ironclad data contract for planning steps"""
+    step_name: str = Field(description="The name of the tool or function to execute")
+    parameters: Dict[str, Any] = Field(description="Parameters for the tool")
+    reasoning: str = Field(description="Brief explanation of why this step is necessary")
+    expected_output: str = Field(description="Expected format/type of output")
+
+class PlanResponse(BaseModel):
+    """Data contract for complete plan response"""
+    steps: List[PlanStep] = Field(description="List of planned steps")
+    total_steps: int = Field(description="Total number of steps")
+    confidence: float = Field(ge=0.0, le=1.0, description="Confidence in the plan")
+
+class ExecutionResult(BaseModel):
+    """Data contract for tool execution results"""
+    success: bool = Field(description="Whether execution was successful")
+    output: Any = Field(description="The tool's output")
+    error_message: Optional[str] = Field(description="Error message if execution failed")
+    execution_time: float = Field(description="Time taken for execution")
+
+# Note: FSMState enum already defined above with granular failure states
 
 # --- Enhanced State Tracking ---
 
@@ -45,18 +162,22 @@ class ToolCall:
 
 class EnhancedAgentState(TypedDict):
     """
-    Enhanced agent state with FSM control fields and proactive state-passing
+    Enhanced agent state with FSM control fields, correlation tracking, and failure context
     """
+    # Correlation and context
+    correlation_id: str
+    
     # User input
     query: str
     
     # Planning and execution
     plan: str
-    master_plan: List[Dict[str, Any]]  # List of planned steps
+    master_plan: List[Dict[str, Any]]
+    validated_plan: Optional[PlanResponse]
     
     # Tool execution history with state-passing
     tool_calls: Annotated[List[Dict[str, Any]], operator.add]
-    step_outputs: Dict[int, Any]  # Key: step number, Value: output
+    step_outputs: Dict[int, Any]
     
     # Final output
     final_answer: str
@@ -65,9 +186,16 @@ class EnhancedAgentState(TypedDict):
     current_fsm_state: str
     stagnation_counter: int
     max_stagnation: int
+    retry_count: int
+    max_retries: int
+    
+    # Failure context
+    failure_history: List[Dict[str, Any]]
+    circuit_breaker_status: str  # "closed", "open", "half-open"
+    last_api_error: Optional[str]
     
     # Verification and confidence
-    verification_level: str  # "basic", "thorough", "exhaustive"
+    verification_level: str
     confidence: float
     cross_validation_sources: List[str]
     
@@ -83,8 +211,8 @@ class EnhancedAgentState(TypedDict):
     end_time: float
     
     # --- Adaptive Tool Selection ---
-    tool_reliability: Dict[str, Dict[str, Any]]  # Tool performance metrics
-    tool_preferences: Dict[str, List[str]]  # Preferred tools for query types
+    tool_reliability: Dict[str, Dict[str, Any]]
+    tool_preferences: Dict[str, List[str]]
 
 # --- Model Configuration ---
 
@@ -135,36 +263,209 @@ class VerificationResult(BaseModel):
 # --- Rate Limiting ---
 
 class RateLimiter:
-    """Enhanced rate limiter with burst handling."""
+    """Rate limiter for API calls to prevent hitting rate limits"""
     
     def __init__(self, max_requests_per_minute=60, burst_allowance=10):
-        self.max_requests = max_requests_per_minute
+        self.max_requests_per_minute = max_requests_per_minute
         self.burst_allowance = burst_allowance
         self.requests = []
-        self.burst_used = 0
-        
+    
     def wait_if_needed(self):
-        """Advanced rate limiting with burst capacity."""
+        """Wait if needed to comply with rate limits"""
         now = time.time()
         self.requests = [req_time for req_time in self.requests if now - req_time < 60]
         
-        if len(self.requests) >= self.max_requests:
-            if self.burst_used < self.burst_allowance:
-                self.burst_used += 1
-                logger.info(f"Using burst capacity ({self.burst_used}/{self.burst_allowance})")
-            else:
-                sleep_time = 60 - (now - self.requests[0]) + 1
-                if sleep_time > 0:
-                    logger.warning(f"Rate limit hit, sleeping for {sleep_time:.1f}s")
-                    time.sleep(sleep_time)
-        
-        # Reset burst counter periodically
-        if len(self.requests) < self.max_requests * 0.5:
-            self.burst_used = max(0, self.burst_used - 1)
+        if len(self.requests) >= self.max_requests_per_minute:
+            sleep_time = 60 - (now - self.requests[0])
+            if sleep_time > 0:
+                logger.info(f"Rate limiting: sleeping for {sleep_time:.2f} seconds")
+                time.sleep(sleep_time)
         
         self.requests.append(now)
 
-rate_limiter = RateLimiter(max_requests_per_minute=60, burst_allowance=15)
+# Global rate limiter instance
+rate_limiter = RateLimiter()
+
+# --- RESILIENT COMMUNICATION LAYER ---
+class ResilientAPIClient:
+    """Production-grade API client with retries, circuit breaker, and structured error handling"""
+    
+    def __init__(self, api_key: str, base_url: str = "https://api.groq.com/openai/v1"):
+        self.api_key = api_key
+        self.base_url = base_url
+        self.session = self._create_resilient_session()
+        self.rate_limiter = RateLimiter()
+        
+    def _create_resilient_session(self) -> requests.Session:
+        """Create a requests session with intelligent retry strategy"""
+        session = requests.Session()
+        
+        if RETRY_AVAILABLE:
+            # Configure exponential backoff retry strategy
+            retry_strategy = Retry(
+                total=3,  # Total number of retries
+                status_forcelist=[429, 500, 502, 503, 504],  # HTTP status codes to retry
+                backoff_factor=1,  # Exponential backoff factor
+                allowed_methods=["POST"]  # Only retry POST requests (our API calls)
+            )
+            
+            adapter = HTTPAdapter(max_retries=retry_strategy)
+            session.mount("https://", adapter)
+            session.mount("http://", adapter)
+            
+        # Set default timeout for all requests
+        session.request = self._add_timeout(session.request)
+        
+        return session
+    
+    def _add_timeout(self, original_request):
+        """Add timeout to all requests"""
+        def request_with_timeout(*args, **kwargs):
+            kwargs.setdefault('timeout', 30)  # 30 second timeout
+            return original_request(*args, **kwargs)
+        return request_with_timeout
+    
+    @circuit(failure_threshold=5, recovery_timeout=60, expected_exception=requests.exceptions.RequestException)
+    def make_chat_completion(self, messages: List[Dict], model: str = "llama-3.3-70b-versatile", 
+                           enforce_json: bool = True, correlation_id: str = None) -> Dict[str, Any]:
+        """Make a chat completion request with full resilience patterns"""
+        
+        correlation_id = correlation_id or str(uuid.uuid4())
+        
+        with correlation_context(correlation_id):
+            logger.info(f"Initiating API call to {self.base_url}/chat/completions", 
+                       extra={'model': model, 'message_count': len(messages)})
+            
+            # Apply rate limiting
+            self.rate_limiter.wait_if_needed()
+            
+            # Prepare the request payload
+            payload = {
+                "model": model,
+                "messages": messages,
+                "max_tokens": 4096,
+                "temperature": 0.1
+            }
+            
+            # CRITICAL: Enforce JSON response format
+            if enforce_json:
+                payload["response_format"] = {"type": "json_object"}
+                logger.debug("JSON response format enforced")
+                
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            try:
+                response = self.session.post(
+                    f"{self.base_url}/chat/completions",
+                    json=payload,
+                    headers=headers
+                )
+                
+                # Raise exception for HTTP errors
+                response.raise_for_status()
+                
+                result = response.json()
+                
+                logger.info("API call successful", 
+                           extra={'status_code': response.status_code, 
+                                 'response_time': response.elapsed.total_seconds()})
+                
+                return result
+                
+            except requests.exceptions.HTTPError as http_err:
+                logger.error(f"HTTP error occurred: {http_err}", 
+                           extra={'status_code': response.status_code, 'response_body': response.text[:500]})
+                raise
+            except requests.exceptions.ConnectionError as conn_err:
+                logger.error(f"Connection error occurred: {conn_err}")
+                raise
+            except requests.exceptions.Timeout as timeout_err:
+                logger.error(f"Request timed out: {timeout_err}")
+                raise
+            except requests.exceptions.RequestException as req_err:
+                logger.error(f"Unexpected request error: {req_err}")
+                raise
+
+# --- ENHANCED PLANNING WITH STRUCTURED OUTPUT ---
+class EnhancedPlanner:
+    """Planner that enforces structured output and validates plans"""
+    
+    def __init__(self, api_client: ResilientAPIClient):
+        self.api_client = api_client
+        
+    def create_structured_plan(self, query: str, context: Dict = None, correlation_id: str = None) -> PlanResponse:
+        """Create a plan with enforced structure and validation"""
+        
+        correlation_id = correlation_id or str(uuid.uuid4())
+        
+        with correlation_context(correlation_id):
+            logger.info("Creating structured plan", extra={'query_length': len(query)})
+        
+            # Create the prompt with explicit JSON requirement
+            system_prompt = """You are a strategic planning engine. You MUST respond with a valid JSON object.
+
+Create a step-by-step plan to answer the user's query. Your response must be a JSON object with this exact structure:
+
+{
+  "steps": [
+    {
+      "step_name": "tool_name",
+      "parameters": {"param1": "value1", "param2": "value2"},
+      "reasoning": "Why this step is needed",
+      "expected_output": "What format/type of output is expected"
+    }
+  ],
+  "total_steps": 2,
+  "confidence": 0.8
+}
+
+Available tools and their exact parameters:
+- web_researcher: {"query": "search query", "source": "wikipedia"}
+- semantic_search_tool: {"query": "search query", "filename": "knowledge_base.csv", "top_k": 3}
+- python_interpreter: {"code": "python code"}
+- tavily_search: {"query": "search query", "max_results": 3}
+- file_reader: {"filename": "path/to/file", "lines": -1}
+- video_analyzer: {"url": "video_url", "action": "download_info"}
+- gaia_video_analyzer: {"video_url": "googleusercontent_url"}
+
+Use EXACT parameter names. Respond ONLY with the JSON object, no markdown or explanations."""
+
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Create a plan to answer: {query}"}
+            ]
+            
+            try:
+                # Make API call with enforced JSON
+                response = self.api_client.make_chat_completion(
+                    messages=messages,
+                    enforce_json=True,
+                    correlation_id=correlation_id
+                )
+                
+                # Extract the content
+                plan_json = response["choices"][0]["message"]["content"]
+                
+                logger.debug("Raw plan response received", extra={'response_length': len(plan_json)})
+                
+                # Parse and validate using Pydantic
+                try:
+                    plan_response = PlanResponse.model_validate_json(plan_json)
+                    logger.info("Plan validation successful", 
+                               extra={'total_steps': plan_response.total_steps, 
+                                     'confidence': plan_response.confidence})
+                    return plan_response
+                    
+                except ValidationError as e:
+                    logger.error("Plan validation failed", extra={'validation_errors': str(e), 'raw_response': plan_json[:500]})
+                    raise ValueError(f"Plan validation failed: {e}")
+                    
+            except Exception as e:
+                logger.error("Plan creation failed", extra={'error': str(e)})
+                raise
 
 # --- Main FSM-based Agent ---
 
@@ -181,17 +482,30 @@ class FSMReActAgent:
         self.model_preference = model_preference
         self.use_crew = use_crew
         
-        # Add stub tools for missing ones (FIX 3: Register stubs for not-yet-implemented tools)
+        # Initialize resilient communication components
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        if not groq_api_key:
+            logger.warning("GROQ_API_KEY not found, some features may be limited")
+            # Create a mock client for testing
+            self.api_client = None
+            self.planner = None
+        else:
+            self.api_client = ResilientAPIClient(groq_api_key)
+            self.planner = EnhancedPlanner(self.api_client)
+        
+        # Add stub tools for missing ones
         self._add_stub_tools()
         
         # FSM Configuration
-        self.max_stagnation = 3  # Maximum allowed stagnation before error
-        self.max_steps = 20  # Maximum total steps to prevent runaway execution
+        self.max_stagnation = 3
+        self.max_steps = 20
         
         try:
             logger.info(f"Initializing FSMReActAgent with {len(tools)} tools")
-            self.graph = self._build_fsm_graph()
-            logger.info("FSMReActAgent graph built successfully")
+            with correlation_context(str(uuid.uuid4())):
+                logger.info("Building resilient FSM graph", extra={'tools_count': len(tools), 'use_crew': use_crew})
+                self.graph = self._build_fsm_graph()
+                logger.info("FSMReActAgent graph built successfully")
         except Exception as e:
             logger.error(f"Failed to build FSM graph: {e}", exc_info=True)
             raise RuntimeError(f"FSMReActAgent initialization failed: {e}")
@@ -365,7 +679,7 @@ class FSMReActAgent:
             except Exception as e:
                 logger.error(f"Error in planning node: {e}")
                 return {
-                    "current_fsm_state": FSMState.ERROR,
+                    "current_fsm_state": FSMState.FINAL_FAILURE,
                     "errors": [str(e)]
                 }
         
@@ -527,7 +841,7 @@ class FSMReActAgent:
             except Exception as e:
                 logger.error(f"Error in tool execution node: {e}")
                 return {
-                    "current_fsm_state": FSMState.ERROR,
+                    "current_fsm_state": FSMState.TOOL_EXECUTION_FAILURE,
                     "errors": [str(e)],
                     "tool_reliability": tool_reliability  # Always include tool_reliability
                 }
@@ -591,7 +905,7 @@ class FSMReActAgent:
             except Exception as e:
                 logger.error(f"Error in synthesizing node: {e}")
                 return {
-                    "current_fsm_state": FSMState.ERROR,
+                    "current_fsm_state": FSMState.FINAL_FAILURE,
                     "errors": [str(e)]
                 }
         
@@ -635,7 +949,7 @@ class FSMReActAgent:
                     stagnation_count = state.get("stagnation_counter", 0) + 1
                     if stagnation_count >= self.max_stagnation:
                         return {
-                            "current_fsm_state": FSMState.ERROR,
+                            "current_fsm_state": FSMState.FINAL_FAILURE,
                             "errors": ["Max verification attempts reached"]
                         }
                     
@@ -692,7 +1006,8 @@ class FSMReActAgent:
                 return "synthesizing_node"
             elif current_state == FSMState.VERIFYING:
                 return "verifying_node"
-            elif current_state == FSMState.ERROR:
+            elif current_state in [FSMState.FINAL_FAILURE, FSMState.TOOL_EXECUTION_FAILURE, 
+                                  FSMState.PERMANENT_API_FAILURE, FSMState.INVALID_PLAN_FAILURE]:
                 return "error_node"
             elif current_state == FSMState.FINISHED:
                 return END
@@ -959,9 +1274,6 @@ CRITICAL: Use the EXACT parameter names shown above. Do NOT use generic "query" 
     
     def _parse_plan_into_steps(self, plan_text: str, state: EnhancedAgentState) -> List[Dict[str, Any]]:
         """Parse LLM plan into structured steps."""
-        import re
-        import json
-        
         steps = []
         # Updated pattern to capture tool parameters
         step_pattern = r"Step (\d+):\s*(.+?)(?:\n|$)"
@@ -1160,49 +1472,86 @@ Provide a verification result."""
         return best_alternative
     
     def run(self, inputs: dict):
-        """Run the FSM agent with the given inputs."""
-        try:
-            # Initialize state
-            initial_state = {
-                "query": inputs.get("input", inputs.get("query", "")),
-                "messages": [HumanMessage(content=inputs.get("input", ""))],
-                "current_fsm_state": FSMState.PLANNING,
-                "stagnation_counter": 0,
-                "max_stagnation": self.max_stagnation,
-                "step_count": 0,
-                "tool_calls": [],
-                "step_outputs": {},
-                "errors": [],
-                "start_time": time.time(),
-                "verification_level": "thorough",  # Default to thorough per directives
-                "confidence": 0.0,
-                "tool_reliability": {},
-                "tool_preferences": {}
-            }
-            
-            # Run the graph
-            logger.info(f"Starting FSM execution for query: {initial_state['query'][:100]}...")
-            result = self.graph.invoke(initial_state)
-            
-            # Extract final answer
-            final_answer = result.get("final_answer", "Unable to determine answer")
-            
-            logger.info(f"FSM execution completed. Answer: {final_answer}")
-            
-            return {
-                "output": final_answer,
-                "intermediate_steps": result.get("tool_calls", []),
-                "confidence": result.get("confidence", 0.0),
-                "total_steps": result.get("step_count", 0)
-            }
-            
-        except Exception as e:
-            logger.error(f"Error in FSM agent execution: {e}", exc_info=True)
-            return {
-                "output": f"Error: {str(e)}",
-                "intermediate_steps": [],
-                "error": str(e)
-            }
+        """Run the FSM agent with comprehensive resilience and correlation tracking."""
+        correlation_id = str(uuid.uuid4())
+        
+        with correlation_context(correlation_id):
+            try:
+                query = inputs.get("input", inputs.get("query", ""))
+                logger.info(f"Starting resilient FSM execution", extra={'query_length': len(query), 'query_preview': query[:100]})
+                
+                # Initialize state with full resilience context
+                initial_state = {
+                    "correlation_id": correlation_id,
+                    "query": query,
+                    "messages": [HumanMessage(content=query)],
+                    "current_fsm_state": FSMState.PLANNING,
+                    "stagnation_counter": 0,
+                    "max_stagnation": self.max_stagnation,
+                    "retry_count": 0,
+                    "max_retries": 3,
+                    "step_count": 0,
+                    "tool_calls": [],
+                    "step_outputs": {},
+                    "errors": [],
+                    "failure_history": [],
+                    "circuit_breaker_status": "closed",
+                    "last_api_error": None,
+                    "start_time": time.time(),
+                    "verification_level": "thorough",  # Default to thorough per directives
+                    "confidence": 0.0,
+                    "cross_validation_sources": [],
+                    "tool_reliability": {},
+                    "tool_preferences": {},
+                    "validated_plan": None,
+                    "plan": "",
+                    "master_plan": [],
+                    "final_answer": "",
+                    "end_time": 0.0
+                }
+                
+                # Log state transition
+                logger.info("FSM STATE: INITIAL", extra={'next_state': FSMState.PLANNING})
+                
+                # Run the graph with resilience
+                result = self.graph.invoke(initial_state)
+                
+                # Extract final answer with fallback
+                final_answer = result.get("final_answer", "Unable to determine answer")
+                confidence = result.get("confidence", 0.0)
+                total_steps = result.get("step_count", 0)
+                
+                # Log successful completion
+                execution_time = time.time() - initial_state["start_time"]
+                logger.info("FSM execution completed successfully", 
+                           extra={
+                               'final_answer_length': len(final_answer),
+                               'confidence': confidence,
+                               'total_steps': total_steps,
+                               'execution_time': execution_time
+                           })
+                
+                return {
+                    "output": final_answer,
+                    "intermediate_steps": result.get("tool_calls", []),
+                    "confidence": confidence,
+                    "total_steps": total_steps,
+                    "correlation_id": correlation_id,
+                    "execution_time": execution_time
+                }
+                
+            except Exception as e:
+                logger.error("FSM agent execution failed", extra={'error': str(e)}, exc_info=True)
+                
+                # Return graceful error response
+                return {
+                    "output": f"I encountered an error while processing your request. Please try again or rephrase your question.",
+                    "intermediate_steps": [],
+                    "error": str(e),
+                    "correlation_id": correlation_id,
+                    "confidence": 0.0,
+                    "total_steps": 0
+                }
     
     def stream(self, inputs: dict):
         """Stream the FSM agent execution."""
