@@ -12,6 +12,7 @@ import pandas as pd
 from functools import lru_cache
 import threading
 from queue import Queue
+import requests
 
 import gradio as gr
 from dotenv import load_dotenv
@@ -20,6 +21,14 @@ from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from src.advanced_agent import AdvancedReActAgent
 from src.database import get_supabase_client, SupabaseLogHandler
 from src.tools import get_tools
+
+# Import GAIA agent functionality
+try:
+    from agent import build_graph
+    GAIA_AVAILABLE = True
+except ImportError:
+    logger.warning("⚠️ GAIA agent.py not available - GAIA evaluation will be disabled")
+    GAIA_AVAILABLE = False
 
 # --- Initialization ---
 # Load environment variables
@@ -74,11 +83,326 @@ except Exception as e:
     traceback.print_exc()
     exit("Critical error: Agent could not be initialized. Check logs above for details.")
 
+# --- GAIA Constants ---
+DEFAULT_API_URL = "https://agents-course-unit4-scoring.hf.space"
+
 # --- API Rate Limiting Constants ---
 MAX_PARALLEL_WORKERS = 8  # Reduced from 20 to respect Groq rate limits (6000 TPM)
 API_RATE_LIMIT_BUFFER = 5  # Extra seconds between API calls for safety
 GROQ_TPM_LIMIT = 6000  # Groq tokens per minute limit
 REQUEST_SPACING = 0.5  # Minimum seconds between requests
+
+# --- Advanced GAIA Agent ---
+class AdvancedGAIAAgent:
+    """
+    GAIA Agent with all advanced features:
+    - Strategic planning and reflection
+    - Cross-validation and verification  
+    - Adaptive model selection
+    - Tool orchestration
+    - Performance monitoring
+    """
+    
+    def __init__(self):
+        logger.info("🚀 Initializing Advanced GAIA Agent...")
+        
+        if not GAIA_AVAILABLE:
+            raise RuntimeError("GAIA agent functionality not available - agent.py not found")
+        
+        try:
+            self.graph = build_graph()
+            self.session_count = 0
+            self.performance_stats = {
+                "total_questions": 0,
+                "successful_answers": 0,
+                "avg_processing_time": 0.0,
+                "tool_usage": {tool.name: 0 for tool in tools},
+                "start_time": time.time()
+            }
+            logger.info("✅ Advanced GAIA Agent initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize Advanced GAIA Agent: {e}")
+            raise RuntimeError(f"Agent initialization failed: {e}")
+    
+    def __call__(self, question: str) -> str:
+        """Process GAIA question with advanced reasoning."""
+        start_time = time.time()
+        self.session_count += 1
+        
+        try:
+            logger.info(f"🎯 Processing GAIA question #{self.session_count}")
+            logger.debug(f"Question preview: {question[:100]}...")
+            
+            # Enhanced state for comprehensive processing
+            messages = [HumanMessage(content=question)]
+            enhanced_state = {
+                "messages": messages,
+                "run_id": uuid.uuid4(),
+                "log_to_db": LOGGING_ENABLED,
+                # Strategic planning
+                "master_plan": [],
+                "current_step": 0,
+                "plan_revisions": 0,
+                # Reflection capabilities
+                "reflections": [],
+                "confidence_history": [],
+                "error_recovery_attempts": 0,
+                # Adaptive intelligence
+                "step_count": 0,
+                "confidence": 0.3,
+                "reasoning_complete": False,
+                "verification_level": "thorough",  # High verification for GAIA
+                # Tool performance
+                "tool_success_rates": {},
+                "tool_results": [],
+                "cross_validation_sources": []
+            }
+            
+            # Process with advanced reasoning
+            result = self.graph.invoke(enhanced_state)
+            
+            # Extract clean answer
+            final_message = result['messages'][-1]
+            raw_answer = final_message.content if hasattr(final_message, 'content') else str(final_message)
+            
+            # Clean answer for GAIA submission
+            clean_answer = self._extract_clean_answer(raw_answer)
+            
+            # Update performance stats
+            processing_time = time.time() - start_time
+            self._update_stats(processing_time, True)
+            
+            logger.info(f"✅ Question processed in {processing_time:.2f}s")
+            return clean_answer
+            
+        except Exception as e:
+            processing_time = time.time() - start_time
+            self._update_stats(processing_time, False)
+            error_msg = f"Error processing question: {str(e)}"
+            logger.error(f"❌ {error_msg}")
+            return error_msg
+    
+    def _extract_clean_answer(self, response: str) -> str:
+        """Extract clean answer for GAIA submission."""
+        if not response:
+            return "No answer provided"
+        
+        # Use the advanced answer extraction from the original app
+        clean_answer = extract_final_answer(response)
+        
+        # Additional GAIA-specific cleaning
+        if len(clean_answer) > 500:  # GAIA prefers concise answers
+            lines = clean_answer.split('\n')
+            # Find the most concise line that looks like an answer
+            for line in lines:
+                line = line.strip()
+                if line and len(line) < 200:
+                    if any(char.isdigit() for char in line) or len(line.split()) <= 15:
+                        clean_answer = line
+                        break
+        
+        return clean_answer.strip()
+    
+    def _update_stats(self, processing_time: float, success: bool):
+        """Update performance statistics."""
+        self.performance_stats["total_questions"] += 1
+        if success:
+            self.performance_stats["successful_answers"] += 1
+        
+        # Update average processing time
+        total_time = (self.performance_stats["avg_processing_time"] * 
+                     (self.performance_stats["total_questions"] - 1) + processing_time)
+        self.performance_stats["avg_processing_time"] = total_time / self.performance_stats["total_questions"]
+    
+    def get_performance_summary(self) -> str:
+        """Get performance summary for monitoring."""
+        stats = self.performance_stats
+        uptime = time.time() - stats["start_time"]
+        success_rate = (stats["successful_answers"] / max(1, stats["total_questions"])) * 100
+        
+        return f"""
+🎯 **Advanced GAIA Agent Performance**
+- Questions Processed: {stats["total_questions"]}
+- Success Rate: {success_rate:.1f}%
+- Avg Processing Time: {stats["avg_processing_time"]:.2f}s
+- Uptime: {uptime/3600:.1f} hours
+- Tools Available: {len(tools)}
+- Advanced Features: ✅ Enabled
+"""
+
+# --- GAIA Evaluation Functions ---
+def run_and_submit_all(profile: gr.OAuthProfile | None):
+    """
+    Enhanced GAIA evaluation with advanced agent capabilities.
+    Fetches questions, processes with sophisticated reasoning, and submits answers.
+    """
+    if not GAIA_AVAILABLE:
+        return "❌ GAIA functionality not available - agent.py not found", None
+    
+    # Determine space configuration
+    space_id = os.getenv("SPACE_ID")
+    
+    if profile:
+        username = f"{profile.username}"
+        logger.info(f"👤 User logged in: {username}")
+    else:
+        logger.warning("❌ User not logged in")
+        return "Please Login to Hugging Face with the button.", None
+    
+    api_url = DEFAULT_API_URL
+    questions_url = f"{api_url}/questions"
+    submit_url = f"{api_url}/submit"
+    
+    # Initialize Advanced GAIA Agent
+    try:
+        logger.info("🚀 Initializing Advanced GAIA Agent for evaluation...")
+        agent = AdvancedGAIAAgent()
+    except Exception as e:
+        error_msg = f"❌ Error initializing advanced agent: {e}"
+        logger.error(error_msg)
+        return error_msg, None
+    
+    # Agent code URL for submission
+    agent_code = f"https://huggingface.co/spaces/{space_id}/tree/main" if space_id else "Local deployment"
+    logger.info(f"📂 Agent code location: {agent_code}")
+    
+    # Fetch questions from GAIA API
+    logger.info(f"📥 Fetching questions from: {questions_url}")
+    try:
+        response = requests.get(questions_url, timeout=15)
+        response.raise_for_status()
+        questions_data = response.json()
+        
+        if not questions_data:
+            logger.warning("⚠️ No questions received")
+            return "No questions received from GAIA API.", None
+            
+        logger.info(f"✅ Fetched {len(questions_data)} questions for evaluation")
+        
+    except requests.exceptions.RequestException as e:
+        error_msg = f"❌ Error fetching questions: {e}"
+        logger.error(error_msg)
+        return error_msg, None
+    except Exception as e:
+        error_msg = f"❌ Unexpected error fetching questions: {e}"
+        logger.error(error_msg)
+        return error_msg, None
+    
+    # Process questions with advanced agent
+    results_log = []
+    answers_payload = []
+    start_time = time.time()
+    
+    logger.info(f"🧠 Starting advanced processing of {len(questions_data)} questions...")
+    
+    for i, item in enumerate(questions_data, 1):
+        task_id = item.get("task_id")
+        question_text = item.get("question")
+        
+        if not task_id or question_text is None:
+            logger.warning(f"⚠️ Skipping invalid question item: {item}")
+            continue
+        
+        try:
+            logger.info(f"🔄 Processing question {i}/{len(questions_data)} (ID: {task_id})")
+            
+            # Process with advanced agent
+            question_start = time.time()
+            submitted_answer = agent(question_text)
+            question_time = time.time() - question_start
+            
+            # Store results
+            answers_payload.append({
+                "task_id": task_id, 
+                "submitted_answer": submitted_answer
+            })
+            
+            results_log.append({
+                "Task ID": task_id,
+                "Question": question_text[:200] + "..." if len(question_text) > 200 else question_text,
+                "Submitted Answer": submitted_answer,
+                "Processing Time": f"{question_time:.1f}s"
+            })
+            
+            logger.info(f"✅ Question {i} completed in {question_time:.1f}s")
+            
+        except Exception as e:
+            error_msg = f"AGENT ERROR: {e}"
+            logger.error(f"❌ Error on question {i} (ID: {task_id}): {e}")
+            
+            results_log.append({
+                "Task ID": task_id,
+                "Question": question_text[:200] + "..." if len(question_text) > 200 else question_text,
+                "Submitted Answer": error_msg,
+                "Processing Time": "Error"
+            })
+    
+    total_time = time.time() - start_time
+    
+    if not answers_payload:
+        logger.error("❌ No answers generated")
+        return "Advanced agent did not produce any answers to submit.", pd.DataFrame(results_log)
+    
+    # Prepare submission with enhanced data
+    submission_data = {
+        "username": username.strip(),
+        "agent_code": agent_code,
+        "answers": answers_payload
+    }
+    
+    logger.info(f"📤 Submitting {len(answers_payload)} answers for user '{username}'")
+    logger.info(f"⏱️ Total processing time: {total_time:.1f}s")
+    logger.info(f"📊 Average time per question: {total_time/len(questions_data):.1f}s")
+    
+    # Submit to GAIA API
+    try:
+        logger.info(f"🚀 Submitting to: {submit_url}")
+        response = requests.post(submit_url, json=submission_data, timeout=60)
+        response.raise_for_status()
+        result_data = response.json()
+        
+        # Enhanced success message with performance stats
+        performance_summary = agent.get_performance_summary()
+        
+        final_status = f"""
+🎉 **GAIA Submission Successful!**
+
+📊 **Results:**
+- User: {result_data.get('username')}
+- Overall Score: {result_data.get('score', 'N/A')}% 
+- Correct: {result_data.get('correct_count', '?')}/{result_data.get('total_attempted', '?')}
+- Message: {result_data.get('message', 'No message received.')}
+
+⏱️ **Performance:**
+- Total Processing Time: {total_time:.1f}s
+- Avg Time/Question: {total_time/len(questions_data):.1f}s
+
+{performance_summary}
+"""
+        
+        logger.info("🎉 GAIA submission completed successfully!")
+        results_df = pd.DataFrame(results_log)
+        return final_status, results_df
+        
+    except requests.exceptions.HTTPError as e:
+        error_detail = f"Server responded with status {e.response.status_code}."
+        try:
+            error_json = e.response.json()
+            error_detail += f" Detail: {error_json.get('detail', e.response.text)}"
+        except:
+            error_detail += f" Response: {e.response.text[:500]}"
+        
+        status_message = f"❌ Submission Failed: {error_detail}"
+        logger.error(status_message)
+        results_df = pd.DataFrame(results_log)
+        return status_message, results_df
+        
+    except Exception as e:
+        status_message = f"❌ Unexpected submission error: {e}"
+        logger.error(status_message)
+        results_df = pd.DataFrame(results_log)
+        return status_message, results_df
 
 # --- Advanced Parallel Processing & Caching ---
 
@@ -714,7 +1038,7 @@ def reset_session():
     return [], "", "🔄 Session reset successfully!", session_id
 
 def build_gradio_interface():
-    """Builds and returns the cutting-edge parallel-processing Gradio chat interface."""
+    """Builds and returns the comprehensive AI agent interface with GAIA evaluation."""
     
     # Custom CSS for enhanced styling
     custom_css = """
@@ -727,30 +1051,132 @@ def build_gradio_interface():
     .status-warning { color: #f39c12; }
     .status-error { color: #e74c3c; }
     .parallel-indicator { background: linear-gradient(45deg, #11998e, #38ef7d); padding: 5px 10px; border-radius: 15px; color: white; font-weight: bold; }
+    .gaia-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    .feature-card {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 10px 0;
+    }
     """
     
     with gr.Blocks(
         theme=gr.themes.Soft(primary_hue="blue", secondary_hue="indigo"), 
-        title="🚀 Ultra-Fast Parallel AI Agent",
+        title="🚀 Advanced AI Agent with GAIA Evaluation",
         css=custom_css
     ) as demo:
         
         # Header
         gr.HTML(f"""
         <div class="header-text">
-            <h1>🚀 API-Safe Ultra-Fast Parallel AI Agent</h1>
+            <h1>🚀 Advanced AI Agent with GAIA Benchmark</h1>
             <p>
                 <span class="parallel-indicator">⚡ {parallel_pool.max_workers} API-LIMITED WORKERS</span>
-                • Advanced ReAct reasoning • Multi-modal processing • Real-time analytics • GPU acceleration • Intelligent caching • Rate limiting
+                • Advanced ReAct reasoning • GAIA evaluation • Multi-modal processing • Real-time analytics • GPU acceleration • Intelligent caching
             </p>
             <div style="margin-top: 10px; padding: 8px; background: linear-gradient(45deg, #ff6b6b, #ee5a24); color: white; border-radius: 15px; display: inline-block;">
                 <strong>📊 Groq API Safe:</strong> {GROQ_TPM_LIMIT} TPM limit respected | <strong>🔄 Smart Rate Limiting</strong>
+                {' | <strong>🎯 GAIA:</strong> ' + ('✅ Available' if GAIA_AVAILABLE else '❌ Unavailable')}
             </div>
         </div>
         """)
         
         # Session state
         session_state = gr.State(session_manager.create_session())
+        
+        # Main tabs for different functionalities
+        with gr.Tabs():
+            # GAIA Evaluation Tab
+            with gr.TabItem("🎯 GAIA Evaluation", id="gaia_eval"):
+                if GAIA_AVAILABLE:
+                    gr.HTML("""
+                    <div class="gaia-header">
+                        <h2>🧠 GAIA Benchmark Evaluation</h2>
+                        <p>Advanced AI agent with strategic planning, reflection, and cross-validation capabilities</p>
+                    </div>
+                    """)
+                    
+                    gr.Markdown("""
+                    ## 🚀 Enhanced GAIA Agent Features
+                    
+                    This agent features:
+                    - **Strategic Planning**: Analyzes questions and creates multi-step reasoning plans
+                    - **Cross-Validation**: Verifies answers through multiple sources and tools  
+                    - **Adaptive Reasoning**: Adjusts strategy based on question complexity
+                    - **Tool Orchestration**: Uses 15+ specialized tools for research and analysis
+                    - **Reflection & Error Recovery**: Learns from mistakes and improves responses
+                    
+                    ### Instructions:
+                    1. **Log in** to your Hugging Face account below
+                    2. **Click 'Run GAIA Evaluation'** to start the benchmark
+                    3. **Monitor progress** in real-time with detailed logging
+                    4. **View results** with comprehensive performance analytics
+                    """)
+                    
+                    gr.LoginButton()
+                    
+                    with gr.Row():
+                        run_button = gr.Button(
+                            "🚀 Run GAIA Evaluation & Submit All Answers", 
+                            variant="primary",
+                            size="lg"
+                        )
+                    
+                    with gr.Row():
+                        with gr.Column(scale=2):
+                            status_output = gr.Textbox(
+                                label="📊 Evaluation Status & Results",
+                                lines=15,
+                                interactive=False,
+                                placeholder="Click 'Run GAIA Evaluation' to start..."
+                            )
+                        
+                        with gr.Column(scale=1):
+                            gaia_analytics_display = gr.Markdown(
+                                value=create_analytics_display(),
+                                label="📈 Real-time Analytics"
+                            )
+                    
+                    results_table = gr.DataFrame(
+                        label="📋 Detailed Question Results",
+                        wrap=True,
+                        interactive=False
+                    )
+                    
+                    # Connect GAIA evaluation
+                    run_button.click(
+                        fn=run_and_submit_all,
+                        outputs=[status_output, results_table]
+                    )
+                    
+                else:
+                    gr.HTML("""
+                    <div style="background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 20px; border-radius: 10px; text-align: center;">
+                        <h3>❌ GAIA Functionality Unavailable</h3>
+                        <p>The GAIA evaluation functionality is not available because <code>agent.py</code> could not be imported.</p>
+                        <p>Please ensure all GAIA dependencies are properly installed.</p>
+                    </div>
+                    """)
+            
+            # Interactive Chat Tab  
+            with gr.TabItem("💬 Advanced Agent Chat", id="advanced_chat"):
+                gr.Markdown("""
+                ## 🤖 Interactive Advanced Agent
+                
+                Chat with the same sophisticated agent used for GAIA evaluation:
+                - Uses **strategic planning** for complex questions
+                - Employs **15+ specialized tools** for research and analysis
+                - Provides **cross-validated** answers with confidence assessment
+                - Supports **multimedia** analysis (images, audio, video, documents)
+                """)
         
         with gr.Row():
             # Main chat interface
@@ -884,12 +1310,98 @@ def build_gradio_interface():
                         
                         gr.Markdown("""
                         ### 🔧 Ultra-Fast Session Features:
-                        - **Parallel Processing**: 20 concurrent workers for maximum speed
+                        - **Parallel Processing**: API-safe concurrent workers for maximum speed
                         - **Intelligent Caching**: Sub-second responses for repeated queries
                         - **Performance Tracking**: Monitor response times and tool usage
                         - **Export Capability**: Save conversations with analytics
                         - **Cache Analytics**: Track hit rates and performance gains
                         """)
+            
+            # Documentation Tab
+            with gr.TabItem("📚 Documentation", id="docs"):
+                gr.Markdown(f"""
+                # 📖 Advanced AI Agent with GAIA Evaluation
+                
+                ## 🎯 Overview
+                This unified agent combines powerful strategic AI reasoning with GAIA benchmark evaluation capabilities.
+                
+                ## 🧠 Advanced Features
+                
+                ### Strategic Planning
+                - **Query Analysis**: Automatically analyzes question type and complexity
+                - **Multi-Step Planning**: Creates detailed execution plans before starting
+                - **Plan Adaptation**: Dynamically adjusts strategy based on intermediate results
+                
+                ### Cross-Validation & Verification  
+                - **Multiple Sources**: Verifies information through independent sources
+                - **Tool Cross-Reference**: Uses different tools to confirm findings
+                - **Confidence Assessment**: Tracks and reports confidence levels
+                
+                ### Tool Orchestration
+                - **Web Research**: Wikipedia, Tavily search, general web scraping
+                - **Document Analysis**: PDF, Word, Excel, text files
+                - **Multimedia Processing**: Image analysis, audio transcription, video analysis  
+                - **Computation**: Python interpreter for calculations and data processing
+                - **Semantic Search**: GPU-accelerated vector search through knowledge bases
+                
+                ### Adaptive Intelligence
+                - **Model Selection**: Chooses optimal models for different task types
+                - **Error Recovery**: Intelligent retry strategies with alternative approaches
+                - **Rate Limiting**: Respects API limits with exponential backoff
+                - **Performance Monitoring**: Real-time analytics and optimization
+                
+                ## 🎯 GAIA Evaluation
+                
+                {'✅ **Available**: Full GAIA benchmark evaluation with advanced reasoning' if GAIA_AVAILABLE else '❌ **Unavailable**: GAIA agent.py not found - install dependencies'}
+                
+                ### GAIA Features
+                - **Benchmark Submission**: Automated question processing and answer submission
+                - **Performance Analytics**: Detailed metrics and success tracking
+                - **Enhanced Reasoning**: GAIA-optimized answer extraction and cleaning
+                - **Real-time Monitoring**: Live progress tracking during evaluation
+                
+                ## 🔧 Technical Architecture
+                
+                ### Multi-Model Configuration
+                - **Reasoning Models**: Optimized for complex logical thinking
+                - **Function Calling Models**: Specialized for tool interaction
+                - **Text Generation Models**: High-quality response generation
+                - **Vision Models**: Image and visual content analysis
+                
+                ### API-Safe Processing
+                - **Rate Limiting**: {GROQ_TPM_LIMIT} TPM limit with {REQUEST_SPACING}s spacing
+                - **Parallel Workers**: {parallel_pool.max_workers} concurrent workers (API-safe)
+                - **Smart Caching**: Reduces API calls and improves response times
+                - **Error Recovery**: Graceful handling of rate limits and failures
+                
+                ## 🚀 Usage Tips
+                
+                ### For GAIA Evaluation
+                1. Ensure stable internet connection for API calls
+                2. Log in to Hugging Face account before starting
+                3. Allow sufficient time for comprehensive reasoning
+                4. Monitor progress through real-time status updates
+                
+                ### For Interactive Chat
+                1. Ask complex, multi-step questions to see strategic planning
+                2. Upload files for analysis (supports images, documents, audio, video)
+                3. Request cross-validation for important information
+                4. Monitor tool usage and performance through analytics
+                
+                ## 📊 Performance Optimization
+                
+                - **Parallel Processing**: {parallel_pool.max_workers} worker threads with API rate limiting
+                - **Response Caching**: Intelligent caching with TTL management  
+                - **GPU Acceleration**: CUDA-enabled embedding models when available
+                - **Adaptive Timeouts**: Dynamic timeout adjustment based on complexity
+                
+                ## 🛡️ Error Handling & Recovery
+                
+                - **Exponential Backoff**: Automatic retry with intelligent delays
+                - **Alternative Strategies**: Fallback approaches for different error types
+                - **Graceful Degradation**: Continues operation even with partial tool failures
+                - **Comprehensive Logging**: Detailed error tracking and performance monitoring
+                """)
         
         # Tool status display with parallel indicators
         with gr.Row():
@@ -904,6 +1416,10 @@ def build_gradio_interface():
                 <br><br>
                 <span style="background: linear-gradient(45deg, #ff6b6b, #ee5a24); padding: 3px 10px; border-radius: 15px; color: white; font-size: 0.9em;">
                     🛡️ Groq API Protection: {GROQ_TPM_LIMIT} TPM | {REQUEST_SPACING}s spacing | {API_RATE_LIMIT_BUFFER}s buffer
+                </span>
+                <br>
+                <span style="background: linear-gradient(45deg, #667eea, #764ba2); padding: 3px 10px; border-radius: 15px; color: white; font-size: 0.9em;">
+                    🎯 GAIA Evaluation: {'✅ Available' if GAIA_AVAILABLE else '❌ Unavailable'}
                 </span>
             </div>
             """)
@@ -998,14 +1514,46 @@ def build_gradio_interface():
     return demo
 
 if __name__ == "__main__":
-    logger.info(f"🚀 Starting API-Safe Ultra-Fast Parallel AI Agent")
+    logger.info("\n" + "="*60)
+    logger.info("🚀 ADVANCED AI AGENT WITH GAIA EVALUATION STARTING")
+    logger.info("="*60)
+    
+    # Environment info
+    space_host = os.getenv("SPACE_HOST")
+    space_id = os.getenv("SPACE_ID")
+    
+    if space_host:
+        logger.info(f"✅ SPACE_HOST: {space_host}")
+        logger.info(f"🌐 Runtime URL: https://{space_host}.hf.space")
+    else:
+        logger.info("ℹ️ Running locally (no SPACE_HOST)")
+    
+    if space_id:
+        logger.info(f"✅ SPACE_ID: {space_id}")
+        logger.info(f"📂 Repo URL: https://huggingface.co/spaces/{space_id}")
+    else:
+        logger.info("ℹ️ Local deployment (no SPACE_ID)")
+    
+    # Feature status
+    logger.info(f"🛠️ Tools Available: {len(tools)}")
+    logger.info(f"📊 Logging: {'✅ Enabled' if LOGGING_ENABLED else '❌ Disabled'}")
+    logger.info(f"🎯 GAIA Evaluation: {'✅ Available' if GAIA_AVAILABLE else '❌ Unavailable'}")
+    logger.info(f"⚡ Advanced Features: ✅ Enabled")
+    
+    # Performance info
     logger.info(f"📊 Workers: {parallel_pool.max_workers} (API rate-limited)")
     logger.info(f"🛡️ Groq TPM Limit: {GROQ_TPM_LIMIT}")
     logger.info(f"⏳ Request Spacing: {REQUEST_SPACING}s + {API_RATE_LIMIT_BUFFER}s buffer")
     
+    logger.info("="*60)
+    
+    # Build and launch interface
+    logger.info("🎨 Building Enhanced Gradio Interface...")
     app = build_gradio_interface()
+    
+    logger.info("🚀 Launching Advanced AI Agent with GAIA Evaluation...")
     app.queue(
-        max_size=30  # Reduced from 50 to be more conservative
+        max_size=30  # Reduced from 50 to be more conservative with API limits
     ).launch(
         server_name="0.0.0.0",
         server_port=7860,
