@@ -6,8 +6,6 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 from datetime import datetime
 import time
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 import requests
 from bs4 import BeautifulSoup
 
@@ -194,152 +192,86 @@ class DocumentProcessor:
             logger.error(f"Error processing URL {url}: {e}")
             return False
 
-
-class KnowledgeIngestionHandler(FileSystemEventHandler):
-    """Handles file system events for automatic ingestion."""
-    
-    def __init__(self, processor: DocumentProcessor):
-        self.processor = processor
-        self.pending_files = {}  # Track files being written
-        
-    def on_created(self, event):
-        if not event.is_directory:
-            self._handle_file(event.src_path)
-    
-    def on_modified(self, event):
-        if not event.is_directory:
-            # Debounce modifications to avoid processing incomplete writes
-            self.pending_files[event.src_path] = time.time()
-    
-    def _handle_file(self, file_path: str):
-        """Handle a new or modified file."""
-        path = Path(file_path)
-        
-        # Check if it's a supported file type
-        supported_extensions = {'.pdf', '.docx', '.doc', '.txt', '.md', '.py', '.js', '.json', '.yaml', '.yml'}
-        if path.suffix.lower() not in supported_extensions:
-            return
-        
-        # Process the file
-        self.processor.process_file(path)
-    
-    def process_pending(self):
-        """Process files that have been stable for 2 seconds."""
-        current_time = time.time()
-        stable_files = []
-        
-        for file_path, mod_time in list(self.pending_files.items()):
-            if current_time - mod_time > 2:  # File stable for 2 seconds
-                stable_files.append(file_path)
-                del self.pending_files[file_path]
-        
-        for file_path in stable_files:
-            self._handle_file(file_path)
-
-
 class KnowledgeIngestionService:
-    """Main service for automated knowledge base ingestion."""
+    """Simplified knowledge ingestion service for Hugging Face Spaces."""
     
-    def __init__(self, watch_directories: List[str], poll_urls: List[str] = None):
-        self.watch_directories = [Path(d) for d in watch_directories]
-        self.poll_urls = poll_urls or []
+    def __init__(self, watch_directories: List[str] = None, poll_urls: List[str] = None):
         self.processor = DocumentProcessor()
-        self.observer = Observer()
-        self.handler = KnowledgeIngestionHandler(self.processor)
-        
+        self.watch_directories = watch_directories or []
+        self.poll_urls = poll_urls or []
+        self.is_running = False
+        self._task = None
+    
     def start(self):
         """Start the ingestion service."""
-        logger.info("Starting Knowledge Ingestion Service")
+        if self.is_running:
+            return
         
-        # Initial scan of directories
-        self._initial_scan()
+        self.is_running = True
+        logger.info("Starting knowledge ingestion service")
         
-        # Set up file system monitoring
+        # Process initial files
         for directory in self.watch_directories:
-            if directory.exists():
-                self.observer.schedule(self.handler, str(directory), recursive=True)
-                logger.info(f"Watching directory: {directory}")
-            else:
-                logger.warning(f"Directory does not exist: {directory}")
+            self._process_directory(directory)
         
-        self.observer.start()
-        
-        # Start async event loop for URL polling
-        asyncio.create_task(self._poll_urls())
-        
-        logger.info("Knowledge Ingestion Service started")
+        # Start URL polling if configured
+        if self.poll_urls:
+            self._task = asyncio.create_task(self._poll_urls())
     
     def stop(self):
         """Stop the ingestion service."""
-        logger.info("Stopping Knowledge Ingestion Service")
-        self.observer.stop()
-        self.observer.join()
-    
-    def _initial_scan(self):
-        """Perform initial scan of watched directories."""
-        logger.info("Performing initial scan of directories")
+        if not self.is_running:
+            return
         
-        for directory in self.watch_directories:
-            if not directory.exists():
-                continue
-                
-            for file_path in directory.rglob("*"):
+        self.is_running = False
+        if self._task:
+            self._task.cancel()
+        logger.info("Stopped knowledge ingestion service")
+    
+    def _process_directory(self, directory: str):
+        """Process all files in a directory."""
+        try:
+            path = Path(directory)
+            if not path.exists():
+                logger.warning(f"Directory does not exist: {directory}")
+                return
+            
+            for file_path in path.rglob("*"):
                 if file_path.is_file():
-                    # Check supported extensions
-                    supported = {'.pdf', '.docx', '.doc', '.txt', '.md', '.py', '.js', '.json', '.yaml', '.yml'}
-                    if file_path.suffix.lower() in supported:
-                        self.processor.process_file(file_path)
+                    self.processor.process_file(file_path)
+        except Exception as e:
+            logger.error(f"Error processing directory {directory}: {e}")
     
     async def _poll_urls(self):
-        """Periodically poll URLs for new content."""
-        while True:
+        """Poll configured URLs periodically."""
+        while self.is_running:
             for url in self.poll_urls:
                 try:
                     self.processor.process_url(url)
                 except Exception as e:
                     logger.error(f"Error polling URL {url}: {e}")
-            
-            # Wait 1 hour before next poll
-            await asyncio.sleep(3600)
+            await asyncio.sleep(3600)  # Poll every hour
     
     def add_watch_directory(self, directory: str):
-        """Add a new directory to watch."""
-        path = Path(directory)
-        if path.exists() and path not in self.watch_directories:
-            self.watch_directories.append(path)
-            self.observer.schedule(self.handler, str(path), recursive=True)
-            logger.info(f"Added watch directory: {path}")
+        """Add a directory to watch."""
+        if directory not in self.watch_directories:
+            self.watch_directories.append(directory)
+            if self.is_running:
+                self._process_directory(directory)
     
     def add_poll_url(self, url: str):
-        """Add a new URL to poll."""
+        """Add a URL to poll."""
         if url not in self.poll_urls:
             self.poll_urls.append(url)
-            logger.info(f"Added poll URL: {url}")
-            # Process immediately
-            self.processor.process_url(url)
 
-
-# Standalone runner
 def run_ingestion_service(config: Dict[str, Any]):
-    """Run the ingestion service with the given configuration."""
+    """Run the knowledge ingestion service with the given configuration."""
     service = KnowledgeIngestionService(
-        watch_directories=config.get("watch_directories", ["./documents"]),
+        watch_directories=config.get("watch_directories", []),
         poll_urls=config.get("poll_urls", [])
     )
-    
-    try:
-        service.start()
-        
-        # Run pending file processor in a loop
-        while True:
-            service.handler.process_pending()
-            time.sleep(1)
-            
-    except KeyboardInterrupt:
-        logger.info("Received interrupt signal")
-    finally:
-        service.stop()
-
+    service.start()
+    return service
 
 if __name__ == "__main__":
     # Example configuration

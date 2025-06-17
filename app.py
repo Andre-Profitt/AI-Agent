@@ -1458,35 +1458,27 @@ def build_gradio_interface():
 
 # Start knowledge ingestion service in background
 def start_knowledge_ingestion():
-    """Start the knowledge ingestion service in a separate thread."""
-    config = {
-        "watch_directories": [
-            "./documents",
-            "./knowledge_base",
-            os.path.expanduser("~/Documents/AI_Agent_Knowledge")
-        ],
-        "poll_urls": []
-    }
-    
-    service = KnowledgeIngestionService(
-        watch_directories=config["watch_directories"],
-        poll_urls=config["poll_urls"]
-    )
-    
+    """Initialize knowledge ingestion service for Hugging Face Spaces."""
     try:
-        service.start()
-        logger.info("Knowledge ingestion service started successfully")
+        # Configure knowledge ingestion for Space environment
+        config = {
+            "watch_directories": ["/home/user/app/documents"],  # Space-specific path
+            "poll_urls": []  # Add any URLs to poll if needed
+        }
         
-        # Keep the service running
-        while True:
-            service.handler.process_pending()
-            time.sleep(1)
+        # Create documents directory if it doesn't exist
+        os.makedirs("/home/user/app/documents", exist_ok=True)
+        
+        # Initialize and start the service
+        service = run_ingestion_service(config)
+        logger.info("Knowledge ingestion service started successfully")
+        return service
     except Exception as e:
-        logger.error(f"Knowledge ingestion service error: {e}")
+        logger.error(f"Failed to start knowledge ingestion service: {e}")
+        return None
 
-# Start ingestion service in background thread
-ingestion_thread = threading.Thread(target=start_knowledge_ingestion, daemon=True)
-ingestion_thread.start()
+# Initialize knowledge ingestion service
+knowledge_service = start_knowledge_ingestion()
 
 if __name__ == "__main__":
     logger.info("\n" + "="*60)

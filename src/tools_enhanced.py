@@ -11,9 +11,39 @@ from datetime import datetime
 
 from langchain_core.tools import tool
 from langchain_core.tools import Tool
-from langchain_tavily import TavilySearch
-from langchain_experimental.tools import PythonREPLTool
-from langchain_groq import ChatGroq
+
+# Resilient imports for optional dependencies
+try:
+    from langchain_tavily import TavilySearch
+    TAVILY_AVAILABLE = True
+except ImportError:
+    # Create stub for missing dependency
+    class TavilySearch:  # type: ignore
+        def __init__(self, *_, **__): pass
+        def run(self, query: str):
+            return f"TavilySearch unavailable - install langchain-tavily. Query: '{query}'"
+    TAVILY_AVAILABLE = False
+
+try:
+    from langchain_experimental.tools import PythonREPLTool
+    PYTHON_REPL_AVAILABLE = True
+except ImportError:
+    @tool
+    def PythonREPLTool(code: str) -> str:  # type: ignore
+        """Fallback for when langchain-experimental is not installed."""
+        return "PythonREPL unavailable - install langchain-experimental"
+    PYTHON_REPL_AVAILABLE = False
+
+try:
+    from langchain_groq import ChatGroq
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
+    # Create a stub for ChatGroq
+    class ChatGroq:  # type: ignore
+        def __init__(self, *_, **__): pass
+        def invoke(self, prompt: str):
+            return type('obj', (object,), {'content': 'ChatGroq unavailable - install langchain-groq'})
 
 # Import existing tools that don't need modification
 from src.tools import (
@@ -246,6 +276,9 @@ def abstract_reasoning_tool(puzzle_text: str) -> str:
     try:
         logger.info(f"Abstract reasoning tool called with puzzle: {puzzle_text[:100]}...")
         
+        if not GROQ_AVAILABLE:
+            return "Abstract reasoning requires ChatGroq - install langchain-groq"
+        
         # Use a reasoning-optimized LLM with Chain-of-Thought prompting
         llm = ChatGroq(
             temperature=0.1,
@@ -353,52 +386,104 @@ def get_enhanced_tools() -> List[Tool]:
     Returns the complete set of enhanced tools optimized for GAIA benchmark.
     Includes both original tools and new specialized tools.
     Prefers production tools when available.
+    
+    This function is resilient to missing imports and will always return a valid tool list.
     """
-    tools = [
-        # Original tools that don't need modification
-        file_reader,
-        advanced_file_reader,
-        audio_transcriber,
-        semantic_search_tool,
-        python_interpreter,
-        
-        # Video analyzer - use production if available
-        video_analyzer_production if PRODUCTION_TOOLS_AVAILABLE else gaia_video_analyzer,
-        
-        # Chess analyzer - use production if available
-        chess_analyzer_production if PRODUCTION_TOOLS_AVAILABLE else chess_logic_tool,
-        
-        # Web researcher
-        web_researcher,  # Enhanced version
-        
-        # Abstract reasoning
-        abstract_reasoning_tool,
-        
-        # Image analyzer - combine with chess production if available
-        Tool(
+    tools = []
+    
+    # Add tools that should always be available
+    try:
+        tools.extend([
+            # Original tools that don't need modification
+            file_reader,
+            advanced_file_reader,
+            audio_transcriber,
+            semantic_search_tool,
+            python_interpreter,
+        ])
+    except Exception as e:
+        logger.warning(f"Error adding base tools: {e}")
+    
+    # Add video analyzer
+    try:
+        if PRODUCTION_TOOLS_AVAILABLE:
+            tools.append(video_analyzer_production)
+        else:
+            tools.append(gaia_video_analyzer)
+    except Exception as e:
+        logger.warning(f"Error adding video analyzer: {e}")
+        tools.append(gaia_video_analyzer)  # Fallback to mock
+    
+    # Add chess analyzer
+    try:
+        if PRODUCTION_TOOLS_AVAILABLE:
+            tools.append(chess_analyzer_production)
+        else:
+            tools.append(chess_logic_tool)
+    except Exception as e:
+        logger.warning(f"Error adding chess analyzer: {e}")
+        tools.append(chess_logic_tool)  # Fallback to mock
+    
+    # Add other tools
+    try:
+        tools.extend([
+            # Web researcher
+            web_researcher,  # Enhanced version
+            
+            # Abstract reasoning
+            abstract_reasoning_tool,
+        ])
+    except Exception as e:
+        logger.warning(f"Error adding enhanced tools: {e}")
+    
+    # Add image analyzer
+    try:
+        tools.append(Tool(
             name="image_analyzer_enhanced",
             description="Enhanced image analyzer that can handle chess positions and convert to FEN notation",
             func=lambda filename, task="describe": (
                 image_analyzer_chess_production(filename) if task == "chess" and PRODUCTION_TOOLS_AVAILABLE
                 else image_analyzer_enhanced(filename, task)
             )
-        ),
-        
-        # Tavily search
-        Tool(
+        ))
+    except Exception as e:
+        logger.warning(f"Error adding image analyzer: {e}")
+    
+    # Add Tavily search if available
+    try:
+        tools.append(Tool(
             name="tavily_search",
             description="Search the web for real-time information",
             func=tavily_search_backoff
-        ),
-        
-        # Weather (kept for compatibility)
-        get_weather
-    ]
+        ))
+    except Exception as e:
+        logger.warning(f"Error adding Tavily search: {e}")
+    
+    # Add weather tool
+    try:
+        tools.append(get_weather)
+    except Exception as e:
+        logger.warning(f"Error adding weather tool: {e}")
     
     # Add Stockfish installer if production tools are available
     if PRODUCTION_TOOLS_AVAILABLE:
-        tools.append(install_stockfish)
+        try:
+            tools.append(install_stockfish)
+        except Exception as e:
+            logger.warning(f"Error adding Stockfish installer: {e}")
     
+    # Ensure we always return at least some tools
+    if not tools:
+        logger.error("No tools could be loaded! Adding minimal fallback tools.")
+        # Add absolute minimal tools
+        @tool
+        def echo_tool(message: str) -> str:
+            """A simple echo tool for testing when no other tools are available."""
+            return f"Echo: {message}"
+        
+        tools = [echo_tool]
+    
+    logger.info(f"Enhanced tools loaded successfully: {len(tools)} tools available")
     return tools
 
 # --- Specialized Tool Helpers ---

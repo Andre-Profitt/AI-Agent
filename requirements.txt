@@ -79,3 +79,13 @@ watchdog>=3.0.0  # For file system monitoring
 pypdf>=3.17.0
 unstructured>=0.11.0
 llama-index-readers-file>=0.1.0
+
+# Configure logging BEFORE using it
+logger = logging.getLogger(__name__)
+
+# Try to import production tools
+try:
+    from src.tools_production import (...)
+    logger.info("Production tools loaded successfully")
+except ImportError as e:
+    logger.warning(f"Production tools not available: {e}")

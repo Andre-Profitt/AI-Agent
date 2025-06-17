@@ -12,12 +12,41 @@ import subprocess
 import json
 from pathlib import Path
 
-from langchain_tavily import TavilySearch
+# Resilient imports for optional dependencies
+try:
+    from langchain_tavily import TavilySearch
+    TAVILY_AVAILABLE = True
+except ImportError:
+    # Graceful degradation - create a noop stub
+    class TavilySearch:  # type: ignore
+        def __init__(self, *_, **__): 
+            self.max_results = 3
+        def run(self, query: str):
+            return f"TavilySearch unavailable - install langchain-tavily. Query: '{query}'"
+    TAVILY_AVAILABLE = False
+
 from langchain_core.tools import tool
-from langchain_experimental.tools import PythonREPLTool
-from llama_index.core import VectorStoreIndex, Settings
-from llama_index.core.tools import QueryEngineTool
-from llama_index.embeddings.openai import OpenAIEmbedding
+
+# PythonREPLTool is optional; fall back to a simple echo tool if absent
+try:
+    from langchain_experimental.tools import PythonREPLTool
+    PYTHON_REPL_AVAILABLE = True
+except ImportError:
+    @tool
+    def PythonREPLTool(code: str) -> str:  # type: ignore
+        """Fallback for when langchain-experimental is not installed."""
+        return "PythonREPL unavailable - install langchain-experimental"
+    PYTHON_REPL_AVAILABLE = False
+
+# LlamaIndex imports with fallback
+try:
+    from llama_index.core import VectorStoreIndex, Settings
+    from llama_index.core.tools import QueryEngineTool
+    from llama_index.embeddings.openai import OpenAIEmbedding
+    LLAMAINDEX_AVAILABLE = True
+except ImportError:
+    LLAMAINDEX_AVAILABLE = False
+    logging.warning("LlamaIndex not available - vector store features disabled")
 
 from src.database import get_vector_store
 
@@ -471,7 +500,11 @@ def python_interpreter(code: str) -> str:
 # Tavily Search with built-in backoff
 # -------------------------------------------------------------
 
-tavily_search_client = TavilySearch(max_results=3)
+if TAVILY_AVAILABLE:
+    tavily_search_client = TavilySearch(max_results=3)
+else:
+    # Create a mock client that returns helpful error messages
+    tavily_search_client = TavilySearch()  # Uses our stub class
 
 @tool
 def tavily_search_backoff(query: str, max_results: int = 3) -> str:

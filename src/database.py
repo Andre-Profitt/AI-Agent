@@ -170,4 +170,10 @@ def setup_knowledge_base(documents: List):
         storage_context=storage_context,
         show_progress=True
     )
-    logger.info("Knowledge base setup complete. Documents ingested into Supabase.") 
+    logger.info("Knowledge base setup complete. Documents ingested into Supabase.")
+
+def get_embedding_model():
+    """
+    Initializes and returns the OpenAI embedding model.
+    """
+    return OpenAIEmbedding(model="text-embedding-3-small") 
