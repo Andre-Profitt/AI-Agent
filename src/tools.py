@@ -1,5 +1,7 @@
 import os
 import logging
+import time
+import random
 from typing import Any
 import io
 from contextlib import redirect_stdout
@@ -87,7 +89,29 @@ except ImportError as e:
 # Configure logging
 logger = logging.getLogger(__name__)
 
+# -------------------------------------------------------------
+# Helper: Exponential Backoff for external API calls
+# -------------------------------------------------------------
+
+def _exponential_backoff(func, max_retries: int = 4):
+    """Simple exponential backoff wrapper to reduce 429s."""
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except Exception as e:
+            msg = str(e).lower()
+            if "429" in msg or "rate limit" in msg:
+                sleep = (2 ** attempt) + random.uniform(0, 1)
+                logger.warning(f"Rate limit encountered. Sleeping {sleep:.1f}s (attempt {attempt+1}/{max_retries})")
+                time.sleep(sleep)
+            else:
+                raise
+    # If still failing after retries, raise last error
+    raise
+
 # --- Critical Tools for Environment Interaction ---
+
+_BINARY_EXTENSIONS = {'.mp3', '.wav', '.png', '.jpg', '.jpeg', '.gif', '.mp4', '.mov', '.pdf'}
 
 @tool
 def file_reader(filename: str, lines: int = -1) -> str:
@@ -104,6 +128,11 @@ def file_reader(filename: str, lines: int = -1) -> str:
     Returns:
         str: The content of the file, or an error message if the file is not found.
     """
+    # Prevent accidental reading of binary or large files
+    ext = Path(filename).suffix.lower()
+    if ext in _BINARY_EXTENSIONS:
+        return f"Error: '{ext}' files are binary. Use an appropriate tool instead of file_reader."
+
     try:
         with open(filename, 'r', encoding='utf-8') as f:
             if lines == -1:
@@ -323,8 +352,8 @@ def web_researcher(query: str, source: str = "wikipedia") -> str:
                 return f"Error searching Wikipedia: {str(e)}"
         
         elif source == "search":
-            # Use the existing Tavily search
-            return "Use the TavilySearch tool for general web search"
+            # Use the Tavily search with backoff
+            return tavily_search_backoff(query)
         
         else:
             return f"Research source '{source}' not implemented"
@@ -438,17 +467,41 @@ def python_interpreter(code: str) -> str:
     except Exception as e:
         return f"Execution Error: {str(e)}"
 
+# -------------------------------------------------------------
+# Tavily Search with built-in backoff
+# -------------------------------------------------------------
+
+tavily_search_client = TavilySearch(max_results=3)
+
+@tool
+def tavily_search_backoff(query: str, max_results: int = 3) -> str:
+    """Runs Tavily search with exponential backoff to avoid 429 limits."""
+
+    def _call():
+        return tavily_search_client.run(query)
+
+    try:
+        result = _exponential_backoff(_call, max_retries=4)
+        # Tavily returns list of dicts; convert to readable string if needed
+        if isinstance(result, list):
+            formatted = []
+            for idx, item in enumerate(result, 1):
+                title = item.get('title') or item.get('url')
+                snippet = item.get('content') or item.get('snippet', '')
+                formatted.append(f"{idx}. {title}\n{snippet}\n")
+            return "\n".join(formatted)
+        return str(result)
+    except Exception as e:
+        return f"Error during Tavily search: {e}"
+
 # --- Tool Definitions ---
 
 def get_tools() -> list:
     """
     Initializes and returns a list of all tools available to the agent.
     """
-    # 1. Tavily Search Tool for real-time web searches
-    tavily_search_tool = TavilySearch(
-        max_results=3,
-        description='A search engine optimized for comprehensive, accurate, and trusted results. Useful for searching the web for current events, facts, and real-time information.'
-    )
+    # 1. Tavily Search Tool with backoff for real-time web searches
+    tavily_search_tool = tavily_search_backoff
 
     # 2. LlamaIndex Knowledge Base Tool for private data retrieval
     # Initialize the vector store and index
@@ -492,7 +545,7 @@ def get_tools() -> list:
         web_researcher,  # For Wikipedia and web research
         semantic_search_tool,  # For working with knowledge bases like supabase_docs.csv
         python_interpreter,  # Enhanced code execution
-        tavily_search_tool,  # Real-time web search
+        tavily_search_tool,  # Real-time web search with backoff
         python_repl_tool  # Backup code execution tool
     ]
     

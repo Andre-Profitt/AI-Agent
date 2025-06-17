@@ -8,7 +8,7 @@ import gradio as gr
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
-from src.advanced_agent import AdvancedReActAgent
+from src.agent import ReActAgent
 from src.database import get_supabase_client, SupabaseLogHandler
 from src.tools import get_tools
 
@@ -38,33 +38,14 @@ except Exception as e:
 # Initialize tools and agent
 try:
     tools = get_tools()
-    # Use the more sophisticated AdvancedReActAgent which includes strategic planning,
-    # reflection nodes, and robust error handling improvements.
-    agent_graph = AdvancedReActAgent(
-        tools=tools,
-        log_handler=supabase_handler if LOGGING_ENABLED else None
-    ).graph
-    logger.info("AdvancedReAct Agent initialized successfully.")
+    agent_graph = ReActAgent(tools=tools, log_handler=supabase_handler if LOGGING_ENABLED else None).graph
+    logger.info("Enhanced ReAct Agent initialized successfully.")
 except Exception as e:
     logger.critical(f"Failed to initialize agent: {e}", exc_info=True)
     # Exit if agent cannot be created, as the app is non-functional
     exit("Critical error: Agent could not be initialized. Check logs.")
 
-# --- Gradio Interface Logic ---
-
-def format_chat_history(chat_history: List[List[str]]) -> List:
-    """Formats Gradio's chat history into a list of LangChain messages."""
-    messages = []
-    for turn in chat_history:
-        user_message, ai_message = turn
-        if user_message:
-            messages.append(HumanMessage(content=user_message))
-        if ai_message:
-            # This part is tricky as AI message might contain tool calls.
-            # For simplicity, we'll treat it as a plain AIMessage here.
-            # A more robust implementation would parse this for tool calls.
-            messages.append(AIMessage(content=ai_message))
-    return messages
+# --- Enhanced Answer Extraction ---
 
 def extract_final_answer(response: str) -> str:
     """
@@ -179,6 +160,21 @@ def extract_final_answer(response: str) -> str:
     
     return response.strip()
 
+# --- Gradio Interface Logic ---
+
+def format_chat_history(chat_history: List[List[str]]) -> List:
+    """Formats Gradio's chat history into a list of LangChain messages."""
+    messages = []
+    for turn in chat_history:
+        user_message, ai_message = turn
+        if user_message:
+            messages.append(HumanMessage(content=user_message))
+        if ai_message:
+            # This part is tricky as AI message might contain tool calls.
+            # For simplicity, we'll treat it as a plain AIMessage here.
+            # A more robust implementation would parse this for tool calls.
+            messages.append(AIMessage(content=ai_message))
+    return messages
 
 def chat_interface_logic(message: str, history: List[List[str]], log_to_db: bool):
     """
@@ -191,7 +187,7 @@ def chat_interface_logic(message: str, history: List[List[str]], log_to_db: bool
     formatted_history = format_chat_history(history)
     current_messages = formatted_history + [HumanMessage(content=message)]
     
-    # Prepare agent input
+    # Prepare agent input with enhanced state
     run_id = uuid.uuid4()
     agent_input = {
         "messages": current_messages,
@@ -274,33 +270,34 @@ def chat_interface_logic(message: str, history: List[List[str]], log_to_db: bool
 
 
 def build_gradio_interface():
-    """Builds and returns the Gradio chat interface."""
-    with gr.Blocks(theme=gr.themes.Default(primary_hue="blue"), title="Multi-Tool ReAct Agent") as demo:
-        gr.Markdown("# 🤖 Multi-Tool ReAct Agent")
+    """Builds and returns the enhanced Gradio chat interface."""
+    with gr.Blocks(theme=gr.themes.Default(primary_hue="blue"), title="Enhanced Multi-Tool ReAct Agent") as demo:
+        gr.Markdown("# 🧠 Enhanced Multi-Tool ReAct Agent")
         gr.Markdown(
-            "Powered by Groq, LangGraph, LlamaIndex, Tavily, and Supabase. "
-            "Ask me a question that requires web search, knowledge base retrieval, or code execution."
+            "**Powered by sophisticated reasoning with clean answers** | "
+            "Groq + LangGraph + LlamaIndex + Tavily + Supabase | "
+            "World-class planning, reflection, and tool orchestration, but concise final answers only."
         )
 
         with gr.Row():
             with gr.Column(scale=2):
                 chatbot = gr.Chatbot(
                     [],
-                    label="Conversation",
+                    label="Conversation - Final Answers Only",
                     height=600,
                 )
                 message_box = gr.Textbox(
-                    placeholder="e.g., What is the result of 123 * 456?",
+                    placeholder="Ask any complex question requiring research, analysis, or computation...",
                     label="Your Message",
                     show_label=False,
                     lines=2,
                 )
             with gr.Column(scale=1):
-                gr.Markdown("### Agent Trajectory")
-                gr.Markdown("Intermediate thoughts, actions, and observations from the agent will appear here.")
-                intermediate_steps_display = gr.Markdown(label="Intermediate Steps")
+                gr.Markdown("### 🔍 Reasoning Process")
+                gr.Markdown("Watch the sophisticated planning, tool use, and reflection steps here.")
+                intermediate_steps_display = gr.Markdown(label="Agent Reasoning", value="Waiting for input...")
                 log_to_db_checkbox = gr.Checkbox(
-                    label="Log Trajectory to Supabase",
+                    label="Log Detailed Trajectory to Database",
                     value=True,
                     visible=LOGGING_ENABLED
                 )
