@@ -203,25 +203,37 @@ class AdvancedGAIAAgent:
             return error_msg
     
     def _extract_clean_answer(self, response: str) -> str:
-        """Extract clean answer for GAIA submission."""
+        """Extract clean answer for GAIA submission - no formatting, just the answer."""
         if not response:
             return "No answer provided"
         
-        # Use the advanced answer extraction from the original app
+        # Use the enhanced answer extraction
         clean_answer = extract_final_answer(response)
         
-        # Additional GAIA-specific cleaning
-        if len(clean_answer) > 500:  # GAIA prefers concise answers
-            lines = clean_answer.split('\n')
-            # Find the most concise line that looks like an answer
+        # Additional GAIA-specific cleaning for concise answers
+        if len(clean_answer) > 200:  # GAIA prefers very concise answers
+            lines = [line.strip() for line in clean_answer.split('\n') if line.strip()]
+            
+            # Look for the most direct answer line
             for line in lines:
-                line = line.strip()
-                if line and len(line) < 200:
-                    if any(char.isdigit() for char in line) or len(line.split()) <= 15:
+                if len(line) < 100 and line:
+                    # Prefer short, factual answers
+                    if (any(char.isdigit() for char in line) or 
+                        len(line.split()) <= 10 or
+                        line.isupper() or  # Country codes, etc.
+                        ',' in line and len(line) < 80):  # Lists
                         clean_answer = line
                         break
+            
+            # If still too long, take first 150 chars
+            if len(clean_answer) > 150:
+                clean_answer = clean_answer[:150].strip()
         
-        return clean_answer.strip()
+        # Remove any remaining artifacts
+        clean_answer = re.sub(r'^(the\s+)?answer\s*(is\s*)?:?\s*', '', clean_answer, flags=re.IGNORECASE)
+        clean_answer = clean_answer.strip('"\'.,!?()[]{}')
+        
+        return clean_answer.strip() if clean_answer.strip() else "Unable to determine answer"
     
     def _update_stats(self, processing_time: float, success: bool):
         """Update performance statistics."""
@@ -691,14 +703,21 @@ def format_chat_history(chat_history: List[List[str]]) -> List:
 
 def extract_final_answer(response: str) -> str:
     """
-    Extracts only the final answer from sophisticated reasoning chains.
-    Handles complex responses that include planning, reasoning, and conclusions.
+    Extracts clean, direct answers without formatting artifacts.
+    Removes "final answer", $\boxed{}, and verbose explanations.
     """
     if not response or not isinstance(response, str):
         return response
     
-    # Remove common prefixes
+    # Remove LaTeX boxing notation
+    response = re.sub(r'\$\\boxed\{([^}]+)\}\$', r'\1', response)
+    response = re.sub(r'\\boxed\{([^}]+)\}', r'\1', response)
+    response = re.sub(r'\$([^$]+)\$', r'\1', response)  # Remove other LaTeX math
+    
+    # Remove "final answer" prefixes (case insensitive)
     prefixes_to_remove = [
+        "the final answer is:",
+        "the final answer to.*? is:",
         "final answer:",
         "the answer is:",
         "answer:",
@@ -715,21 +734,22 @@ def extract_final_answer(response: str) -> str:
         "the correct answer is:",
         "ultimately,",
         "in summary,",
-        "to conclude,"
+        "to conclude,",
+        "the solution is:",
+        "my answer is:"
     ]
     
-    response_lower = response.lower().strip()
-    
-    # Check for prefixes and extract what comes after
+    # Clean the response by removing prefixes
     for prefix in prefixes_to_remove:
-        if prefix in response_lower:
-            # Find the last occurrence of the prefix
-            idx = response_lower.rfind(prefix)
-            if idx != -1:
-                extracted = response[idx + len(prefix):].strip()
-                if extracted:
-                    response = extracted
-                    break
+        # Use regex to handle variations and punctuation
+        pattern = re.escape(prefix).replace(r'\.\*\?', '.*?')
+        response = re.sub(pattern, '', response, flags=re.IGNORECASE)
+    
+    # Remove incomplete tool calls and artifacts
+    response = re.sub(r'<\|python_tag\|>.*', '', response, flags=re.DOTALL)
+    response = re.sub(r'\{[\'"]query[\'"]:[^}]+\}', '', response)
+    response = re.sub(r'web_researcher\.search\(.*?\)', '', response)
+    response = re.sub(r'audio_transcriber\..*', '', response)
     
     # Remove explanation patterns
     explanation_patterns = [
@@ -739,68 +759,58 @@ def extract_final_answer(response: str) -> str:
         r"following.*?research.*?[,.]",
         r"from.*?information.*?[,.]",
         r"using.*?tool.*?[,.]",
-        r"through.*?search.*?[,.]"
+        r"through.*?search.*?[,.]",
+        r"therefore.*?[,.]",
+        r".*published the following.*:",
+        r".*following studio albums.*:"
     ]
     
     for pattern in explanation_patterns:
         response = re.sub(pattern, "", response, flags=re.IGNORECASE | re.DOTALL)
     
-    # Handle sentences that start with reasoning
-    reasoning_starters = [
-        "this is because",
-        "the reason is",
-        "this indicates",
-        "this suggests",
-        "this shows that",
-        "this means",
-        "this tells us",
-        "we can see that",
-        "it appears that",
-        "the data shows",
-        "evidence suggests"
-    ]
-    
-    lines = response.split('\n')
-    final_lines = []
-    
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-            
-        line_lower = line.lower()
-        is_reasoning = any(starter in line_lower for starter in reasoning_starters)
-        
-        if not is_reasoning:
-            final_lines.append(line)
-    
-    if final_lines:
-        response = '\n'.join(final_lines)
-    
-    # Clean up common artifacts
+    # Clean up formatting and whitespace
     response = response.strip()
-    response = re.sub(r'^[*\-•]\s*', '', response)  # Remove bullet points
+    response = re.sub(r'\n+', ' ', response)  # Replace newlines with spaces
     response = re.sub(r'\s+', ' ', response)  # Normalize whitespace
+    response = re.sub(r'^[*\-•]\s*', '', response)  # Remove bullet points
     
-    # Extract just numbers/codes if that's what's needed
-    response = response.strip('.,!?')
+    # Remove quotes if the entire answer is quoted
+    if response.startswith('"') and response.endswith('"'):
+        response = response[1:-1]
     
-    # If response is very long (>100 chars) and contains multiple sentences,
-    # try to extract the most important part
-    if len(response) > 100 and '. ' in response:
-        sentences = response.split('. ')
-        # Look for the shortest sentence that might be the answer
-        potential_answers = [s.strip() for s in sentences if len(s.strip()) < 50]
-        if potential_answers:
-            # Prefer sentences with numbers, dates, or short factual statements
-            for ans in potential_answers:
-                if any(char.isdigit() for char in ans) or len(ans.split()) <= 5:
-                    response = ans
-                    break
-            else:
-                response = potential_answers[0]
+    # Handle specific answer formats
+    lines = [line.strip() for line in response.split('\n') if line.strip()]
     
-    return response.strip()
+    # Look for the most concise, direct answer
+    if lines:
+        # Find the shortest meaningful line (likely the direct answer)
+        direct_answers = [line for line in lines if len(line) < 100 and not any(
+            reasoning in line.lower() for reasoning in [
+                "this is because", "the reason is", "this indicates", "this suggests",
+                "this shows that", "this means", "evidence suggests", "we can see"
+            ]
+        )]
+        
+        if direct_answers:
+            # Prefer the first direct answer
+            response = direct_answers[0]
+        else:
+            # Fall back to the first line if no direct answer found
+            response = lines[0] if lines else response
+    
+    # Final cleanup
+    response = response.strip('.,!?()[]{}')
+    response = response.strip()
+    
+    # Handle edge cases
+    if not response or len(response) < 1:
+        return "No clear answer found"
+    
+    # Remove any remaining "The answer has been provided" type responses
+    if response.lower() in ["the answer has been provided", "unable to determine", "no solution possible"]:
+        return response
+    
+    return response
 
 def process_uploaded_file(file_obj) -> str:
     """Process uploaded files and return analysis."""

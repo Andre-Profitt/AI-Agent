@@ -388,7 +388,15 @@ Reflect when:
 - Adapt strategy based on problem complexity
 - Conclude only when appropriately confident
 
-Remember: Think like a world-class researcher - plan strategically, execute systematically, validate thoroughly, but provide only the final answer when complete."""
+🎯 CRITICAL ANSWER FORMAT REQUIREMENT:
+When providing your final answer:
+- Give ONLY the direct answer (number, word, phrase, name, etc.)  
+- DO NOT include "final answer", "the answer is", or any prefixes
+- DO NOT use mathematical notation like $\\boxed{...}$ or LaTeX formatting
+- DO NOT include explanations or reasoning in your final response
+- Examples of correct format: "2", "PaleoNeon", "HON", "Vladimir", "Moscow"
+
+Remember: Think like a world-class researcher - plan strategically, execute systematically, validate thoroughly, but provide only the clean, direct answer when complete."""
 
     def _create_initial_plan(self, query: str) -> List[PlanStep]:
         """Create an intelligent initial plan based on query analysis."""
