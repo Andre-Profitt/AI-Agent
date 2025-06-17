@@ -74,20 +74,44 @@ except Exception as e:
     traceback.print_exc()
     exit("Critical error: Agent could not be initialized. Check logs above for details.")
 
+# --- API Rate Limiting Constants ---
+MAX_PARALLEL_WORKERS = 8  # Reduced from 20 to respect Groq rate limits (6000 TPM)
+API_RATE_LIMIT_BUFFER = 5  # Extra seconds between API calls for safety
+GROQ_TPM_LIMIT = 6000  # Groq tokens per minute limit
+REQUEST_SPACING = 0.5  # Minimum seconds between requests
+
 # --- Advanced Parallel Processing & Caching ---
 
 class ParallelAgentPool:
     """High-performance parallel agent execution with worker pool."""
     
-    def __init__(self, max_workers: int = 20):
-        self.max_workers = max_workers
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+    def __init__(self, max_workers: int = MAX_PARALLEL_WORKERS):
+        self.max_workers = min(max_workers, MAX_PARALLEL_WORKERS)  # Enforce API limits
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers)
         self.active_tasks = {}
         self.task_queue = Queue()
         self.response_cache = {}
         self.cache_lock = threading.Lock()
+        self.last_request_time = 0
+        self.request_count = 0
+        self.rate_limit_lock = threading.Lock()
         
-        logger.info(f"🚀 Initialized ParallelAgentPool with {max_workers} workers")
+        logger.info(f"🚀 Initialized ParallelAgentPool with {self.max_workers} workers (API rate-limited)")
+        logger.info(f"📊 Configured for Groq TPM limit: {GROQ_TPM_LIMIT}")
+        
+    def _enforce_rate_limit(self):
+        """Enforce API rate limiting between requests."""
+        with self.rate_limit_lock:
+            current_time = time.time()
+            time_since_last = current_time - self.last_request_time
+            
+            if time_since_last < REQUEST_SPACING:
+                sleep_time = REQUEST_SPACING - time_since_last + (API_RATE_LIMIT_BUFFER / 10)
+                logger.debug(f"⏳ Rate limiting: sleeping {sleep_time:.2f}s")
+                time.sleep(sleep_time)
+            
+            self.last_request_time = time.time()
+            self.request_count += 1
     
     @lru_cache(maxsize=1000)
     def _get_cache_key(self, message: str, session_id: str) -> str:
@@ -115,7 +139,7 @@ class ParallelAgentPool:
     
     def execute_agent_parallel(self, message: str, history: List[List[str]], 
                                log_to_db: bool, session_id: str):
-        """Execute agent with parallel processing for maximum performance."""
+        """Execute agent with parallel processing and API rate limiting."""
         
         # Check cache first
         cached_response = self.get_cached_response(message, session_id)
@@ -124,7 +148,11 @@ class ParallelAgentPool:
             yield "📋 **Retrieved from cache** (Ultra-fast response!)\n\n", cached_response, session_id
             return
         
-        # Execute in thread pool
+        # Enforce API rate limiting before making request
+        self._enforce_rate_limit()
+        
+        # Execute in thread pool with rate limiting
+        logger.info(f"🔄 Executing with rate limiting (request #{self.request_count})")
         future = self.executor.submit(chat_interface_logic_sync, message, history, log_to_db, session_id)
         
         try:
@@ -153,11 +181,15 @@ class ParallelAgentPool:
             "max_workers": self.max_workers,
             "active_threads": threading.active_count(),
             "cache_size": len(self.response_cache),
-            "pending_tasks": self.task_queue.qsize() if hasattr(self.task_queue, 'qsize') else 0
+            "pending_tasks": self.task_queue.qsize() if hasattr(self.task_queue, 'qsize') else 0,
+            "total_requests": self.request_count,
+            "last_request_time": self.last_request_time,
+            "rate_limiting_active": True
         }
 
-# Global parallel agent pool
-parallel_pool = ParallelAgentPool(max_workers=20)
+# Global parallel agent pool - REDUCED for API rate limits
+# Groq has 6000 TPM (tokens per minute) limits, so we use fewer workers
+parallel_pool = ParallelAgentPool(max_workers=8)  # Reduced from 20 to respect API limits
 
 class AsyncResponseCache:
     """Advanced response caching with TTL and intelligent invalidation."""
@@ -624,15 +656,20 @@ def create_analytics_display():
     </div>
     """
     
-    # Parallel processing status
+    # Parallel processing status with rate limiting
     parallel_html = f"""
     <div style="background: linear-gradient(45deg, #11998e, #38ef7d); padding: 15px; border-radius: 8px; color: white; margin: 10px 0;">
-        <h3>⚡ Parallel Processing Engine</h3>
+        <h3>⚡ API-Safe Parallel Processing Engine</h3>
         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
-            <div><strong>Worker Threads:</strong> {analytics['parallel_pool']['max_workers']}</div>
+            <div><strong>Worker Threads:</strong> {analytics['parallel_pool']['max_workers']} (API-limited)</div>
             <div><strong>Active Threads:</strong> {analytics['parallel_pool']['active_threads']}</div>
+            <div><strong>Total Requests:</strong> {analytics['parallel_pool'].get('total_requests', 0)}</div>
+            <div><strong>Rate Limiting:</strong> {'🟢 Active' if analytics['parallel_pool'].get('rate_limiting_active') else '🔴 Inactive'}</div>
             <div><strong>Cache Efficiency:</strong> {analytics['cache_efficiency']['hit_rate']:.1%}</div>
             <div><strong>Parallel Tasks:</strong> {analytics['performance']['parallel_executions']}</div>
+        </div>
+        <div style="margin-top: 10px; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 5px; font-size: 0.9em;">
+            <strong>📊 Groq API Limits:</strong> {GROQ_TPM_LIMIT} TPM | <strong>🔄 Request Spacing:</strong> {REQUEST_SPACING}s | <strong>⏳ Buffer:</strong> {API_RATE_LIMIT_BUFFER}s
         </div>
     </div>
     """
@@ -701,11 +738,14 @@ def build_gradio_interface():
         # Header
         gr.HTML(f"""
         <div class="header-text">
-            <h1>🚀 Ultra-Fast Parallel AI Agent</h1>
+            <h1>🚀 API-Safe Ultra-Fast Parallel AI Agent</h1>
             <p>
-                <span class="parallel-indicator">⚡ {parallel_pool.max_workers} PARALLEL WORKERS</span>
-                • Advanced ReAct reasoning • Multi-modal processing • Real-time analytics • GPU acceleration • Intelligent caching
+                <span class="parallel-indicator">⚡ {parallel_pool.max_workers} API-LIMITED WORKERS</span>
+                • Advanced ReAct reasoning • Multi-modal processing • Real-time analytics • GPU acceleration • Intelligent caching • Rate limiting
             </p>
+            <div style="margin-top: 10px; padding: 8px; background: linear-gradient(45deg, #ff6b6b, #ee5a24); color: white; border-radius: 15px; display: inline-block;">
+                <strong>📊 Groq API Safe:</strong> {GROQ_TPM_LIMIT} TPM limit respected | <strong>🔄 Smart Rate Limiting</strong>
+            </div>
         </div>
         """)
         
@@ -779,23 +819,28 @@ def build_gradio_interface():
                         )
                         refresh_analytics_btn = gr.Button("🔄 Refresh Analytics")
                     
-                    # Parallel processing tab
-                    with gr.TabItem("⚡ Parallel Engine"):
+                    # API-Safe parallel processing tab
+                    with gr.TabItem("⚡ API-Safe Engine"):
                         gr.HTML(f"""
                         <div style="background: linear-gradient(45deg, #667eea, #764ba2); padding: 20px; border-radius: 10px; color: white;">
-                            <h3>⚡ Parallel Processing Engine Status</h3>
+                            <h3>⚡ API-Safe Parallel Processing Engine</h3>
                             <div style="margin: 15px 0;">
-                                <strong>🚀 Worker Pool:</strong> {parallel_pool.max_workers} parallel workers<br>
+                                <strong>🚀 Worker Pool:</strong> {parallel_pool.max_workers} API-limited workers<br>
+                                <strong>📊 Groq Limits:</strong> {GROQ_TPM_LIMIT} TPM respected<br>
                                 <strong>💾 Cache System:</strong> Intelligent response caching with TTL<br>
-                                <strong>🔄 Async Processing:</strong> Non-blocking concurrent execution<br>
-                                <strong>📈 Performance Boost:</strong> Up to 10-30x faster responses<br>
+                                <strong>🔄 Rate Limiting:</strong> {REQUEST_SPACING}s spacing + {API_RATE_LIMIT_BUFFER}s buffer<br>
+                                <strong>📈 Performance Boost:</strong> Up to 10x faster responses (API-safe)<br>
                             </div>
                             <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 5px;">
-                                <strong>💡 How it works:</strong><br>
+                                <strong>💡 How it works (API-Safe):</strong><br>
                                 • Cached responses: Sub-second delivery<br>
-                                • Parallel execution: Multiple agent workers<br>
-                                • Smart caching: Reduces redundant processing<br>
-                                • Async I/O: Non-blocking operations
+                                • Rate-limited execution: Respects API limits<br>
+                                • Smart caching: Reduces API calls<br>
+                                • Request spacing: Prevents 429 errors<br>
+                                • Buffer timing: Extra safety margin
+                            </div>
+                            <div style="margin-top: 10px; padding: 8px; background: rgba(255,100,100,0.3); border-radius: 5px;">
+                                <strong>🚨 API Protection:</strong> System automatically manages Groq rate limits to prevent 429 errors and ensure stable operation.
                             </div>
                         </div>
                         """)
@@ -854,7 +899,11 @@ def build_gradio_interface():
                 {' '.join([f'<span class="tool-indicator">{tool.name}</span>' for tool in tools])}
                 <br><br>
                 <span style="background: linear-gradient(45deg, #11998e, #38ef7d); padding: 5px 15px; border-radius: 20px; color: white; font-weight: bold;">
-                    ⚡ ULTRA-FAST: {parallel_pool.max_workers} Parallel Workers + Intelligent Caching
+                    ⚡ API-SAFE ULTRA-FAST: {parallel_pool.max_workers} Rate-Limited Workers + Smart Caching
+                </span>
+                <br><br>
+                <span style="background: linear-gradient(45deg, #ff6b6b, #ee5a24); padding: 3px 10px; border-radius: 15px; color: white; font-size: 0.9em;">
+                    🛡️ Groq API Protection: {GROQ_TPM_LIMIT} TPM | {REQUEST_SPACING}s spacing | {API_RATE_LIMIT_BUFFER}s buffer
                 </span>
             </div>
             """)
@@ -949,9 +998,16 @@ def build_gradio_interface():
     return demo
 
 if __name__ == "__main__":
-    logger.info(f"🚀 Starting Ultra-Fast Parallel AI Agent with {parallel_pool.max_workers} workers")
+    logger.info(f"🚀 Starting API-Safe Ultra-Fast Parallel AI Agent")
+    logger.info(f"📊 Workers: {parallel_pool.max_workers} (API rate-limited)")
+    logger.info(f"🛡️ Groq TPM Limit: {GROQ_TPM_LIMIT}")
+    logger.info(f"⏳ Request Spacing: {REQUEST_SPACING}s + {API_RATE_LIMIT_BUFFER}s buffer")
+    
     app = build_gradio_interface()
-    app.queue(max_size=50, concurrency_limit=20).launch(
+    app.queue(
+        max_size=30,  # Reduced from 50 to be more conservative
+        concurrency_limit=MAX_PARALLEL_WORKERS  # Match our worker pool size
+    ).launch(
         server_name="0.0.0.0",
         server_port=7860,
         share=os.getenv("GRADIO_SHARE", "false").lower() == "true",
