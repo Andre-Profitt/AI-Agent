@@ -775,6 +775,14 @@ def chat_interface_logic_sync(message: str, history: List[List[str]], log_to_db:
     start_time = time.time()
     logger.info(f"Received new message: '{message}'")
     
+    # Import and validate user input (FIX for "{{" issue)
+    from src.advanced_agent_fsm import validate_user_prompt
+    
+    if not validate_user_prompt(message):
+        logger.warning(f"Invalid user input rejected: '{message}'")
+        yield "❌ **Invalid Input**\n\nPlease provide a meaningful question or instruction with at least 3 characters including letters or numbers.\n\n**Examples:**\n- What is the weather today?\n- Calculate 2 + 2\n- Explain quantum computing", "Please provide a valid question", session_id or session_manager.create_session()
+        return
+    
     # Create session if needed
     if session_id is None or session_id not in session_manager.sessions:
         session_id = session_manager.create_session()

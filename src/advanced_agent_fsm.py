@@ -1480,6 +1480,18 @@ Provide a verification result."""
                 query = inputs.get("input", inputs.get("query", ""))
                 logger.info(f"Starting resilient FSM execution", extra={'query_length': len(query), 'query_preview': query[:100]})
                 
+                # Early validation to prevent "{{" type issues (Secondary defense)
+                if not validate_user_prompt(query):
+                    logger.warning(f"FSM agent rejecting invalid input: '{query}'")
+                    return {
+                        "output": "Please provide a meaningful question with at least 3 characters including letters or numbers.",
+                        "intermediate_steps": [],
+                        "correlation_id": correlation_id,
+                        "confidence": 0.0,
+                        "total_steps": 0,
+                        "execution_time": 0.0
+                    }
+
                 # Initialize state with full resilience context
                 initial_state = {
                     "correlation_id": correlation_id,
@@ -1557,4 +1569,8 @@ Provide a verification result."""
         """Stream the FSM agent execution."""
         # For now, just run normally
         # Streaming can be implemented later if needed
-        yield self.run(inputs) 
+        yield self.run(inputs)
+
+def validate_user_prompt(prompt: str) -> bool:
+    stripped = prompt.strip()
+    return len(stripped) >= 3 and any(c.isalnum() for c in stripped) 
