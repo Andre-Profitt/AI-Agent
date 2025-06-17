@@ -13,7 +13,7 @@ from langchain_core.messages import AnyMessage, BaseMessage, SystemMessage, Huma
 from langchain_groq import ChatGroq
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -181,6 +181,9 @@ class FSMReActAgent:
         self.model_preference = model_preference
         self.use_crew = use_crew
         
+        # Add stub tools for missing ones (FIX 3: Register stubs for not-yet-implemented tools)
+        self._add_stub_tools()
+        
         # FSM Configuration
         self.max_stagnation = 3  # Maximum allowed stagnation before error
         self.max_steps = 20  # Maximum total steps to prevent runaway execution
@@ -192,6 +195,42 @@ class FSMReActAgent:
         except Exception as e:
             logger.error(f"Failed to build FSM graph: {e}", exc_info=True)
             raise RuntimeError(f"FSMReActAgent initialization failed: {e}")
+    
+    def _add_stub_tools(self):
+        """FIX 3: Add stub implementations for missing tools referenced in logs."""
+        stub_tools = {
+            "video_analyzer": {
+                "description": "Analyze video content and extract information",
+                "params": {"url": str, "action": str},
+                "response": "Video analyzer not yet implemented. Please use gaia_video_analyzer or video_analyzer_production instead."
+            },
+            "programming_language_identifier": {
+                "description": "Identify the programming language of code",
+                "params": {"code": str},
+                "response": "Language identifier not yet implemented. Please use python_interpreter to analyze code."
+            }
+        }
+        
+        for tool_name, config in stub_tools.items():
+            if tool_name not in self.tool_registry:
+                # Create a stub tool
+                from langchain_core.tools import Tool
+                
+                def make_stub_func(name, resp):
+                    def stub_func(**kwargs):
+                        logger.warning(f"Stub tool '{name}' called with args: {kwargs}")
+                        return resp
+                    return stub_func
+                
+                stub_tool = Tool(
+                    name=tool_name,
+                    description=config["description"],
+                    func=make_stub_func(tool_name, config["response"])
+                )
+                
+                self.tools.append(stub_tool)
+                self.tool_registry[tool_name] = stub_tool
+                logger.info(f"Added stub tool: {tool_name}")
     
     def _get_llm(self, task_type: str = "reasoning", temperature: float = None):
         """Get appropriate LLM based on task type and preference."""
@@ -309,12 +348,15 @@ class FSMReActAgent:
                 plan_text = response.content
                 structured_plan = self._parse_plan_into_steps(plan_text, state)
                 
+                # FIX 1: Validate and correct tool parameters before returning
+                validated_plan = self._validate_and_correct_plan(structured_plan)
+                
                 # Determine next tool to execute
-                next_tool = self._get_next_tool_from_plan(structured_plan, state)
+                next_tool = self._get_next_tool_from_plan(validated_plan, state)
                 
                 return {
                     "plan": plan_text,
-                    "master_plan": structured_plan,
+                    "master_plan": validated_plan,
                     "current_fsm_state": FSMState.TOOL_EXECUTION if next_tool else FSMState.SYNTHESIZING,
                     "messages": [response],
                     "stagnation_counter": 0  # Reset on successful planning
@@ -331,7 +373,7 @@ class FSMReActAgent:
             """Execute tools and persist outputs (Directive 2)."""
             logger.info(f"--- FSM STATE: TOOL_EXECUTION (Step {state.get('step_count', 0)}) ---")
             
-            # Initialize tool_reliability at the beginning to avoid UnboundLocalError
+            # FIX 5: Initialize tool_reliability at the beginning to avoid UnboundLocalError
             tool_reliability = state.get("tool_reliability", {})
             
             try:
@@ -361,13 +403,16 @@ class FSMReActAgent:
                             "step_count": state.get("step_count", 0) + 1
                         }
                 
+                # FIX 2: Apply parameter translation layer before execution
+                translated_input = self._translate_tool_parameters(tool_name, tool_input)
+                
                 # Execute the tool
                 tool_output = None
                 execution_start = time.time()
                 execution_success = False
                 
                 if tool_name in self.tool_registry:
-                    logger.info(f"Executing tool: {tool_name} with input: {tool_input}")
+                    logger.info(f"Executing tool: {tool_name} with input: {translated_input}")
                     tool = self.tool_registry[tool_name]
                     
                     # --- ADAPTIVE TOOL SELECTION ---
@@ -384,7 +429,7 @@ class FSMReActAgent:
                     
                     # Execute with error handling
                     try:
-                        tool_output = tool.invoke(tool_input)
+                        tool_output = tool.invoke(translated_input)
                         execution_success = True
                     except Exception as tool_error:
                         logger.error(f"Tool execution failed: {tool_error}")
@@ -403,7 +448,7 @@ class FSMReActAgent:
                             logger.info(f"Trying alternative tool: {alternative_tool}")
                             try:
                                 alt_tool = self.tool_registry[alternative_tool]
-                                tool_output = alt_tool.invoke(tool_input)
+                                tool_output = alt_tool.invoke(translated_input)
                                 execution_success = True
                                 tool_name = alternative_tool  # Update for record
                             except Exception as alt_error:
@@ -426,8 +471,19 @@ class FSMReActAgent:
                                 "tool_reliability": tool_reliability
                             }
                 else:
+                    # Tool not found - will use stub if available
                     tool_output = f"Error: Tool '{tool_name}' not found"
                     logger.error(tool_output)
+                    execution_success = False
+                    
+                    # Return to planning
+                    return {
+                        "current_fsm_state": FSMState.PLANNING,
+                        "stagnation_counter": state.get("stagnation_counter", 0) + 1,
+                        "errors": [tool_output],
+                        "step_count": state.get("step_count", 0) + 1,
+                        "tool_reliability": tool_reliability
+                    }
                 
                 # Update tool reliability for successful execution
                 if execution_success:
@@ -448,7 +504,7 @@ class FSMReActAgent:
                 # Create tool call record
                 new_tool_call = {
                     "tool_name": tool_name,
-                    "tool_input": tool_input,
+                    "tool_input": translated_input,
                     "output": tool_output,
                     "step": step_number,
                     "timestamp": datetime.now().isoformat()
@@ -472,12 +528,26 @@ class FSMReActAgent:
                 logger.error(f"Error in tool execution node: {e}")
                 return {
                     "current_fsm_state": FSMState.ERROR,
-                    "errors": [str(e)]
+                    "errors": [str(e)],
+                    "tool_reliability": tool_reliability  # Always include tool_reliability
                 }
         
         def synthesizing_node(state: EnhancedAgentState) -> dict:
             """Synthesize final answer with structured output (Directive 3)."""
             logger.info(f"--- FSM STATE: SYNTHESIZING ---")
+            
+            # FIX 4: Guard-rail - check if we have any successful tool outputs
+            step_outputs = state.get("step_outputs", {})
+            tool_calls = state.get("tool_calls", [])
+            
+            if not step_outputs and not tool_calls:
+                logger.warning("No tool outputs available for synthesis - returning to planning")
+                return {
+                    "current_fsm_state": FSMState.PLANNING,
+                    "stagnation_counter": state.get("stagnation_counter", 0) + 1,
+                    "errors": ["No tool outputs available for synthesis"],
+                    "step_count": state.get("step_count", 0) + 1
+                }
             
             try:
                 # Determine answer type from query
@@ -528,6 +598,16 @@ class FSMReActAgent:
         def verifying_node(state: EnhancedAgentState) -> dict:
             """Verify the final answer for accuracy and formatting."""
             logger.info(f"--- FSM STATE: VERIFYING ---")
+            
+            # FIX 4: Guard-rail - check if we have a final answer to verify
+            if not state.get("final_answer"):
+                logger.warning("No final answer to verify - returning to planning")
+                return {
+                    "current_fsm_state": FSMState.PLANNING,
+                    "stagnation_counter": state.get("stagnation_counter", 0) + 1,
+                    "errors": ["No final answer to verify"],
+                    "step_count": state.get("step_count", 0) + 1
+                }
             
             try:
                 # Get verification LLM
@@ -699,6 +779,184 @@ CRITICAL: Use the EXACT parameter names shown above. Do NOT use generic "query" 
         
         return base_prompt
     
+    def _validate_and_correct_plan(self, plan: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """FIX 1: Validate tool parameters and correct common mistakes."""
+        validated_plan = []
+        
+        for step in plan:
+            if not step.get("tool"):
+                validated_plan.append(step)
+                continue
+                
+            tool_name = step["tool"]
+            tool_input = step.get("input", {})
+            
+            # Skip if tool not in registry
+            if tool_name not in self.tool_registry:
+                logger.warning(f"Tool {tool_name} not found in registry, will use stub")
+                validated_plan.append(step)
+                continue
+            
+            tool = self.tool_registry[tool_name]
+            
+            # Try to get the tool's input schema
+            try:
+                if hasattr(tool, 'args_schema'):
+                    # Validate against Pydantic schema
+                    try:
+                        validated_input = tool.args_schema.model_validate(tool_input)
+                        step["input"] = validated_input.model_dump()
+                    except ValidationError as e:
+                        logger.warning(f"Validation error for {tool_name}: {e}")
+                        # Try to fix common issues
+                        corrected_input = self._correct_tool_input(tool_name, tool_input, e)
+                        if corrected_input:
+                            step["input"] = corrected_input
+                        else:
+                            # Mark step as invalid
+                            step["error"] = f"Invalid parameters: {str(e)}"
+                else:
+                    # No schema available, apply heuristic corrections
+                    step["input"] = self._correct_tool_input_heuristic(tool_name, tool_input)
+            except Exception as e:
+                logger.error(f"Error validating tool {tool_name}: {e}")
+                # Use input as-is
+            
+            validated_plan.append(step)
+        
+        return validated_plan
+    
+    def _correct_tool_input(self, tool_name: str, tool_input: Dict[str, Any], validation_error: ValidationError) -> Optional[Dict[str, Any]]:
+        """Try to correct tool input based on validation errors."""
+        corrected = tool_input.copy()
+        
+        # Extract missing fields from validation error
+        for error in validation_error.errors():
+            if error["type"] == "missing":
+                field_name = error["loc"][0]
+                
+                # Common corrections for missing fields
+                if field_name == "filename" and "query" in tool_input:
+                    # User provided 'query' instead of 'filename'
+                    corrected["filename"] = tool_input["query"]
+                    del corrected["query"]
+                elif field_name == "code" and "query" in tool_input:
+                    # User provided 'query' instead of 'code'
+                    corrected["code"] = tool_input["query"]
+                    del corrected["query"]
+                elif field_name == "video_url" and "url" in tool_input:
+                    # User provided 'url' instead of 'video_url'
+                    corrected["video_url"] = tool_input["url"]
+                    del corrected["url"]
+                elif field_name == "fen_string" and "query" in tool_input:
+                    # User provided 'query' instead of 'fen_string'
+                    corrected["fen_string"] = tool_input["query"]
+                    del corrected["query"]
+        
+        # Try validation again with corrected input
+        try:
+            tool = self.tool_registry[tool_name]
+            if hasattr(tool, 'args_schema'):
+                validated = tool.args_schema.model_validate(corrected)
+                return validated.model_dump()
+        except:
+            pass
+        
+        return None
+    
+    def _correct_tool_input_heuristic(self, tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply heuristic corrections when no schema is available."""
+        # Define expected parameters for each tool
+        tool_params = {
+            "file_reader": ["filename", "lines"],
+            "advanced_file_reader": ["filename"],
+            "audio_transcriber": ["filename"],
+            "image_analyzer": ["filename", "task"],
+            "image_analyzer_enhanced": ["filename", "task"],
+            "video_analyzer": ["url", "action"],
+            "gaia_video_analyzer": ["video_url"],
+            "chess_logic_tool": ["fen_string", "analysis_time_seconds"],
+            "python_interpreter": ["code"],
+            "web_researcher": ["query", "source", "date_range", "search_type"],
+            "semantic_search_tool": ["query", "filename", "top_k"],
+            "tavily_search": ["query", "max_results"]
+        }
+        
+        expected_params = tool_params.get(tool_name, ["query"])
+        corrected = {}
+        
+        # Map common mismatches
+        if "query" in tool_input and "query" not in expected_params:
+            # Figure out where to map 'query'
+            if "filename" in expected_params:
+                corrected["filename"] = tool_input["query"]
+            elif "code" in expected_params:
+                corrected["code"] = tool_input["query"]
+            elif "fen_string" in expected_params:
+                corrected["fen_string"] = tool_input["query"]
+            elif "url" in expected_params:
+                corrected["url"] = tool_input["query"]
+            elif "video_url" in expected_params:
+                corrected["video_url"] = tool_input["query"]
+        else:
+            # Keep query if it's expected
+            if "query" in tool_input and "query" in expected_params:
+                corrected["query"] = tool_input["query"]
+        
+        # Copy over other valid parameters
+        for param in expected_params:
+            if param in tool_input and param not in corrected:
+                corrected[param] = tool_input[param]
+        
+        # Add default values for missing required params
+        if tool_name == "file_reader" and "lines" not in corrected:
+            corrected["lines"] = -1
+        elif tool_name == "semantic_search_tool":
+            if "filename" not in corrected:
+                corrected["filename"] = "knowledge_base.csv"
+            if "top_k" not in corrected:
+                corrected["top_k"] = 3
+        elif tool_name == "tavily_search" and "max_results" not in corrected:
+            corrected["max_results"] = 3
+        elif tool_name == "chess_logic_tool" and "analysis_time_seconds" not in corrected:
+            corrected["analysis_time_seconds"] = 2.0
+        elif tool_name in ["image_analyzer", "image_analyzer_enhanced"] and "task" not in corrected:
+            corrected["task"] = "describe"
+        elif tool_name == "video_analyzer" and "action" not in corrected:
+            corrected["action"] = "download_info"
+        
+        return corrected
+    
+    def _translate_tool_parameters(self, tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
+        """FIX 2: Translate common parameter mismatches at execution time."""
+        # This provides a second layer of defense in case planning validation missed something
+        
+        # Quick translations based on tool name
+        translations = {
+            "file_reader": {"query": "filename"},
+            "advanced_file_reader": {"query": "filename"},
+            "audio_transcriber": {"query": "filename"},
+            "image_analyzer": {"query": "filename"},
+            "image_analyzer_enhanced": {"query": "filename"},
+            "python_interpreter": {"query": "code"},
+            "video_analyzer": {"query": "url"},
+            "gaia_video_analyzer": {"query": "video_url", "url": "video_url"},
+            "chess_logic_tool": {"query": "fen_string"}
+        }
+        
+        if tool_name not in translations:
+            return tool_input
+        
+        translated = tool_input.copy()
+        
+        for old_key, new_key in translations[tool_name].items():
+            if old_key in translated and new_key not in translated:
+                translated[new_key] = translated[old_key]
+                del translated[old_key]
+                logger.info(f"Translated parameter '{old_key}' to '{new_key}' for tool {tool_name}")
+        
+        return translated
+    
     def _parse_plan_into_steps(self, plan_text: str, state: EnhancedAgentState) -> List[Dict[str, Any]]:
         """Parse LLM plan into structured steps."""
         import re
@@ -865,7 +1123,10 @@ Provide a verification result."""
             "chess_analyzer_production": ["chess_logic_tool", "python_interpreter"],
             "file_reader": ["advanced_file_reader", "python_interpreter"],
             "image_analyzer_enhanced": ["image_analyzer", "python_interpreter"],
-            "image_analyzer": ["image_analyzer_enhanced", "python_interpreter"]
+            "image_analyzer": ["image_analyzer_enhanced", "python_interpreter"],
+            # Add alternatives for stub tools
+            "video_analyzer": ["gaia_video_analyzer", "video_analyzer_production"],
+            "programming_language_identifier": ["python_interpreter"]
         }
         
         # Get alternatives for the failed tool
@@ -921,7 +1182,7 @@ Provide a verification result."""
             
             # Run the graph
             logger.info(f"Starting FSM execution for query: {initial_state['query'][:100]}...")
-            result = self.graph.invoke(initial_state, config={"recursion_limit": 50})
+            result = self.graph.invoke(initial_state)
             
             # Extract final answer
             final_answer = result.get("final_answer", "Unable to determine answer")
