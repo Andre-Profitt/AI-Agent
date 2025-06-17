@@ -26,14 +26,6 @@ from src.tools_enhanced import get_enhanced_tools
 from src.knowledge_ingestion import KnowledgeIngestionService
 
 # Import GAIA agent functionality
-try:
-    from agent import build_graph
-    GAIA_AVAILABLE = True
-except ImportError:
-    logger.warning("⚠️ GAIA agent.py not available - GAIA evaluation will be disabled")
-    GAIA_AVAILABLE = False
-
-# --- Initialization ---
 # Load environment variables
 load_dotenv()
 
@@ -44,6 +36,14 @@ logger = logging.getLogger(__name__)
 # Prevent passing logs to the root logger's handlers
 logger.propagate = False
 
+try:
+    from agent import build_graph
+    GAIA_AVAILABLE = True
+except ImportError:
+    logger.warning("⚠️ GAIA agent.py not available - GAIA evaluation will be disabled")
+    GAIA_AVAILABLE = False
+
+# --- Initialization ---
 # Initialize Supabase client and custom log handler
 try:
     supabase_client = get_supabase_client()

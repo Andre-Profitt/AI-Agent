@@ -1,6 +1,6 @@
 """
 GAIA Benchmark Agent Wrapper
-Integrates the advanced AdvancedReActAgent with GAIA benchmark requirements
+Integrates the advanced FSMReActAgent with GAIA benchmark requirements
 while preserving all sophisticated features like strategic planning, reflection,
 cross-validation, and adaptive reasoning.
 """
@@ -8,8 +8,8 @@ cross-validation, and adaptive reasoning.
 import logging
 from typing import List
 from langchain_core.messages import HumanMessage, AIMessage
-from src.advanced_agent import AdvancedReActAgent
-from src.tools import get_tools
+from src.advanced_agent_fsm import FSMReActAgent
+from src.tools_enhanced import get_enhanced_tools
 from src.database import get_supabase_client, SupabaseLogHandler
 import uuid
 
@@ -29,26 +29,27 @@ except Exception as e:
 
 def build_graph():
     """
-    Builds and returns the advanced agent graph for GAIA benchmark evaluation.
+    Builds and returns the advanced FSM agent graph for GAIA benchmark evaluation.
     This function is required by the GAIA template.
     
     Returns:
         The compiled LangGraph agent with all advanced features enabled.
     """
     try:
-        # Initialize tools
-        tools = get_tools()
-        logger.info(f"GAIA Agent: Initialized {len(tools)} tools")
+        # Initialize enhanced tools optimized for GAIA
+        tools = get_enhanced_tools()
+        logger.info(f"GAIA Agent: Initialized {len(tools)} enhanced tools")
         
-        # Create the advanced agent with all sophisticated features
-        advanced_agent = AdvancedReActAgent(
+        # Create the FSM agent with all sophisticated features
+        fsm_agent = FSMReActAgent(
             tools=tools,
             log_handler=supabase_handler if LOGGING_ENABLED else None,
-            model_preference="quality"  # Use highest quality models for GAIA
+            model_preference="quality",  # Use highest quality models for GAIA
+            use_crew=True  # Enable crew workflow for complex queries
         )
         
-        logger.info("GAIA Agent: AdvancedReActAgent initialized successfully")
-        return advanced_agent.graph
+        logger.info("GAIA Agent: FSMReActAgent initialized successfully")
+        return fsm_agent.graph
         
     except Exception as e:
         logger.error(f"GAIA Agent: Failed to build graph: {e}")
@@ -56,7 +57,7 @@ def build_graph():
 
 class GAIAAgent:
     """
-    GAIA Benchmark Agent that leverages all advanced features:
+    GAIA Benchmark Agent that leverages all advanced FSM features:
     - Strategic planning and multi-step reasoning
     - Cross-validation and verification
     - Adaptive model selection
@@ -65,13 +66,13 @@ class GAIAAgent:
     """
     
     def __init__(self):
-        """Initialize the GAIA agent with advanced capabilities."""
-        logger.info("Initializing GAIA Agent with advanced features...")
+        """Initialize the GAIA agent with advanced FSM capabilities."""
+        logger.info("Initializing GAIA Agent with advanced FSM features...")
         
         try:
-            self.graph = build_graph()
+            # Initialize session tracking - agent will be created per call
             self.session_count = 0
-            logger.info("GAIA Agent initialized successfully")
+            logger.info("GAIA Agent initialized successfully with FSM architecture")
         except Exception as e:
             logger.error(f"GAIA Agent initialization failed: {e}")
             raise
@@ -98,43 +99,24 @@ class GAIAAgent:
             logger.info(f"GAIA Agent: Processing question #{self.session_count}")
             logger.debug(f"Question: {question[:100]}...")
             
-            # Create message format for the advanced agent
-            messages = [HumanMessage(content=question)]
+            # Create the FSM agent directly since we need its run() method
+            tools = get_enhanced_tools()
+            fsm_agent = FSMReActAgent(
+                tools=tools,
+                log_handler=supabase_handler if LOGGING_ENABLED else None,
+                model_preference="quality",
+                use_crew=True
+            )
             
-            # Enhanced state for GAIA processing
-            enhanced_state = {
-                "messages": messages,
-                "run_id": uuid.uuid4(),
-                "log_to_db": LOGGING_ENABLED,
-                # Strategic planning state
-                "master_plan": [],
-                "current_step": 0,
-                "plan_revisions": 0,
-                # Reflection state
-                "reflections": [],
-                "confidence_history": [],
-                "error_recovery_attempts": 0,
-                # Adaptive intelligence
-                "step_count": 0,
-                "confidence": 0.3,  # Start conservative for GAIA
-                "reasoning_complete": False,
-                "verification_level": "thorough",  # Default to thorough for GAIA
-                # Tool performance tracking
-                "tool_success_rates": {},
-                "tool_results": [],
-                "cross_validation_sources": []
-            }
+            # Use the FSM agent's run method with proper input format
+            logger.info("GAIA Agent: Starting FSM reasoning process...")
+            result = fsm_agent.run({"input": question})
             
-            # Invoke the advanced agent graph
-            logger.info("GAIA Agent: Starting advanced reasoning process...")
-            result = self.graph.invoke(enhanced_state)
-            
-            # Extract the final answer from the sophisticated response
-            final_message = result['messages'][-1]
-            if isinstance(final_message, AIMessage):
-                raw_answer = final_message.content
+            # Extract the final answer from the FSM response
+            if isinstance(result, dict):
+                raw_answer = result.get("output", result.get("response", str(result)))
             else:
-                raw_answer = str(final_message)
+                raw_answer = str(result)
             
             # Clean and extract the final answer for GAIA submission
             clean_answer = self._extract_gaia_answer(raw_answer)
