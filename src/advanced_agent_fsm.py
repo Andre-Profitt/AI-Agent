@@ -331,6 +331,9 @@ class FSMReActAgent:
             """Execute tools and persist outputs (Directive 2)."""
             logger.info(f"--- FSM STATE: TOOL_EXECUTION (Step {state.get('step_count', 0)}) ---")
             
+            # Initialize tool_reliability at the beginning to avoid UnboundLocalError
+            tool_reliability = state.get("tool_reliability", {})
+            
             try:
                 # Get the next tool to execute from the plan
                 next_tool_info = self._get_next_tool_from_plan(
@@ -369,7 +372,6 @@ class FSMReActAgent:
                     
                     # --- ADAPTIVE TOOL SELECTION ---
                     # Check if we should use an alternative tool based on reliability
-                    tool_reliability = state.get("tool_reliability", {})
                     tool_stats = tool_reliability.get(tool_name, {"successes": 0, "failures": 0})
                     
                     if tool_stats["failures"] > 2 and tool_stats["successes"] < tool_stats["failures"]:
@@ -673,30 +675,62 @@ Query: {state['query']}
         if errors:
             base_prompt += f"Previous attempt had issues: {', '.join(errors)}\n\n"
         
-        base_prompt += """Create a detailed plan with specific tool calls. Format:
-Step 1: [Description] - Tool: [tool_name] with input: [specific input]
-Step 2: [Description] - Tool: [tool_name] with input: [specific input based on Step 1 output]
-...
+        base_prompt += """Create a detailed plan with specific tool calls. Each tool has SPECIFIC parameter names.
 
-Available tools: web_researcher, semantic_search_tool, python_interpreter, tavily_search, file_reader, image_analyzer, video_analyzer, audio_transcriber"""
+Available tools and their EXACT parameter requirements:
+- web_researcher: {{"query": "search query", "source": "wikipedia" or "search"}}
+- semantic_search_tool: {{"query": "search query", "filename": "knowledge_base.csv", "top_k": 3}}
+- python_interpreter: {{"code": "python code to execute"}}
+- tavily_search: {{"query": "search query", "max_results": 3}}
+- file_reader: {{"filename": "path/to/file.txt", "lines": -1}}
+- advanced_file_reader: {{"filename": "path/to/file"}}
+- image_analyzer: {{"filename": "path/to/image.jpg", "task": "describe"}}
+- image_analyzer_enhanced: {{"filename": "path/to/image.jpg", "task": "describe" or "chess"}}
+- video_analyzer: {{"url": "video_url", "action": "download_info" or "transcribe"}}
+- gaia_video_analyzer: {{"video_url": "googleusercontent_url"}}
+- audio_transcriber: {{"filename": "path/to/audio.mp3"}}
+- chess_logic_tool: {{"fen_string": "chess_position_in_FEN", "analysis_time_seconds": 2.0}}
+
+Format your plan EXACTLY like this:
+Step 1: [Description] - Tool: tool_name with parameters: {{"param1": "value1", "param2": value2}}
+Step 2: [Description] - Tool: tool_name with parameters: {{"param": "value based on Step 1"}}
+
+CRITICAL: Use the EXACT parameter names shown above. Do NOT use generic "query" for tools that require specific parameters."""
         
         return base_prompt
     
     def _parse_plan_into_steps(self, plan_text: str, state: EnhancedAgentState) -> List[Dict[str, Any]]:
         """Parse LLM plan into structured steps."""
         import re
+        import json
         
         steps = []
+        # Updated pattern to capture tool parameters
         step_pattern = r"Step (\d+):\s*(.+?)(?:\n|$)"
-        matches = re.findall(step_pattern, plan_text, re.MULTILINE)
+        matches = re.findall(step_pattern, plan_text, re.MULTILINE | re.DOTALL)
         
         for step_num, step_desc in matches:
-            # Extract tool and input from description
+            # Extract tool name
             tool_match = re.search(r"Tool:\s*(\w+)", step_desc, re.IGNORECASE)
-            input_match = re.search(r"input:\s*(.+?)(?:\n|$)", step_desc, re.IGNORECASE)
-            
             tool_name = tool_match.group(1) if tool_match else None
-            tool_input = input_match.group(1).strip() if input_match else step_desc
+            
+            # Extract parameters - look for JSON-like structure
+            params_match = re.search(r"parameters:\s*(\{[^}]+\})", step_desc, re.IGNORECASE)
+            
+            if params_match:
+                try:
+                    # Parse the JSON parameters
+                    params_str = params_match.group(1)
+                    # Handle single quotes by replacing them with double quotes
+                    params_str = params_str.replace("'", '"')
+                    tool_params = json.loads(params_str)
+                except json.JSONDecodeError:
+                    # Fallback to extracting parameters manually
+                    logger.warning(f"Failed to parse JSON parameters for step {step_num}, using fallback parser")
+                    tool_params = self._fallback_parse_params(step_desc, tool_name)
+            else:
+                # Try to extract parameters from the description
+                tool_params = self._fallback_parse_params(step_desc, tool_name)
             
             # Check if this step has already been completed
             completed = int(step_num) in state.get("step_outputs", {})
@@ -705,11 +739,55 @@ Available tools: web_researcher, semantic_search_tool, python_interpreter, tavil
                 "step": int(step_num),
                 "description": step_desc,
                 "tool": tool_name,
-                "input": {"query": tool_input} if tool_name else None,
+                "input": tool_params if tool_name else None,
                 "completed": completed
             })
         
         return steps
+    
+    def _fallback_parse_params(self, step_desc: str, tool_name: str) -> Dict[str, Any]:
+        """Fallback parameter extraction when JSON parsing fails."""
+        # Default parameters for each tool
+        tool_defaults = {
+            "python_interpreter": {"code": ""},
+            "file_reader": {"filename": "", "lines": -1},
+            "advanced_file_reader": {"filename": ""},
+            "image_analyzer": {"filename": "", "task": "describe"},
+            "image_analyzer_enhanced": {"filename": "", "task": "describe"},
+            "video_analyzer": {"url": "", "action": "download_info"},
+            "gaia_video_analyzer": {"video_url": ""},
+            "audio_transcriber": {"filename": ""},
+            "chess_logic_tool": {"fen_string": "", "analysis_time_seconds": 2.0},
+            "web_researcher": {"query": "", "source": "wikipedia"},
+            "semantic_search_tool": {"query": "", "filename": "knowledge_base.csv", "top_k": 3},
+            "tavily_search": {"query": "", "max_results": 3}
+        }
+        
+        # Get default parameters for this tool
+        params = tool_defaults.get(tool_name, {"query": ""})
+        
+        # Try to extract values from the description
+        # Look for quoted strings after "input:" or "parameters:"
+        input_match = re.search(r'(?:input|parameters):\s*["\']?([^"\']+)["\']?', step_desc, re.IGNORECASE)
+        if input_match:
+            input_value = input_match.group(1).strip()
+            
+            # Assign to the appropriate parameter based on tool
+            if tool_name == "python_interpreter":
+                params["code"] = input_value
+            elif tool_name in ["file_reader", "advanced_file_reader", "image_analyzer", "image_analyzer_enhanced", "audio_transcriber"]:
+                params["filename"] = input_value
+            elif tool_name in ["video_analyzer"]:
+                params["url"] = input_value
+            elif tool_name == "gaia_video_analyzer":
+                params["video_url"] = input_value
+            elif tool_name == "chess_logic_tool":
+                params["fen_string"] = input_value
+            else:
+                # For search tools, use "query"
+                params["query"] = input_value
+        
+        return params
     
     def _get_next_tool_from_plan(self, plan: List[Dict], state: EnhancedAgentState) -> Optional[Dict]:
         """Get the next uncompleted tool from the plan."""
@@ -786,7 +864,8 @@ Provide a verification result."""
             "chess_logic_tool": ["chess_analyzer_production", "python_interpreter"],
             "chess_analyzer_production": ["chess_logic_tool", "python_interpreter"],
             "file_reader": ["advanced_file_reader", "python_interpreter"],
-            "image_analyzer_enhanced": ["image_analyzer_chess", "python_interpreter"]
+            "image_analyzer_enhanced": ["image_analyzer", "python_interpreter"],
+            "image_analyzer": ["image_analyzer_enhanced", "python_interpreter"]
         }
         
         # Get alternatives for the failed tool
@@ -842,7 +921,7 @@ Provide a verification result."""
             
             # Run the graph
             logger.info(f"Starting FSM execution for query: {initial_state['query'][:100]}...")
-            result = self.graph.invoke(initial_state)
+            result = self.graph.invoke(initial_state, config={"recursion_limit": 50})
             
             # Extract final answer
             final_answer = result.get("final_answer", "Unable to determine answer")

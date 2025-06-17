@@ -1372,6 +1372,11 @@ def build_gradio_interface():
             if not message.strip():
                 return chat_history, "", session_id
             
+            # Ensure chat_history is a list of lists format
+            if not isinstance(chat_history, list):
+                chat_history = []
+            
+            # Append new message in correct format
             chat_history.append([message, None])
             
             # Check cache first for instant responses
@@ -1386,17 +1391,29 @@ def build_gradio_interface():
                 return
             
             # Use parallel processing for new requests
-            response_generator = chat_interface_logic_sync(message, chat_history, log_to_db, session_id)
-            
-            final_response = ""
-            for steps, response, updated_session_id in response_generator:
-                chat_history[-1] = [message, response]
-                final_response = response
-                yield chat_history, steps, updated_session_id
-            
-            # Cache successful responses
-            if final_response and not any(error_word in final_response.lower() for error_word in ["error", "failed", "exception"]):
-                response_cache.set(cache_key, final_response)
+            try:
+                response_generator = chat_interface_logic_sync(message, chat_history[:-1], log_to_db, session_id)
+                
+                final_response = ""
+                for steps, response, updated_session_id in response_generator:
+                    # Ensure response is a string, not a dict or other type
+                    if isinstance(response, dict):
+                        response = response.get("output", str(response))
+                    elif not isinstance(response, str):
+                        response = str(response)
+                    
+                    chat_history[-1] = [message, response]
+                    final_response = response
+                    yield chat_history, steps, updated_session_id
+                
+                # Cache successful responses
+                if final_response and not any(error_word in final_response.lower() for error_word in ["error", "failed", "exception"]):
+                    response_cache.set(cache_key, final_response)
+            except Exception as e:
+                logger.error(f"Error in on_submit: {e}", exc_info=True)
+                error_response = f"An error occurred: {str(e)}"
+                chat_history[-1] = [message, error_response]
+                yield chat_history, error_response, session_id
         
         def on_file_upload(file_obj):
             if file_obj is not None:
