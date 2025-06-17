@@ -761,7 +761,7 @@ def build_gradio_interface():
                     height=500,
                     show_label=True,
                     container=True,
-                    bubble_full_width=False
+                    type='messages'
                 )
                 
                 with gr.Row():
@@ -1005,8 +1005,7 @@ if __name__ == "__main__":
     
     app = build_gradio_interface()
     app.queue(
-        max_size=30,  # Reduced from 50 to be more conservative
-        concurrency_limit=MAX_PARALLEL_WORKERS  # Match our worker pool size
+        max_size=30  # Reduced from 50 to be more conservative
     ).launch(
         server_name="0.0.0.0",
         server_port=7860,
