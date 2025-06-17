@@ -23,6 +23,7 @@ from src.advanced_agent_fsm import FSMReActAgent
 from src.database import get_supabase_client, SupabaseLogHandler
 # Import enhanced tools for GAIA
 from src.tools_enhanced import get_enhanced_tools
+from src.knowledge_ingestion import KnowledgeIngestionService
 
 # Import GAIA agent functionality
 try:
@@ -63,7 +64,8 @@ try:
     fsm_agent = FSMReActAgent(
         tools=tools,
         log_handler=supabase_handler if LOGGING_ENABLED else None,
-        model_preference="balanced"
+        model_preference="balanced",
+        use_crew=True  # Enable crew workflow for complex queries
     )
     logger.info("FSM-based ReAct Agent initialized successfully.")
 except Exception as e:
@@ -1453,6 +1455,38 @@ def build_gradio_interface():
         )
 
     return demo
+
+# Start knowledge ingestion service in background
+def start_knowledge_ingestion():
+    """Start the knowledge ingestion service in a separate thread."""
+    config = {
+        "watch_directories": [
+            "./documents",
+            "./knowledge_base",
+            os.path.expanduser("~/Documents/AI_Agent_Knowledge")
+        ],
+        "poll_urls": []
+    }
+    
+    service = KnowledgeIngestionService(
+        watch_directories=config["watch_directories"],
+        poll_urls=config["poll_urls"]
+    )
+    
+    try:
+        service.start()
+        logger.info("Knowledge ingestion service started successfully")
+        
+        # Keep the service running
+        while True:
+            service.handler.process_pending()
+            time.sleep(1)
+    except Exception as e:
+        logger.error(f"Knowledge ingestion service error: {e}")
+
+# Start ingestion service in background thread
+ingestion_thread = threading.Thread(target=start_knowledge_ingestion, daemon=True)
+ingestion_thread.start()
 
 if __name__ == "__main__":
     logger.info("\n" + "="*60)

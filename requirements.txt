@@ -17,8 +17,9 @@ tavily-python==0.7.6
 langchain-experimental==0.3.4
 
 # Database Connector
-supabase==2.15.3
+supabase==2.0.2
 psycopg2-binary==2.9.10
+vecs==0.3.0
 
 # UI and Environment
 gradio==5.25.2
@@ -46,21 +47,21 @@ torchvision>=0.15.0
 openai-whisper==20240930
 librosa==0.11.0
 pydub==0.25.1
-yt-dlp==2025.6.9
+yt-dlp>=2023.12.30
 opencv-python==4.11.0.86
 moviepy==2.2.1
 Pillow==11.2.1
 ffmpeg-python==0.2.0
 
 # Web Scraping & Research
-beautifulsoup4==4.13.4
+beautifulsoup4>=4.12.0
 selenium==4.33.0
 requests-html==0.10.0
 wikipedia==1.4.0
 
 # File Format Support
 openpyxl==3.1.5
-python-docx==1.1.2
+python-docx>=1.1.0
 PyPDF2==3.0.1
 python-magic==0.4.27
 
@@ -68,3 +69,13 @@ python-magic==0.4.27
 chess==1.11.2
 matplotlib==3.10.3
 seaborn==0.13.2
+
+# Production tool dependencies
+python-chess>=1.999
+stockfish>=3.28.0  # Python wrapper for Stockfish
+watchdog>=3.0.0  # For file system monitoring
+
+# Document processing
+pypdf>=3.17.0
+unstructured>=0.11.0
+llama-index-readers-file>=0.1.0

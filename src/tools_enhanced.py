@@ -26,6 +26,20 @@ from src.tools import (
     get_weather
 )
 
+# Try to import production tools
+try:
+    from src.tools_production import (
+        video_analyzer_production,
+        chess_analyzer_production,
+        install_stockfish,
+        image_analyzer_chess as image_analyzer_chess_production
+    )
+    PRODUCTION_TOOLS_AVAILABLE = True
+    logger.info("Production tools loaded successfully")
+except ImportError as e:
+    PRODUCTION_TOOLS_AVAILABLE = False
+    logger.warning(f"Production tools not available: {e}")
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -338,6 +352,7 @@ def get_enhanced_tools() -> List[Tool]:
     """
     Returns the complete set of enhanced tools optimized for GAIA benchmark.
     Includes both original tools and new specialized tools.
+    Prefers production tools when available.
     """
     tools = [
         # Original tools that don't need modification
@@ -347,12 +362,27 @@ def get_enhanced_tools() -> List[Tool]:
         semantic_search_tool,
         python_interpreter,
         
-        # Enhanced tools for GAIA
-        gaia_video_analyzer,
-        chess_logic_tool,
+        # Video analyzer - use production if available
+        video_analyzer_production if PRODUCTION_TOOLS_AVAILABLE else gaia_video_analyzer,
+        
+        # Chess analyzer - use production if available
+        chess_analyzer_production if PRODUCTION_TOOLS_AVAILABLE else chess_logic_tool,
+        
+        # Web researcher
         web_researcher,  # Enhanced version
+        
+        # Abstract reasoning
         abstract_reasoning_tool,
-        image_analyzer_enhanced,
+        
+        # Image analyzer - combine with chess production if available
+        Tool(
+            name="image_analyzer_enhanced",
+            description="Enhanced image analyzer that can handle chess positions and convert to FEN notation",
+            func=lambda filename, task="describe": (
+                image_analyzer_chess_production(filename) if task == "chess" and PRODUCTION_TOOLS_AVAILABLE
+                else image_analyzer_enhanced(filename, task)
+            )
+        ),
         
         # Tavily search
         Tool(
@@ -364,6 +394,10 @@ def get_enhanced_tools() -> List[Tool]:
         # Weather (kept for compatibility)
         get_weather
     ]
+    
+    # Add Stockfish installer if production tools are available
+    if PRODUCTION_TOOLS_AVAILABLE:
+        tools.append(install_stockfish)
     
     return tools
 

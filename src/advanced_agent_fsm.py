@@ -81,6 +81,10 @@ class EnhancedAgentState(TypedDict):
     step_count: int
     start_time: float
     end_time: float
+    
+    # --- Adaptive Tool Selection ---
+    tool_reliability: Dict[str, Dict[str, Any]]  # Tool performance metrics
+    tool_preferences: Dict[str, List[str]]  # Preferred tools for query types
 
 # --- Model Configuration ---
 
@@ -244,16 +248,50 @@ class FSMReActAgent:
             logger.info(f"--- FSM STATE: PLANNING (Step {state.get('step_count', 0)}) ---")
             
             try:
-                # Get planning-optimized LLM
+                # Check if this is a complex query that should be delegated to crew
                 if self.use_crew and state.get("step_count", 0) == 0:
-                    from src.crew_workflow import run_crew_workflow
-                    crew_result = run_crew_workflow(state["query"], self.tool_registry)
-                    return {
-                        "final_answer": crew_result.get("output", ""),
-                        "tool_calls": crew_result.get("intermediate_steps", []),
-                        "current_fsm_state": FSMState.FINISHED,
-                        "stagnation_counter": 0
-                    }
+                    # Analyze complexity - delegate if query involves multiple steps or research
+                    complexity_indicators = [
+                        "analyze", "compare", "research", "find and explain",
+                        "multiple", "various", "comprehensive", "detailed"
+                    ]
+                    query_lower = state["query"].lower()
+                    
+                    is_complex = any(indicator in query_lower for indicator in complexity_indicators)
+                    
+                    if is_complex:
+                        logger.info("Complex query detected - delegating to CrewAI workflow")
+                        try:
+                            from src.crew_workflow import run_crew_workflow
+                            crew_result = run_crew_workflow(state["query"], self.tool_registry)
+                            
+                            # Convert crew results to FSM format
+                            crew_steps = crew_result.get("intermediate_steps", {})
+                            tool_calls = []
+                            
+                            for step_id, step_data in crew_steps.items():
+                                if isinstance(step_data, dict):
+                                    tool_calls.append({
+                                        "tool_name": "crew_agent",
+                                        "tool_input": {"task": step_id},
+                                        "output": step_data,
+                                        "step": len(tool_calls) + 1,
+                                        "timestamp": datetime.now().isoformat()
+                                    })
+                            
+                            return {
+                                "final_answer": crew_result.get("output", ""),
+                                "tool_calls": tool_calls,
+                                "current_fsm_state": FSMState.VERIFYING,  # Still verify crew results
+                                "stagnation_counter": 0,
+                                "confidence": 0.85  # Crew results have good baseline confidence
+                            }
+                        except ImportError:
+                            logger.warning("CrewAI not available, falling back to standard planning")
+                        except Exception as e:
+                            logger.error(f"Crew workflow failed: {e}, falling back to standard planning")
+                
+                # Standard planning flow
                 llm = self._get_llm(task_type="reasoning")
                 
                 # Hydrate prompt with previous results (Directive 2)
@@ -322,25 +360,83 @@ class FSMReActAgent:
                 
                 # Execute the tool
                 tool_output = None
+                execution_start = time.time()
+                execution_success = False
+                
                 if tool_name in self.tool_registry:
                     logger.info(f"Executing tool: {tool_name} with input: {tool_input}")
                     tool = self.tool_registry[tool_name]
                     
+                    # --- ADAPTIVE TOOL SELECTION ---
+                    # Check if we should use an alternative tool based on reliability
+                    tool_reliability = state.get("tool_reliability", {})
+                    tool_stats = tool_reliability.get(tool_name, {"successes": 0, "failures": 0})
+                    
+                    if tool_stats["failures"] > 2 and tool_stats["successes"] < tool_stats["failures"]:
+                        # This tool has been failing, try to find an alternative
+                        alternative_tool = self._find_alternative_tool(tool_name, state)
+                        if alternative_tool:
+                            logger.warning(f"Tool {tool_name} has high failure rate, switching to {alternative_tool}")
+                            tool_name = alternative_tool
+                            tool = self.tool_registry[tool_name]
+                    
                     # Execute with error handling
                     try:
                         tool_output = tool.invoke(tool_input)
+                        execution_success = True
                     except Exception as tool_error:
                         logger.error(f"Tool execution failed: {tool_error}")
-                        # Treat validation / schema errors specially – bump stagnation so we do not retry unchanged
-                        return {
-                            "current_fsm_state": FSMState.PLANNING,
-                            "stagnation_counter": state.get("stagnation_counter", 0) + 1,
-                            "errors": [f"Tool execution failed: {str(tool_error)}"],
-                            "step_count": state.get("step_count", 0) + 1
-                        }
+                        execution_success = False
+                        
+                        # Update tool reliability
+                        tool_stats = tool_reliability.get(tool_name, {"successes": 0, "failures": 0})
+                        tool_stats["failures"] += 1
+                        tool_stats["last_error"] = str(tool_error)
+                        tool_stats["last_error_time"] = datetime.now().isoformat()
+                        tool_reliability[tool_name] = tool_stats
+                        
+                        # Try alternative tool if available
+                        alternative_tool = self._find_alternative_tool(tool_name, state)
+                        if alternative_tool and alternative_tool != tool_name:
+                            logger.info(f"Trying alternative tool: {alternative_tool}")
+                            try:
+                                alt_tool = self.tool_registry[alternative_tool]
+                                tool_output = alt_tool.invoke(tool_input)
+                                execution_success = True
+                                tool_name = alternative_tool  # Update for record
+                            except Exception as alt_error:
+                                logger.error(f"Alternative tool also failed: {alt_error}")
+                                # Return to planning with error
+                                return {
+                                    "current_fsm_state": FSMState.PLANNING,
+                                    "stagnation_counter": state.get("stagnation_counter", 0) + 1,
+                                    "errors": [f"Tool execution failed: {str(tool_error)}, Alternative also failed: {str(alt_error)}"],
+                                    "step_count": state.get("step_count", 0) + 1,
+                                    "tool_reliability": tool_reliability
+                                }
+                        else:
+                            # No alternative, return to planning
+                            return {
+                                "current_fsm_state": FSMState.PLANNING,
+                                "stagnation_counter": state.get("stagnation_counter", 0) + 1,
+                                "errors": [f"Tool execution failed: {str(tool_error)}"],
+                                "step_count": state.get("step_count", 0) + 1,
+                                "tool_reliability": tool_reliability
+                            }
                 else:
                     tool_output = f"Error: Tool '{tool_name}' not found"
                     logger.error(tool_output)
+                
+                # Update tool reliability for successful execution
+                if execution_success:
+                    tool_stats = tool_reliability.get(tool_name, {"successes": 0, "failures": 0})
+                    tool_stats["successes"] += 1
+                    tool_stats["last_success_time"] = datetime.now().isoformat()
+                    tool_stats["avg_execution_time"] = (
+                        (tool_stats.get("avg_execution_time", 0) * tool_stats["successes"] + 
+                         (time.time() - execution_start)) / (tool_stats["successes"] + 1)
+                    )
+                    tool_reliability[tool_name] = tool_stats
                 
                 # --- CRITICAL STATE UPDATE (Directive 2) ---
                 # Persist the tool output in step_outputs
@@ -366,7 +462,8 @@ class FSMReActAgent:
                     "tool_calls": [new_tool_call],
                     "current_fsm_state": next_state,
                     "stagnation_counter": 0,  # Reset on successful execution
-                    "step_count": state.get("step_count", 0) + 1
+                    "step_count": state.get("step_count", 0) + 1,
+                    "tool_reliability": tool_reliability  # Include updated reliability
                 }
                 
             except Exception as e:
@@ -678,6 +775,50 @@ Check:
 
 Provide a verification result."""
     
+    def _find_alternative_tool(self, failed_tool: str, state: EnhancedAgentState) -> Optional[str]:
+        """Find an alternative tool based on the failed tool and query context."""
+        # Define tool alternatives mapping
+        tool_alternatives = {
+            "web_researcher": ["tavily_search", "semantic_search_tool"],
+            "tavily_search": ["web_researcher", "semantic_search_tool"],
+            "gaia_video_analyzer": ["video_analyzer_production", "audio_transcriber"],
+            "video_analyzer_production": ["gaia_video_analyzer", "audio_transcriber"],
+            "chess_logic_tool": ["chess_analyzer_production", "python_interpreter"],
+            "chess_analyzer_production": ["chess_logic_tool", "python_interpreter"],
+            "file_reader": ["advanced_file_reader", "python_interpreter"],
+            "image_analyzer_enhanced": ["image_analyzer_chess", "python_interpreter"]
+        }
+        
+        # Get alternatives for the failed tool
+        alternatives = tool_alternatives.get(failed_tool, [])
+        
+        # Filter alternatives that exist in the registry
+        available_alternatives = [alt for alt in alternatives if alt in self.tool_registry]
+        
+        if not available_alternatives:
+            return None
+        
+        # Check tool reliability to pick the best alternative
+        tool_reliability = state.get("tool_reliability", {})
+        best_alternative = None
+        best_score = -1
+        
+        for alt in available_alternatives:
+            stats = tool_reliability.get(alt, {"successes": 0, "failures": 0})
+            # Calculate a simple reliability score
+            total_calls = stats["successes"] + stats["failures"]
+            if total_calls == 0:
+                # Untested tool, give it a chance
+                score = 0.5
+            else:
+                score = stats["successes"] / total_calls
+            
+            if score > best_score:
+                best_score = score
+                best_alternative = alt
+        
+        return best_alternative
+    
     def run(self, inputs: dict):
         """Run the FSM agent with the given inputs."""
         try:
@@ -694,7 +835,9 @@ Provide a verification result."""
                 "errors": [],
                 "start_time": time.time(),
                 "verification_level": "thorough",  # Default to thorough per directives
-                "confidence": 0.0
+                "confidence": 0.0,
+                "tool_reliability": {},
+                "tool_preferences": {}
             }
             
             # Run the graph
