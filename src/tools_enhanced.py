@@ -26,6 +26,9 @@ from src.tools import (
     get_weather
 )
 
+# Configure logging BEFORE using it
+logger = logging.getLogger(__name__)
+
 # Try to import production tools
 try:
     from src.tools_production import (
@@ -39,9 +42,6 @@ try:
 except ImportError as e:
     PRODUCTION_TOOLS_AVAILABLE = False
     logger.warning(f"Production tools not available: {e}")
-
-# Configure logging
-logger = logging.getLogger(__name__)
 
 # --- GAIA Mock Data ---
 
