@@ -152,7 +152,7 @@ class AdvancedGAIAAgent:
                 "step_count": 0,
                 "confidence": 0.3,
                 "reasoning_complete": False,
-                "verification_level": "thorough",  # High verification for GAIA
+                "verification_level": "thorough",  # Enhanced verification for GAIA accuracy
                 # Tool performance
                 "tool_success_rates": {},
                 "tool_results": [],
@@ -860,7 +860,7 @@ def chat_interface_logic_sync(message: str, history: List[List[str]], log_to_db:
     formatted_history = format_chat_history(history)
     current_messages = formatted_history + [HumanMessage(content=message)]
     
-    # Prepare agent input
+    # Prepare agent input with enhanced verification
     run_id = uuid.uuid4()
     agent_input = {
         "messages": current_messages,
@@ -869,7 +869,9 @@ def chat_interface_logic_sync(message: str, history: List[List[str]], log_to_db:
         "plan": "",
         "step_count": 0,
         "confidence": 0.3,
-        "reasoning_complete": False
+        "reasoning_complete": False,
+        "verification_level": "thorough",  # Enhanced verification for accuracy
+        "cross_validation_sources": []
     }
 
     # Stream the agent's response

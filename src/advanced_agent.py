@@ -373,12 +373,15 @@ Reflect when:
 - **Low-confidence path**: Exhaustive cross-validation and alternative approaches
 - **Error recovery**: Switch tools, simplify queries, or change approach
 
-🎯 GAIA-OPTIMIZED EXECUTION:
-- For factual questions: Verify through 2+ authoritative sources
-- For calculations: Cross-check with python_interpreter
-- For multimedia: Use appropriate specialized tools
-- For temporal data: Pay special attention to dates and timeframes
-- For complex reasoning: Break into verifiable sub-components
+🎯 ENHANCED ACCURACY REQUIREMENTS:
+- For factual questions: Verify through 2+ authoritative sources - NEVER rely on single source
+- For calculations: Cross-check with python_interpreter AND manual verification
+- For multimedia: Use appropriate specialized tools AND verify content carefully
+- For temporal data: Pay special attention to dates, timeframes, and ensure current information
+- For complex reasoning: Break into verifiable sub-components AND validate each step
+- For reverse text: Decode character by character to ensure accuracy
+- For mathematical problems: Verify logic step-by-step before concluding
+- For historical data: Cross-reference multiple sources for accuracy
 
 🏆 EXCELLENCE PRINCIPLES:
 - Plan before acting, reflect during execution
@@ -431,11 +434,37 @@ Remember: Think like a world-class researcher - plan strategically, execute syst
             ])
             
         elif any(indicator in query_lower for indicator in ["album", "song", "music", "artist"]):
-            # Music/discography question
+            # Music/discography question - enhanced accuracy
             steps.extend([
                 PlanStep(step_id, "Research artist discography", "web_researcher", "Find complete discography"),
                 PlanStep(step_id + 1, "Cross-reference release dates", "semantic_search_tool", "Verify timeframes"),
-                PlanStep(step_id + 2, "Count relevant releases", "python_interpreter", "Accurate count")
+                PlanStep(step_id + 2, "Verify with secondary sources", "tavily_search", "Double-check discography"),
+                PlanStep(step_id + 3, "Count relevant releases", "python_interpreter", "Accurate count")
+            ])
+            
+        elif any(indicator in query_lower for indicator in ["video", "watch", "youtube"]):
+            # Video analysis question - enhanced verification
+            steps.extend([
+                PlanStep(step_id, "Analyze video content", "video_analyzer", "Extract video information"),
+                PlanStep(step_id + 1, "Cross-reference video details", "web_researcher", "Verify video content"),
+                PlanStep(step_id + 2, "Double-check specific details", "semantic_search_tool", "Confirm accuracy")
+            ])
+            
+        elif any(indicator in query_lower for indicator in ["reverse", "backwards", "decode"]):
+            # Text reversal/decoding question
+            steps.extend([
+                PlanStep(step_id, "Decode reversed text carefully", "python_interpreter", "Character-by-character reversal"),
+                PlanStep(step_id + 1, "Verify decoding accuracy", None, "Manual verification"),
+                PlanStep(step_id + 2, "Confirm final answer", None, "Double-check result")
+            ])
+            
+        elif any(indicator in query_lower for indicator in ["olympics", "athletes", "competition"]):
+            # Olympic/sports data question - enhanced verification
+            steps.extend([
+                PlanStep(step_id, "Research Olympic data", "web_researcher", "Find official Olympic records"),
+                PlanStep(step_id + 1, "Cross-reference statistics", "semantic_search_tool", "Verify athlete counts"),
+                PlanStep(step_id + 2, "Confirm with secondary sources", "tavily_search", "Double-check data"),
+                PlanStep(step_id + 3, "Calculate final answer", "python_interpreter", "Accurate calculation")
             ])
             
         else:
@@ -449,17 +478,18 @@ Remember: Think like a world-class researcher - plan strategically, execute syst
         return steps
 
     def _assess_verification_level(self, state: EnhancedAgentState) -> str:
-        """Determine appropriate verification level based on confidence and complexity."""
+        """Determine verification level with bias toward thorough verification for accuracy."""
         confidence = state.get("confidence", 0.5)
         step_count = state.get("step_count", 0)
         error_count = state.get("error_recovery_attempts", 0)
         
-        if confidence > 0.8 and error_count == 0:
-            return "basic"
+        # Default to thorough verification for better accuracy
+        if confidence > 0.85 and error_count == 0 and step_count >= 5:
+            return "basic"  # Only use basic if very confident with multiple steps
         elif confidence > 0.6 and error_count < 2:
-            return "thorough"
+            return "thorough"  # Default level for most questions
         else:
-            return "exhaustive"
+            return "exhaustive"  # Use exhaustive for complex/problematic cases
 
     def _build_advanced_graph(self):
         """Build sophisticated graph with planning, execution, and reflection nodes."""
@@ -885,29 +915,38 @@ Current confidence is below optimal levels. Enhanced verification recommended:
         return max(0.1, min(0.95, new_confidence))
 
     def _assess_completion_readiness(self, state: EnhancedAgentState, response: AIMessage, confidence: float) -> bool:
-        """Sophisticated completion assessment."""
+        """Enhanced completion assessment with stricter accuracy requirements."""
         content = response.content.lower() if response.content else ""
         
         # Strong completion indicators
         strong_indicators = [
             "final answer", "the answer is", "conclusion", "therefore",
-            "result:", "definitively", "confirmed"
+            "result:", "definitively", "confirmed", "verified through"
         ]
         
         # Check for completion signals
         has_completion_signal = any(indicator in content for indicator in strong_indicators)
         
-        # Confidence-based completion
-        confidence_threshold = {
-            "basic": 0.7,
-            "thorough": 0.8, 
-            "exhaustive": 0.9
-        }
+        # Stricter requirements for accuracy
+        verification_level = state.get("verification_level", "thorough")  # Default to thorough
+        step_count = state.get("step_count", 0)
+        cross_validation_sources = len(state.get("cross_validation_sources", []))
         
-        verification_level = state.get("verification_level", "basic")
-        required_confidence = confidence_threshold[verification_level]
+        # Enhanced completion criteria
+        if verification_level == "basic":
+            # Require multiple verification steps and sources
+            return (has_completion_signal and confidence >= 0.8 and 
+                   step_count >= 4 and cross_validation_sources >= 1)
+        elif verification_level == "thorough":
+            # Require higher confidence and multiple sources
+            return (has_completion_signal and confidence >= 0.85 and 
+                   step_count >= 6 and cross_validation_sources >= 2)
+        else:  # exhaustive
+            # Maximum verification for critical accuracy
+            return (has_completion_signal and confidence >= 0.9 and 
+                   step_count >= 8 and cross_validation_sources >= 3)
         
-        return has_completion_signal and confidence >= required_confidence
+        return False
 
     def _validate_tool_results(self, state: EnhancedAgentState, tool_output: dict) -> dict:
         """Cross-validate and enhance tool results."""
