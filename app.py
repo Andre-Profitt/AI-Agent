@@ -47,8 +47,23 @@ try:
     logger.info("AdvancedReAct Agent initialized successfully.")
 except Exception as e:
     logger.critical(f"Failed to initialize agent: {e}", exc_info=True)
-    # Exit if agent cannot be created, as the app is non-functional
-    exit("Critical error: Agent could not be initialized. Check logs.")
+    # Instead of exiting, try to provide more specific error details
+    print(f"AGENT INITIALIZATION ERROR: {e}")
+    print(f"Error Type: {type(e).__name__}")
+    
+    # Check if tools were initialized successfully
+    try:
+        tools = get_tools()
+        print(f"✅ Tools initialized successfully: {len(tools)} tools available")
+        print(f"Tool names: {[tool.name for tool in tools]}")
+    except Exception as tool_error:
+        print(f"❌ Tools initialization failed: {tool_error}")
+    
+    # Exit only if it's a critical issue we can't recover from
+    import traceback
+    print("Full traceback:")
+    traceback.print_exc()
+    exit("Critical error: Agent could not be initialized. Check logs above for details.")
 
 # --- Gradio Interface Logic ---
 

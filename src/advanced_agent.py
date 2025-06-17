@@ -206,11 +206,18 @@ class AdvancedReActAgent:
     def __init__(self, tools: list, log_handler: logging.Handler = None, model_preference: str = "balanced"):
         self.tools = tools
         self.log_handler = log_handler
-        self.graph = self._build_advanced_graph()
         self.max_reasoning_steps = 20
         self.tool_registry = {tool.name: tool for tool in tools}
         self.model_preference = model_preference  # "fast", "balanced", "quality"
         
+        try:
+            logger.info(f"Initializing AdvancedReActAgent with {len(tools)} tools")
+            self.graph = self._build_advanced_graph()
+            logger.info("AdvancedReActAgent graph built successfully")
+        except Exception as e:
+            logger.error(f"Failed to build agent graph: {e}", exc_info=True)
+            raise RuntimeError(f"AdvancedReActAgent initialization failed during graph building: {e}")
+    
     def _get_llm(self, task_type: str = "reasoning"):
         """Get appropriate LLM based on task type and preference."""
         model_configs = {
@@ -245,24 +252,56 @@ class AdvancedReActAgent:
         elif "70b" in model_name:
             max_tokens = 4096  # Larger models can handle more
             
-        return ChatGroq(
-            temperature=temperature,
-            model_name=model_name,
-            max_tokens=max_tokens,
-            max_retries=1,
-            request_timeout=90
-        )
+        try:
+            return ChatGroq(
+                temperature=temperature,
+                model_name=model_name,
+                max_tokens=max_tokens,
+                max_retries=1,
+                request_timeout=90
+            )
+        except Exception as e:
+            logger.error(f"Failed to initialize ChatGroq with model {model_name}: {e}")
+            # Fallback to a simpler model if the preferred one fails
+            try:
+                fallback_model = "llama-3.1-8b-instant"
+                logger.warning(f"Falling back to {fallback_model}")
+                return ChatGroq(
+                    temperature=0.1,
+                    model_name=fallback_model,
+                    max_tokens=2048,
+                    max_retries=1,
+                    request_timeout=60
+                )
+            except Exception as fallback_error:
+                logger.critical(f"Failed to initialize fallback ChatGroq model: {fallback_error}")
+                raise RuntimeError(f"Unable to initialize any ChatGroq model. Original error: {e}, Fallback error: {fallback_error}")
     
     def _get_planning_llm(self):
         """Get LLM optimized for strategic planning."""
-        # Use the deep reasoning model for planning
-        return ChatGroq(
-            temperature=0.1,
-            model_name=ModelConfig.REASONING_MODELS.get("deep", ModelConfig.REASONING_MODELS["primary"]),
-            max_tokens=4096,
-            max_retries=1,
-            request_timeout=120
-        )
+        try:
+            # Use the deep reasoning model for planning
+            return ChatGroq(
+                temperature=0.1,
+                model_name=ModelConfig.REASONING_MODELS.get("deep", ModelConfig.REASONING_MODELS["primary"]),
+                max_tokens=4096,
+                max_retries=1,
+                request_timeout=120
+            )
+        except Exception as e:
+            logger.error(f"Failed to initialize planning LLM: {e}")
+            # Fallback to basic reasoning model
+            try:
+                return ChatGroq(
+                    temperature=0.1,
+                    model_name=ModelConfig.REASONING_MODELS["primary"],
+                    max_tokens=3072,
+                    max_retries=1,
+                    request_timeout=90
+                )
+            except Exception as fallback_error:
+                logger.critical(f"Failed to initialize fallback planning LLM: {fallback_error}")
+                raise RuntimeError(f"Unable to initialize planning LLM. Original error: {e}, Fallback error: {fallback_error}")
     
     def _get_advanced_system_prompt(self):
         """World-class system prompt with sophisticated reasoning guidance."""
