@@ -19,7 +19,7 @@ langchain-experimental==0.3.4
 # Database Connector
 supabase==2.0.2
 psycopg2-binary==2.9.10
-vecs==0.3.0
+vecs>=0.4.2,<0.5.0
 
 # UI and Environment
 gradio==5.25.2
