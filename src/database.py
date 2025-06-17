@@ -136,7 +136,12 @@ def get_vector_store() -> SupabaseVectorStore:
         raise ValueError("SUPABASE_URL and SUPABASE_DB_PASSWORD must be set in environment variables.")
     
     db_url_parts = supabase_url.replace("https://", "").split(".")
-    db_host = f"db.{'.'.join(db_url_parts[1:])}"  # Extract the project part and rebuild
+    if len(db_url_parts) < 3:
+        raise ValueError("Unexpected SUPABASE_URL format. Expected 'https://<project_ref>.supabase.co'")
+
+    project_ref = db_url_parts[0]
+    rest_domain = '.'.join(db_url_parts[1:])
+    db_host = f"db.{project_ref}.{rest_domain}"
     db_user = "postgres"
     db_name = "postgres"
 
