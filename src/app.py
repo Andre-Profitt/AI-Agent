@@ -8,9 +8,9 @@ import gradio as gr
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
-from src.advanced_agent import AdvancedReActAgent
-from src.database import get_supabase_client, SupabaseLogHandler
-from src.tools import get_tools
+from agent import AdvancedReActAgent as ReActAgent
+from database import get_supabase_client, SupabaseLogHandler
+from tools import get_tools
 
 # --- Initialization ---
 # Load environment variables
@@ -40,7 +40,7 @@ try:
     tools = get_tools()
     # Use the more sophisticated AdvancedReActAgent which includes strategic planning,
     # reflection nodes, and robust error handling improvements.
-    agent_graph = AdvancedReActAgent(
+    agent_graph = ReActAgent(
         tools=tools,
         log_handler=supabase_handler if LOGGING_ENABLED else None
     ).graph

@@ -84,6 +84,44 @@ class EnhancedAgentState(TypedDict):
     tool_results: List[ToolResult]
     cross_validation_sources: List[str]
 
+# --- Multi-Model Configuration ---
+
+class ModelConfig:
+    """Configuration for different Groq models optimized for specific tasks."""
+    
+    # Reasoning models - for complex logical thinking
+    REASONING_MODELS = {
+        "primary": "llama-3.3-70b-versatile",  # Best for complex reasoning
+        "fast": "llama-3.1-8b-instant",        # Fast reasoning
+        "deep": "deepseek-r1-distill-llama-70b"  # Deep analytical reasoning
+    }
+    
+    # Function calling models - for tool use
+    FUNCTION_CALLING_MODELS = {
+        "primary": "llama-3.3-70b-versatile",  # Best function calling
+        "fast": "llama-3.1-8b-instant",        # Fast tool use
+        "versatile": "llama3-groq-70b-8192-tool-use-preview"  # Specialized for tools
+    }
+    
+    # Text generation models - for final answers
+    TEXT_GENERATION_MODELS = {
+        "primary": "llama-3.3-70b-versatile",  # High quality text
+        "fast": "llama-3.1-8b-instant",        # Fast generation
+        "creative": "gemma2-9b-it"             # Creative responses
+    }
+    
+    # Vision models - for image analysis
+    VISION_MODELS = {
+        "primary": "llama-3.2-11b-vision-preview",  # Vision capabilities
+        "fast": "llama-3.2-3b-preview"              # Fast vision processing
+    }
+    
+    # Grading/evaluation models - for answer validation
+    GRADING_MODELS = {
+        "primary": "gemma-7b-it",               # Good for evaluation
+        "fast": "llama-3.1-8b-instant"          # Fast grading
+    }
+
 # --- Rate Limiting & Error Handling ---
 
 class RateLimiter:
@@ -165,21 +203,65 @@ class AdvancedReActAgent:
     cross-validation, and adaptive reasoning capabilities.
     """
     
-    def __init__(self, tools: list, log_handler: logging.Handler = None):
+    def __init__(self, tools: list, log_handler: logging.Handler = None, model_preference: str = "balanced"):
         self.tools = tools
         self.log_handler = log_handler
         self.graph = self._build_advanced_graph()
         self.max_reasoning_steps = 20
         self.tool_registry = {tool.name: tool for tool in tools}
+        self.model_preference = model_preference  # "fast", "balanced", "quality"
         
-    def _get_llm(self):
-        """Initialize optimized LLM for advanced reasoning."""
+    def _get_llm(self, task_type: str = "reasoning"):
+        """Get appropriate LLM based on task type and preference."""
+        model_configs = {
+            "reasoning": ModelConfig.REASONING_MODELS,
+            "function_calling": ModelConfig.FUNCTION_CALLING_MODELS,
+            "text_generation": ModelConfig.TEXT_GENERATION_MODELS,
+            "vision": ModelConfig.VISION_MODELS,
+            "grading": ModelConfig.GRADING_MODELS
+        }
+        
+        models = model_configs.get(task_type, ModelConfig.REASONING_MODELS)
+        
+        # Select model based on preference
+        if self.model_preference == "fast":
+            model_name = models.get("fast", models["primary"])
+        elif self.model_preference == "quality":
+            model_name = models.get("primary")
+        else:  # balanced
+            # Use fast for simple tasks, quality for complex
+            model_name = models.get("fast", models["primary"])
+        
+        # Special handling for certain models
+        temperature = 0.05
+        max_tokens = 3072
+        
+        if "deepseek" in model_name:
+            temperature = 0.1  # Slightly higher for deep reasoning
+            max_tokens = 4096  # More tokens for complex analysis
+        elif "gemma" in model_name:
+            temperature = 0.0  # Very deterministic for grading
+            max_tokens = 2048
+        elif "70b" in model_name:
+            max_tokens = 4096  # Larger models can handle more
+            
         return ChatGroq(
-            temperature=0.05,  # Very low for consistent reasoning
-            model_name="llama-3.1-8b-instant",
-            max_tokens=3072,  # Increased for complex planning
+            temperature=temperature,
+            model_name=model_name,
+            max_tokens=max_tokens,
             max_retries=1,
             request_timeout=90
+        )
+    
+    def _get_planning_llm(self):
+        """Get LLM optimized for strategic planning."""
+        # Use the deep reasoning model for planning
+        return ChatGroq(
+            temperature=0.1,
+            model_name=ModelConfig.REASONING_MODELS.get("deep", ModelConfig.REASONING_MODELS["primary"]),
+            max_tokens=4096,
+            max_retries=1,
+            request_timeout=120
         )
     
     def _get_advanced_system_prompt(self):
@@ -334,8 +416,13 @@ Remember: Think like a world-class researcher - plan strategically, execute syst
 
     def _build_advanced_graph(self):
         """Build sophisticated graph with planning, execution, and reflection nodes."""
-        llm = self._get_llm()
-        model_with_tools = llm.bind_tools(self.tools)
+        # Get different LLMs for different tasks
+        reasoning_llm = self._get_llm("reasoning")
+        function_llm = self._get_llm("function_calling")
+        planning_llm = self._get_planning_llm()
+        
+        # Bind tools to the function calling model
+        model_with_tools = function_llm.bind_tools(self.tools)
 
         def strategic_planning_node(state: EnhancedAgentState):
             """Advanced planning node with query analysis and strategy formation."""
@@ -388,6 +475,18 @@ Execute the next step in your plan systematically.
             step_count = state.get("step_count", 0)
             confidence = state.get("confidence", 0.3)
             
+            # Determine which model to use based on context
+            if any(tool_name in str(messages[-1]) if messages else False 
+                   for tool_name in ["image_analyzer", "video_analyzer"]):
+                # Use vision model if dealing with visual content
+                current_llm = self._get_llm("vision")
+            elif step_count > 10 or confidence < 0.4:
+                # Use deep reasoning model for complex situations
+                current_llm = reasoning_llm
+            else:
+                # Use function calling model for tool interactions
+                current_llm = model_with_tools
+            
             # Add adaptive prompting based on context
             if step_count == 0:
                 guidance = self._get_initial_guidance()
@@ -404,7 +503,7 @@ Execute the next step in your plan systematically.
                 messages = self._optimize_context(messages)
 
             def make_advanced_llm_call():
-                return model_with_tools.invoke(messages)
+                return current_llm.invoke(messages)
 
             response = advanced_retry_with_recovery(make_advanced_llm_call, max_retries=3)
             
@@ -487,7 +586,7 @@ Respond ONLY with the JSON plan.
 """
 
             # Call LLM for reflection plan
-            reflection_response = advanced_retry_with_recovery(lambda: llm.invoke([SystemMessage(content=meta_prompt)]), max_retries=3)
+            reflection_response = advanced_retry_with_recovery(lambda: planning_llm.invoke([SystemMessage(content=meta_prompt)]), max_retries=3)
 
             revised_plan_json = reflection_response.content.strip()
 
@@ -658,7 +757,7 @@ Current confidence is below optimal levels. Enhanced verification recommended:
             )
             try:
                 summary_msg = advanced_retry_with_recovery(
-                    lambda: self._get_llm().invoke([
+                    lambda: self._get_llm("text_generation").invoke([
                         SystemMessage(content=summary_instruction),
                         HumanMessage(content=summary_prompt)
                     ]),

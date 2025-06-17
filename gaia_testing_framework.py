@@ -658,7 +658,12 @@ class GAIATestSuite:
     def _get_grader_llm(self):
         try:
             from langchain_groq import ChatGroq
-            return ChatGroq(model_name="gemma-7b-it", temperature=0, max_retries=1)
+            # Use Gemma-7b for grading as it's optimized for evaluation tasks
+            return ChatGroq(
+                model_name="gemma-7b-it",
+                temperature=0,
+                max_retries=1
+            )
         except Exception:
             return None
 

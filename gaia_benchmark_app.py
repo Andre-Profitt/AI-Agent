@@ -21,7 +21,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
-from src.agent import ReActAgent
+from src.agent import ReActAgent, AdvancedReActAgent
 from src.database import get_supabase_client, SupabaseLogHandler
 from src.tools import get_tools
 
