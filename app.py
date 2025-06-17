@@ -156,7 +156,13 @@ class AdvancedGAIAAgent:
                 # Tool performance
                 "tool_success_rates": {},
                 "tool_results": [],
-                "cross_validation_sources": []
+                "cross_validation_sources": [],
+                # New state flags for directives
+                "answer_synthesized": False,
+                "fact_checked": False,
+                "logic_reviewed": False,
+                "plan_debugging_requested": False,
+                "plan_failures": []
             }
             
             # Process with advanced reasoning with error handling

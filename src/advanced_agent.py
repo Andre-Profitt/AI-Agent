@@ -399,6 +399,12 @@ When providing your final answer:
 - DO NOT include explanations or reasoning in your final response
 - Examples of correct format: "2", "PaleoNeon", "HON", "Vladimir", "Moscow"
 
+🚨 STRICT AMBIGUITY HANDLING (DIRECTIVE 3):
+- NEVER hallucinate or guess when information is missing
+- If a tool fails or context is incomplete, state what is missing
+- Default to "Unable to determine answer" rather than inventing an answer
+- Remember: It's better to admit uncertainty than provide incorrect information
+
 Remember: Think like a world-class researcher - plan strategically, execute systematically, validate thoroughly, but provide only the clean, direct answer when complete."""
 
     def _create_initial_plan(self, query: str) -> List[PlanStep]:
@@ -477,6 +483,65 @@ Remember: Think like a world-class researcher - plan strategically, execute syst
         
         return steps
 
+    def _parse_enhanced_plan(self, plan_content: str, user_query: str) -> List[PlanStep]:
+        """Parse the enhanced plan with explicit input/output specifications."""
+        import re
+        
+        structured_plan = []
+        
+        # Try to parse the structured plan
+        step_pattern = r"Step (\d+):(.*?)(?=Step \d+:|$)"
+        matches = re.findall(step_pattern, plan_content, re.DOTALL)
+        
+        for step_num, step_content in matches:
+            # Extract components
+            desc_match = re.search(r"Step \d+:\s*(.+?)(?=\n|$)", plan_content)
+            description = desc_match.group(1).strip() if desc_match else f"Step {step_num}"
+            
+            # Extract expected output
+            output_match = re.search(r"Expected Output:\s*(.+?)(?=\n|$)", step_content)
+            expected_output = output_match.group(1).strip() if output_match else "Result from this step"
+            
+            # Extract tool
+            tool_match = re.search(r"Tool:\s*(.+?)(?=\n|$)", step_content)
+            tool_text = tool_match.group(1).strip() if tool_match else ""
+            
+            # Map tool text to actual tool names
+            tool_mapping = {
+                "web_researcher": "web_researcher",
+                "semantic_search": "semantic_search_tool",
+                "tavily": "tavily_search",
+                "python": "python_interpreter",
+                "image": "image_analyzer",
+                "video": "video_analyzer",
+                "file": "file_reader",
+                "audio": "audio_transcriber"
+            }
+            
+            tool_needed = None
+            for key, value in tool_mapping.items():
+                if key in tool_text.lower():
+                    tool_needed = value
+                    break
+            
+            structured_plan.append(PlanStep(
+                step_id=int(step_num),
+                description=description,
+                tool_needed=tool_needed,
+                expected_outcome=expected_output,
+                completed=False,
+                success=False,
+                attempts=0,
+                errors=[]
+            ))
+        
+        # If parsing failed or no steps found, use default plan
+        if not structured_plan:
+            logger.warning("Failed to parse enhanced plan, using default")
+            structured_plan = self._create_initial_plan(user_query)
+        
+        return structured_plan
+
     def _assess_verification_level(self, state: EnhancedAgentState) -> str:
         """Determine verification level with bias toward thorough verification for accuracy."""
         confidence = state.get("confidence", 0.5)
@@ -498,11 +563,20 @@ Remember: Think like a world-class researcher - plan strategically, execute syst
         function_llm = self._get_llm("function_calling")
         planning_llm = self._get_planning_llm()
         
+        # DIRECTIVE 1: Add synthesis LLM for precise answer extraction
+        synthesis_llm = self._get_llm("text_generation")
+        
+        # DIRECTIVE 3: Add fact-checking LLM for verification
+        fact_check_llm = self._get_llm("grading")
+        
+        # DIRECTIVE 4: Add logic review LLM
+        logic_llm = self._get_llm("reasoning")
+        
         # Bind tools to the function calling model
         model_with_tools = function_llm.bind_tools(self.tools)
 
         def strategic_planning_node(state: EnhancedAgentState):
-            """Advanced planning node with query analysis and strategy formation."""
+            """DIRECTIVE 2: Enhanced planning with explicit outputs and debugging capability."""
             messages = state["messages"]
             
             # Extract user query for planning
@@ -512,33 +586,114 @@ Remember: Think like a world-class researcher - plan strategically, execute syst
                     user_query = msg.content
                     break
             
-            # Create or update master plan
-            if not state.get("master_plan"):
-                master_plan = self._create_initial_plan(user_query)
-                logger.info(f"Created initial plan with {len(master_plan)} steps")
-            else:
-                master_plan = state["master_plan"]
-            
-            # Add planning context to messages
-            planning_context = f"""
-STRATEGIC PLANNING PHASE:
+            # Check if we need to create or debug the plan
+            if not state.get("master_plan") or state.get("plan_debugging_requested"):
+                # Enhanced planning with explicit input/output specification
+                planning_prompt = f"""
+STRATEGIC PLANNING PHASE - ENHANCED WITH EXPLICIT OUTPUTS
+
+Analyze this problem and create a comprehensive, step-by-step plan:
+"{user_query}"
+
+CRITICAL: For each step, you MUST define:
+1. **Input**: What information/data this step needs (be specific)
+2. **Action**: Exactly what will be done  
+3. **Tool**: Which tool(s) to use (if any)
+4. **Expected Output**: The EXACT format/type of output (e.g., "a number", "a name", "a list of dates")
+5. **Next Step Input**: How this output will be used in the next step
+
+Example format:
+Step 1: Find the Yankee with most walks in 1977
+- Input: Query about 1977 Yankees walks statistics
+- Action: Search for 1977 MLB Yankees statistics
+- Tool: web_researcher
+- Expected Output: Player name (string, e.g., "Mickey Rivers")
+- Next Step Input: Use player name to find their At Bats
+
+Step 2: Find At Bats for [Player_Name]
+- Input: Player name from Step 1
+- Action: Search for [Player_Name] 1977 statistics
+- Tool: web_researcher or tavily_search
+- Expected Output: Number of At Bats (integer, e.g., "565")
+- Next Step Input: This is the final answer
+
+Create a plan following this EXACT format for the given question.
+"""
+                
+                # Add debugging context if this is a plan revision
+                if state.get("plan_debugging_requested"):
+                    plan_failures = state.get("plan_failures", [])
+                    debugging_context = f"""
+
+PLAN DEBUGGING MODE:
+Previous plan failed at Step {state.get('current_step', 1)}. 
+Failures: {', '.join(plan_failures[-3:])}
+
+Analyze what went wrong and create a REVISED plan that addresses these issues.
+"""
+                    planning_prompt += debugging_context
+                
+                # Execute enhanced planning
+                def make_planning_call():
+                    plan_messages = [SystemMessage(content=self._get_advanced_system_prompt())]
+                    plan_messages.extend(messages[-5:])  # Recent context
+                    plan_messages.append(HumanMessage(content=planning_prompt))
+                    return planning_llm.invoke(plan_messages)
+                
+                plan_response = advanced_retry_with_recovery(make_planning_call, max_retries=2)
+                
+                # Parse the enhanced plan to create structured PlanStep objects
+                master_plan = self._parse_enhanced_plan(plan_response.content, user_query)
+                
+                logger.info(f"Created enhanced plan with {len(master_plan)} steps")
+                
+                # Add planning context to messages
+                planning_context = f"""
+STRATEGIC PLANNING PHASE - ENHANCED:
 
 Query Analysis: "{user_query}"
-Plan: {len(master_plan)} steps identified
+Plan: {len(master_plan)} steps with explicit input/output specifications
 Current Step: {state.get('current_step', 1)}
 Confidence: {state.get('confidence', 0.3):.0%}
 Verification Level: {self._assess_verification_level(state)}
 
-Execute the next step in your plan systematically.
+Execute the next step in your plan systematically, paying attention to expected outputs.
 """
-            
-            updated_messages = messages + [SystemMessage(content=planning_context)]
-            
-            return {
-                "messages": updated_messages,
-                "master_plan": master_plan,
-                "current_step": state.get("current_step", 1)
-            }
+                
+                updated_messages = messages + [SystemMessage(content=planning_context)]
+                
+                return {
+                    "messages": updated_messages,
+                    "master_plan": master_plan,
+                    "current_step": state.get("current_step", 1),
+                    "plan_debugging_requested": False,  # Reset flag
+                    "plan_revisions": state.get("plan_revisions", 0) + 1
+                }
+            else:
+                # Use existing plan
+                master_plan = state["master_plan"]
+                
+                # Add current step context
+                current_step_idx = state.get('current_step', 1) - 1
+                if 0 <= current_step_idx < len(master_plan):
+                    current_step = master_plan[current_step_idx]
+                    step_context = f"""
+EXECUTING STEP {current_step.step_id}:
+Description: {current_step.description}
+Expected Output: {current_step.expected_outcome}
+Tool Needed: {current_step.tool_needed or 'reasoning'}
+
+Focus on achieving the expected output format.
+"""
+                    updated_messages = messages + [SystemMessage(content=step_context)]
+                else:
+                    updated_messages = messages
+                
+                return {
+                    "messages": updated_messages,
+                    "master_plan": master_plan,
+                    "current_step": state.get("current_step", 1)
+                }
 
         def advanced_reasoning_node(state: EnhancedAgentState):
             """Enhanced reasoning with adaptive strategies and reflection."""
@@ -637,65 +792,131 @@ Execute the next step in your plan systematically.
                 }
 
         def reflection_and_adaptation_node(state: EnhancedAgentState):
-            """Advanced reflection node: triggers meta-prompt to revise plan after failures."""
+            """DIRECTIVE 2: Enhanced reflection with plan debugging capability."""
             step_count = state.get("step_count", 0)
             confidence = state.get("confidence", 0.3)
+            master_plan = state.get("master_plan", [])
+            current_step_idx = state.get("current_step", 1) - 1
 
-            # Build meta-reflection prompt
+            # Analyze current plan step failures
+            plan_failures = []
+            if 0 <= current_step_idx < len(master_plan):
+                current_plan_step = master_plan[current_step_idx]
+                if current_plan_step.attempts > 0 and not current_plan_step.success:
+                    failure_msg = f"Step {current_plan_step.step_id} failed: Expected '{current_plan_step.expected_outcome}' but got errors"
+                    plan_failures.append(failure_msg)
+                    
+                    # Mark step as having errors
+                    if current_plan_step.errors:
+                        plan_failures.extend(current_plan_step.errors[-2:])  # Last 2 errors
+
+            # Build enhanced reflection prompt with plan debugging
             recent_messages = state["messages"][-8:]
             serialized_history = "\n".join([
                 f"{type(m).__name__}: {getattr(m,'content','')[:200]}" for m in recent_messages
             ])
+            
+            # Extract any error messages
             last_error = ""
-            if state.get("error_recovery_attempts", 0) > 0:
-                # try to find the latest SystemMessage containing error recovery guidance
-                for m in reversed(state["messages"]):
-                    if isinstance(m, SystemMessage) and "RECOVERY" in m.content.upper():
-                        last_error = m.content
-                        break
+            for m in reversed(state["messages"]):
+                if isinstance(m, SystemMessage) and ("RECOVERY" in m.content.upper() or "ERROR" in m.content.upper()):
+                    last_error = m.content
+                    break
 
-            meta_prompt = f"""
-You are entering REFLECTION mode. The agent has failed repeatedly to make progress.
---- Recent History (truncated) ---\n{serialized_history}\n--- End History ---
-Last known error guidance:\n{last_error}\n
-ORIGINAL GOAL: Please analyse why the previous attempts failed. Identify root cause (e.g. wrong tool, misunderstanding). Then produce a REVISED, step-by-step PLAN in JSON array format, each element with 'step', 'action', and 'tool' fields. The plan should directly address the failure cause.
-Respond ONLY with the JSON plan.
+            # Determine reflection type based on context
+            if plan_failures and state.get("plan_revisions", 0) < 3:
+                # DIRECTIVE 2: Plan debugging mode
+                logger.info(f"Entering plan debugging mode. Failures: {plan_failures}")
+                
+                reflection = ReflectionNote(
+                    step=step_count,
+                    confidence_before=confidence,
+                    confidence_after=confidence,
+                    insight=f"Plan debugging triggered: {'; '.join(plan_failures)}",
+                    decision="debug_plan",
+                    timestamp=datetime.now()
+                )
+                
+                reflections = state.get("reflections", [])
+                reflections.append(reflection)
+                
+                # Request plan debugging
+                return {
+                    "messages": [SystemMessage(content="PLAN DEBUGGING REQUIRED: Revising plan based on failures")],
+                    "plan_debugging_requested": True,
+                    "plan_failures": plan_failures,
+                    "reflections": reflections,
+                    "error_recovery_attempts": 0  # reset after reflection
+                }
+            else:
+                # Standard reflection for general issues
+                meta_prompt = f"""
+You are entering REFLECTION mode. Analyze the current situation and determine the best path forward.
+
+Current Status:
+- Step Count: {step_count}
+- Confidence: {confidence:.0%}
+- Verification Level: {state.get('verification_level', 'basic')}
+- Plan Revisions: {state.get('plan_revisions', 0)}
+
+--- Recent History (truncated) ---
+{serialized_history}
+--- End History ---
+
+Last known issue:
+{last_error or 'No specific error, but progress seems stalled'}
+
+Analyze:
+1. What progress has been made?
+2. What is blocking further progress?
+3. Should we continue, pivot, or conclude?
+
+Provide your reflection and recommended next action.
 """
 
-            # Call LLM for reflection plan
-            reflection_response = advanced_retry_with_recovery(lambda: planning_llm.invoke([SystemMessage(content=meta_prompt)]), max_retries=3)
+                # Call LLM for reflection
+                reflection_response = advanced_retry_with_recovery(
+                    lambda: planning_llm.invoke([SystemMessage(content=meta_prompt)]), 
+                    max_retries=2
+                )
 
-            revised_plan_json = reflection_response.content.strip()
+                # Analyze reflection and make decision
+                reflection_content = reflection_response.content.lower()
+                if "conclude" in reflection_content or "sufficient" in reflection_content:
+                    decision = "conclude"
+                elif "pivot" in reflection_content or "alternative" in reflection_content:
+                    decision = "pivot"
+                else:
+                    decision = "continue"
 
-            # Record reflection note
-            reflection = ReflectionNote(
-                step=step_count,
-                confidence_before=confidence,
-                confidence_after=confidence,  # Not updated yet
-                insight="Reflection invoked due to repeated failures.",
-                decision="pivot",
-                timestamp=datetime.now()
-            )
+                # Record reflection note
+                reflection = ReflectionNote(
+                    step=step_count,
+                    confidence_before=confidence,
+                    confidence_after=confidence + 0.1,  # Slight boost after reflection
+                    insight=reflection_response.content[:200],
+                    decision=decision,
+                    timestamp=datetime.now()
+                )
 
-            reflections = state.get("reflections", [])
-            reflections.append(reflection)
+                reflections = state.get("reflections", [])
+                reflections.append(reflection)
 
-            # Store revised plan in state
-            return {
-                "messages": [SystemMessage(content="REFLECTION PLAN GENERATED:\n" + revised_plan_json)],
-                "master_plan": [],
-                "current_step": 1,
-                "reflections": reflections,
-                "error_recovery_attempts": 0  # reset after reflection
-            }
+                # Return updated state
+                return {
+                    "messages": [reflection_response],
+                    "reflections": reflections,
+                    "confidence": min(0.9, confidence + 0.1),
+                    "error_recovery_attempts": 0  # reset after reflection
+                }
 
         def advanced_decision_node(state: EnhancedAgentState):
-            """Sophisticated decision logic for next actions with proper termination."""
+            """Enhanced decision logic with new synthesis and verification nodes."""
             last_message = state["messages"][-1] if state["messages"] else None
             step_count = state.get("step_count", 0)
             confidence = state.get("confidence", 0.0)
             reasoning_complete = state.get("reasoning_complete", False)
-            verification_level = state.get("verification_level", "basic")
+            verification_level = state.get("verification_level", "thorough")  # Default to thorough
             error_attempts = state.get("error_recovery_attempts", 0)
             
             # Safety: Always terminate if no message or step count too high
@@ -708,34 +929,64 @@ Respond ONLY with the JSON plan.
                 logger.debug(f"Step {step_count}: Executing tools")
                 return "enhanced_tools"
             
-            # Enhanced completion logic with fallback termination
-            if reasoning_complete or step_count >= 15:  # Force completion after 15 steps
+            # Check if we need answer synthesis
+            has_gathered_info = any(isinstance(msg, ToolMessage) for msg in state["messages"][-10:])
+            answer_synthesized = state.get("answer_synthesized", False)
+            
+            # DIRECTIVE 1: Route to answer synthesis if we have info but haven't synthesized
+            if has_gathered_info and not answer_synthesized and confidence >= 0.5:
+                logger.info(f"Step {step_count}: Routing to answer synthesis")
+                return "answer_synthesis"
+            
+            # Check if this is a logic/puzzle question
+            original_question = ""
+            for msg in state["messages"]:
+                if isinstance(msg, HumanMessage):
+                    original_question = msg.content.lower()
+                    break
+            
+            is_logic_puzzle = any(indicator in original_question for indicator in 
+                                ["reverse", "backwards", "decode", "puzzle", "riddle", "trick"])
+            
+            # DIRECTIVE 4: Route to logic review for puzzle-type questions
+            if is_logic_puzzle and not state.get("logic_reviewed", False) and confidence >= 0.4:
+                logger.info(f"Step {step_count}: Routing to logic review for puzzle question")
+                return "logic_review"
+            
+            # DIRECTIVE 3: Route to fact checking before final answer
+            if reasoning_complete and not state.get("fact_checked", False) and confidence >= 0.6:
+                logger.info(f"Step {step_count}: Routing to fact checking")
+                return "fact_checking"
+            
+            # Enhanced completion logic
+            if reasoning_complete or step_count >= 15:
                 confidence_threshold = {
-                    "basic": 0.6,      # Lowered thresholds for better termination
-                    "thorough": 0.7,
-                    "exhaustive": 0.8
-                }.get(verification_level, 0.6)
+                    "basic": 0.7,       # Raised thresholds for accuracy
+                    "thorough": 0.8,    
+                    "exhaustive": 0.9
+                }.get(verification_level, 0.8)
                 
-                if confidence >= confidence_threshold or step_count >= 15:
-                    logger.info(f"Terminating: reasoning_complete={reasoning_complete}, confidence={confidence:.2f}, step_count={step_count}")
+                # Ensure we've done synthesis and verification before terminating
+                if (confidence >= confidence_threshold or step_count >= 15) and \
+                   (answer_synthesized or not has_gathered_info):
+                    logger.info(f"Terminating: reasoning_complete={reasoning_complete}, confidence={confidence:.2f}, verified={state.get('fact_checked', False)}")
                     return END
             
-            # Smart reflection triggers - avoid excessive reflection
-            if error_attempts >= 2:  # Reduced from 3 to 2
-                if step_count < self.max_reasoning_steps - 5:  # Leave room for final reasoning
+            # Smart reflection triggers
+            if error_attempts >= 2:
+                if step_count < self.max_reasoning_steps - 5:
                     logger.debug(f"Step {step_count}: Triggering reflection due to errors")
                     return "reflection"
                 else:
-                    # Too close to max steps, force termination
                     logger.warning(f"Step {step_count}: Forcing termination due to error attempts near max steps")
                     return END
             
-            # Periodic reflection, but not too frequent
+            # Periodic reflection
             if step_count % 6 == 0 and step_count > 0 and step_count < self.max_reasoning_steps - 3:
                 logger.debug(f"Step {step_count}: Periodic reflection")
                 return "reflection"
             
-            # Check for stagnation - if no progress in reasoning
+            # Check for stagnation
             if step_count >= 10 and confidence < 0.4:
                 logger.warning(f"Step {step_count}: Low confidence ({confidence:.2f}), forcing termination")
                 return END
@@ -752,6 +1003,176 @@ Respond ONLY with the JSON plan.
         graph_builder.add_node("advanced_reasoning", advanced_reasoning_node)
         graph_builder.add_node("enhanced_tools", enhanced_tool_execution_node)
         graph_builder.add_node("reflection", reflection_and_adaptation_node)
+        
+        # DIRECTIVE 1: Add Answer Synthesis Node
+        def answer_synthesis_node(state: EnhancedAgentState):
+            """Synthesize gathered information into a precise, direct answer."""
+            # Get the user's original question
+            original_question = ""
+            for msg in state["messages"]:
+                if isinstance(msg, HumanMessage):
+                    original_question = msg.content
+                    break
+            
+            # Gather all retrieved information
+            retrieved_data = []
+            for msg in state["messages"]:
+                if isinstance(msg, ToolMessage) or (isinstance(msg, AIMessage) and "found" in msg.content.lower()):
+                    retrieved_data.append(msg.content[:500])  # Limit each piece
+            
+            synthesis_prompt = f"""You have gathered the following information:
+{chr(10).join(retrieved_data[:10])}  
+
+The user's original question was: {original_question}
+
+Synthesize the information to directly answer the user's question in the precise format requested. 
+- If the user asked "how many," provide ONLY a number
+- If they asked for a name, provide ONLY the name
+- If they asked for a location, provide ONLY the location
+- Be as concise and direct as possible
+
+Do not include extraneous details. Just provide the direct answer."""
+
+            try:
+                synthesis_response = advanced_retry_with_recovery(
+                    lambda: synthesis_llm.invoke([SystemMessage(content=synthesis_prompt)]),
+                    max_retries=2
+                )
+                
+                # Update state with synthesized answer
+                return {
+                    "messages": [synthesis_response],
+                    "reasoning_complete": True,
+                    "confidence": state.get("confidence", 0.8) + 0.1,  # Boost confidence after synthesis
+                    "answer_synthesized": True  # Mark that synthesis was performed
+                }
+            except Exception as e:
+                logger.error(f"Answer synthesis failed: {e}")
+                return {"messages": [AIMessage(content="Unable to synthesize answer")]}
+        
+        # DIRECTIVE 3: Add Fact-Checking Node  
+        def fact_checking_node(state: EnhancedAgentState):
+            """Verify factual accuracy before finalizing answer."""
+            # Get the proposed answer from the last message
+            last_message = state["messages"][-1] if state["messages"] else None
+            if not last_message or not hasattr(last_message, 'content'):
+                return state
+                
+            proposed_answer = last_message.content
+            
+            # Find source information
+            sources = []
+            for msg in state["messages"]:
+                if isinstance(msg, ToolMessage):
+                    sources.append(msg.content[:300])
+            
+            fact_check_prompt = f"""I believe the answer is: {proposed_answer}
+
+Based on these sources:
+{chr(10).join(sources[:5])}
+
+Re-read the source text and verify that it explicitly and unambiguously supports this answer. 
+Pay close attention to subtle distinctions (e.g., 'nominator' vs. 'contributor', exact dates, specific numbers).
+
+Does the source explicitly support this exact answer? If not, what is the correct answer based on the sources?
+Respond with either:
+1. "VERIFIED: [answer]" if the answer is correct
+2. "CORRECTED: [correct answer]" if it needs correction
+3. "INSUFFICIENT: Need more information" if sources don't contain the answer"""
+
+            try:
+                fact_check_response = advanced_retry_with_recovery(
+                    lambda: fact_check_llm.invoke([SystemMessage(content=fact_check_prompt)]),
+                    max_retries=2
+                )
+                
+                content = fact_check_response.content
+                if "CORRECTED:" in content:
+                    # Extract corrected answer
+                    corrected = content.split("CORRECTED:")[1].strip()
+                    return {
+                        "messages": [AIMessage(content=corrected)],
+                        "confidence": 0.9,  # High confidence after verification
+                        "fact_checked": True
+                    }
+                elif "INSUFFICIENT:" in content:
+                    return {
+                        "messages": [AIMessage(content="Unable to determine answer from available sources")],
+                        "reasoning_complete": False,
+                        "confidence": 0.3,
+                        "fact_checked": True
+                    }
+                else:  # VERIFIED
+                    return {
+                        "confidence": min(0.95, state.get("confidence", 0.8) + 0.1),
+                        "fact_checked": True  # Mark that fact checking was performed
+                    }
+                    
+            except Exception as e:
+                logger.error(f"Fact checking failed: {e}")
+                return state
+        
+        # DIRECTIVE 4: Add Logic Review Node
+        def logic_review_node(state: EnhancedAgentState):
+            """Review answer for logical soundness and common sense."""
+            # Get the original question
+            original_question = ""
+            for msg in state["messages"]:
+                if isinstance(msg, HumanMessage):
+                    original_question = msg.content
+                    break
+                    
+            # Get the proposed answer
+            last_message = state["messages"][-1] if state["messages"] else None
+            if not last_message or not hasattr(last_message, 'content'):
+                return state
+                
+            proposed_answer = last_message.content
+            
+            logic_prompt = f"""I am about to answer '{proposed_answer}' to the question '{original_question}'.
+
+Is this answer logically sound? Is there a trick or a nuance I might be missing? 
+Re-read the question one more time to ensure my interpretation is correct.
+
+Consider:
+- Does the answer make logical sense?
+- Am I answering what was actually asked?
+- Is there wordplay, a riddle, or hidden meaning?
+- For numerical answers: is the magnitude reasonable?
+- For lists: did I provide the format requested (count vs list)?
+
+Respond with either:
+1. "LOGICAL: Proceed with answer" if it makes sense
+2. "ILLOGICAL: [explanation and correct answer]" if there's an issue"""
+
+            try:
+                logic_response = advanced_retry_with_recovery(
+                    lambda: logic_llm.invoke([SystemMessage(content=logic_prompt)]),
+                    max_retries=2
+                )
+                
+                content = logic_response.content
+                if "ILLOGICAL:" in content:
+                    # Extract the corrected reasoning
+                    corrected = content.split("ILLOGICAL:")[1].strip()
+                    return {
+                        "messages": [AIMessage(content=corrected)],
+                        "confidence": 0.8,
+                        "logic_reviewed": True
+                    }
+                else:  # LOGICAL
+                    return {
+                        "confidence": min(0.95, state.get("confidence", 0.8) + 0.05),
+                        "logic_reviewed": True  # Mark that logic review was performed
+                    }
+                    
+            except Exception as e:
+                logger.error(f"Logic review failed: {e}")
+                return state
+        
+        graph_builder.add_node("answer_synthesis", answer_synthesis_node)
+        graph_builder.add_node("fact_checking", fact_checking_node) 
+        graph_builder.add_node("logic_review", logic_review_node)
 
         # Set entry point
         graph_builder.set_entry_point("strategic_planning")
@@ -759,9 +1180,14 @@ Respond ONLY with the JSON plan.
         # Add edges
         graph_builder.add_edge("strategic_planning", "advanced_reasoning")
         graph_builder.add_edge("enhanced_tools", "advanced_reasoning")
-        graph_builder.add_edge("reflection", "advanced_reasoning")
+        graph_builder.add_edge("reflection", "strategic_planning")  # Reflection can trigger replanning
         
-        # Add conditional edges from reasoning with proper END handling
+        # DIRECTIVE edges: New nodes flow back to decision making
+        graph_builder.add_edge("answer_synthesis", "fact_checking")  # Synthesis -> Fact Check
+        graph_builder.add_edge("fact_checking", "advanced_reasoning")  # Fact Check -> Continue
+        graph_builder.add_edge("logic_review", "advanced_reasoning")   # Logic Review -> Continue
+        
+        # Add conditional edges from reasoning with all new nodes
         graph_builder.add_conditional_edges(
             "advanced_reasoning",
             advanced_decision_node,
@@ -769,7 +1195,10 @@ Respond ONLY with the JSON plan.
                 "enhanced_tools": "enhanced_tools",
                 "reflection": "reflection", 
                 "advanced_reasoning": "advanced_reasoning",
-                END: END  # Use END constant instead of string
+                "answer_synthesis": "answer_synthesis",     # DIRECTIVE 1
+                "fact_checking": "fact_checking",           # DIRECTIVE 3
+                "logic_review": "logic_review",             # DIRECTIVE 4
+                END: END
             }
         )
 
@@ -1073,10 +1502,16 @@ GENERAL ERROR RECOVERY: {error}
             "step_count": 0,
             "confidence": 0.3,
             "reasoning_complete": False,
-            "verification_level": "basic",
+            "verification_level": "thorough",  # DIRECTIVE: Default to thorough verification
             "tool_success_rates": {},
             "tool_results": [],
-            "cross_validation_sources": []
+            "cross_validation_sources": [],
+            # New state flags for directives
+            "answer_synthesized": False,
+            "fact_checked": False,
+            "logic_reviewed": False,
+            "plan_debugging_requested": False,
+            "plan_failures": []
         }
         
         return self.graph.invoke(enhanced_inputs)
@@ -1095,10 +1530,16 @@ GENERAL ERROR RECOVERY: {error}
             "step_count": 0,
             "confidence": 0.3,
             "reasoning_complete": False,
-            "verification_level": "basic",
+            "verification_level": "thorough",  # DIRECTIVE: Default to thorough verification
             "tool_success_rates": {},
             "tool_results": [],
-            "cross_validation_sources": []
+            "cross_validation_sources": [],
+            # New state flags for directives
+            "answer_synthesized": False,
+            "fact_checked": False,
+            "logic_reviewed": False,
+            "plan_debugging_requested": False,
+            "plan_failures": []
         }
         
         return self.graph.stream(enhanced_inputs) 
