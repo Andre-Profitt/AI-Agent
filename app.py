@@ -410,7 +410,7 @@ def chat_interface_logic_parallel(message: str, history: List[List[str]], log_to
 
 def create_analytics_display():
     """Create analytics dashboard content with parallel processing metrics."""
-    analytics = session_manager.get_analytics_summary()
+    analytics = session_manager.get_global_analytics()
     
     # Performance metrics with parallel processing
     perf_html = f"""
@@ -472,7 +472,7 @@ def export_conversation(history: List[List[str]], session_id: str = None):
             "timestamp": timestamp,
             "session_id": session_id,
             "conversation": history,
-            "analytics": session_manager.get_analytics_summary() if session_id in session_manager.sessions else None
+            "analytics": session_manager.get_global_analytics() if session_id in session_manager.sessions else None
         }
         
         with open(filename, 'w') as f:

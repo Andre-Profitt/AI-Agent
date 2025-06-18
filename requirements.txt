@@ -11,6 +11,9 @@ langchain-core==0.3.65
 langchain-groq==0.3.2
 langchain-openai==0.3.24
 
+# Anthropic for next-gen features
+anthropic==0.48.0
+
 # LlamaIndex and Supabase for Knowledge Base
 llama-index==0.12.42
 llama-index-core==0.12.42
