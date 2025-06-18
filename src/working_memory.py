@@ -8,10 +8,11 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 from dataclasses import dataclass, field, asdict
 
+import os
 import anthropic
 from pydantic import BaseModel, Field
 
-from config import get_api_key
+from config import config
 
 
 @dataclass
@@ -65,7 +66,7 @@ class WorkingMemoryManager:
     
     def __init__(self, api_key: Optional[str] = None):
         """Initialize with optional API key"""
-        self.api_key = api_key or get_api_key("ANTHROPIC_API_KEY")
+        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
         if self.api_key:
             self.client = anthropic.Anthropic(api_key=self.api_key)
         else:

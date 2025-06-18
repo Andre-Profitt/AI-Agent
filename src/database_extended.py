@@ -9,7 +9,7 @@ import json
 from dataclasses import dataclass, asdict
 
 from supabase import create_client, Client
-from config import get_api_key
+from config import config
 
 
 @dataclass
@@ -114,8 +114,8 @@ class ExtendedDatabase:
     
     def __init__(self, supabase_url: Optional[str] = None, supabase_key: Optional[str] = None):
         """Initialize extended database client"""
-        self.url = supabase_url or get_api_key("SUPABASE_URL")
-        self.key = supabase_key or get_api_key("SUPABASE_SERVICE_KEY")
+        self.url = supabase_url or config.api.SUPABASE_URL
+        self.key = supabase_key or config.api.SUPABASE_KEY
         
         if self.url and self.key:
             self.client: Client = create_client(self.url, self.key)
