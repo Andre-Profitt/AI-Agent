@@ -35,6 +35,15 @@ from src.database import get_supabase_client, SupabaseLogHandler
 from src.tools_enhanced import get_enhanced_tools
 from src.knowledge_ingestion import KnowledgeIngestionService
 
+# Import next-generation agent
+try:
+    from src.next_gen_integration import NextGenFSMAgent, create_next_gen_agent
+    NEXT_GEN_AVAILABLE = True
+    logger.info("Next-generation agent modules imported successfully")
+except ImportError as e:
+    logger.warning(f"Next-gen modules not available: {e}")
+    NEXT_GEN_AVAILABLE = False
+
 # Only load .env file if not in a Hugging Face Space
 if not config.environment != config.Environment.HUGGINGFACE_SPACE:
     load_dotenv()
@@ -59,16 +68,28 @@ except Exception as e:
 
 # Initialize tools and agent
 try:
-    # Use enhanced tools optimized for GAIA
-    tools = get_enhanced_tools()
-    # Use the new FSM-based agent with deterministic control flow
-    fsm_agent = FSMReActAgent(
-        tools=tools,
-        log_handler=supabase_handler if LOGGING_ENABLED else None,
-        model_preference="balanced",
-        use_crew=True  # Enable crew workflow for complex queries
-    )
-    logger.info("FSM-based ReAct Agent initialized successfully.")
+    # Use next-gen agent if available, otherwise fall back to standard FSM agent
+    if NEXT_GEN_AVAILABLE:
+        # Create a fully-featured next-gen agent
+        fsm_agent = create_next_gen_agent(
+            enable_all_features=True,
+            log_handler=supabase_handler if LOGGING_ENABLED else None,
+            model_preference="balanced",
+            use_crew=True  # Enable crew workflow for complex queries
+        )
+        logger.info("Next-generation FSM Agent initialized successfully with all features.")
+    else:
+        # Fall back to standard FSM agent
+        # Use enhanced tools optimized for GAIA
+        tools = get_enhanced_tools()
+        # Use the new FSM-based agent with deterministic control flow
+        fsm_agent = FSMReActAgent(
+            tools=tools,
+            log_handler=supabase_handler if LOGGING_ENABLED else None,
+            model_preference="balanced",
+            use_crew=True  # Enable crew workflow for complex queries
+        )
+        logger.info("Standard FSM-based ReAct Agent initialized successfully.")
 except Exception as e:
     logger.critical(f"Failed to initialize agent: {e}", exc_info=True)
     # Instead of exiting, try to provide more specific error details
