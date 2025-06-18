@@ -80,8 +80,7 @@ try:
         logger.info("Next-generation FSM Agent initialized successfully with all features.")
     else:
         # Fall back to standard FSM agent
-        # Use enhanced tools optimized for GAIA
-        tools = get_enhanced_tools()
+        # Use enhanced tools optimized for GAIA (already loaded globally)
         # Use the new FSM-based agent with deterministic control flow
         fsm_agent = FSMReActAgent(
             tools=tools,
@@ -98,7 +97,6 @@ except Exception as e:
     
     # Check if tools were initialized successfully
     try:
-        tools = get_enhanced_tools()
         print(f"✅ Tools initialized successfully: {len(tools)} tools available")
         print(f"Tool names: {[tool.name for tool in tools]}")
     except Exception as tool_error:
@@ -109,6 +107,9 @@ except Exception as e:
     print("Full traceback:")
     traceback.print_exc()
     exit("Critical error: Agent could not be initialized. Check logs above for details.")
+
+# Initialize tools globally for use throughout the application
+tools = get_enhanced_tools()
 
 # Global instances
 session_manager = SessionManager()
