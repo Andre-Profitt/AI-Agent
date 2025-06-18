@@ -1,0 +1,32 @@
+# System dependencies for Hugging Face Space
+# These are installed via apt-get before Python packages
+
+# Multimedia processing
+ffmpeg
+libsndfile1
+libmagic1
+
+# Build tools (needed for some Python packages)
+python3-dev
+build-essential
+gcc
+g++
+
+# Libraries for various tools
+libpq-dev
+libssl-dev
+libffi-dev
+
+# For opencv and image processing
+libglib2.0-0
+libsm6
+libxext6
+libxrender-dev
+libgomp1
+
+# Audio processing
+sox
+libsox-fmt-all
+
+# Chess engine (if using system stockfish)
+stockfish 
