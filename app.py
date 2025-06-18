@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
 # Import modular components
-from config import config
+from config import config, Environment
 from session import SessionManager, ParallelAgentPool
 from ui import (
     create_main_chat_interface, 
@@ -29,7 +29,7 @@ from ui import (
 from gaia_logic import GAIAEvaluator, GAIA_AVAILABLE
 
 # Only load .env file if not in a Hugging Face Space
-if config.environment != config.Environment.HUGGINGFACE_SPACE:
+if config.environment != Environment.HUGGINGFACE_SPACE:
     load_dotenv()
 
 # Configure logging based on config - MUST BE BEFORE ANY LOGGER USAGE
