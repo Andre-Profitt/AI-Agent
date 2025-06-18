@@ -1,0 +1,62 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.2, pytest-8.4.0, pluggy-1.6.0 -- /Library/Frameworks/Python.framework/Versions/3.13/bin/python3.13
+cachedir: .pytest_cache
+rootdir: /Users/test/Desktop/ai agent/AI-Agent
+plugins: anyio-4.9.0, langsmith-0.3.45
+collecting ... collected 1 item / 3 errors
+
+==================================== ERRORS ====================================
+______________________ ERROR collecting test_fsm_agent.py ______________________
+ImportError while importing test module '/Users/test/Desktop/ai agent/AI-Agent/test_fsm_agent.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+test_fsm_agent.py:9: in <module>
+    from src.tools_enhanced import get_enhanced_tools
+src/tools_enhanced.py:50: in <module>
+    from src.tools import (
+src/tools.py:52: in <module>
+    from src.database import get_vector_store
+src/database.py:10: in <module>
+    from supabase import Client, create_client
+E   ModuleNotFoundError: No module named 'supabase'
+______________________ ERROR collecting test_fsm_fixes.py ______________________
+ImportError while importing test module '/Users/test/Desktop/ai agent/AI-Agent/test_fsm_fixes.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+test_fsm_fixes.py:13: in <module>
+    from src.tools_enhanced import get_enhanced_tools
+src/tools_enhanced.py:50: in <module>
+    from src.tools import (
+src/tools.py:52: in <module>
+    from src.database import get_vector_store
+src/database.py:10: in <module>
+    from supabase import Client, create_client
+E   ModuleNotFoundError: No module named 'supabase'
+___________________ ERROR collecting test_resilient_agent.py ___________________
+ImportError while importing test module '/Users/test/Desktop/ai agent/AI-Agent/test_resilient_agent.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+test_resilient_agent.py:10: in <module>
+    from src.tools_enhanced import get_enhanced_tools
+src/tools_enhanced.py:50: in <module>
+    from src.tools import (
+src/tools.py:52: in <module>
+    from src.database import get_vector_store
+src/database.py:10: in <module>
+    from supabase import Client, create_client
+E   ModuleNotFoundError: No module named 'supabase'
+=========================== short test summary info ============================
+ERROR test_fsm_agent.py
+ERROR test_fsm_fixes.py
+ERROR test_resilient_agent.py
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 3 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+============================== 3 errors in 3.79s ===============================

@@ -343,8 +343,11 @@ class SessionManager:
     def get_global_analytics(self) -> Dict[str, Any]:
         """Get aggregated analytics across all sessions in a nested format."""
         with self.lock:
+            total_sessions = len(self.sessions)
             if not self.sessions:
-                return self._empty_analytics()
+                analytics = self._empty_analytics()
+                analytics["total_sessions"] = total_sessions
+                return analytics
 
             total_queries = sum(s.total_queries for s in self.sessions.values())
             total_cache_hits = sum(s.cache_hits for s in self.sessions.values())
@@ -364,7 +367,7 @@ class SessionManager:
                 error_type = error["error_type"]
                 error_summary[error_type] = error_summary.get(error_type, 0) + 1
 
-            return {
+            analytics = {
                 "performance": {
                     "total_queries": total_queries,
                     "avg_response_time": total_response_time / max(1, total_queries),
@@ -377,7 +380,7 @@ class SessionManager:
                     "hit_rate": (total_cache_hits / max(1, total_queries)) * 100,
                     "size": len(self.cache.cache) if hasattr(self, 'cache') else 0,
                 },
-                "active_sessions": len(self.sessions),
+                "active_sessions": total_sessions,
                 "uptime_hours": max((s.uptime_hours for s in self.sessions.values()), default=0),
                 "parallel_pool": {
                     "max_workers": config.performance.MAX_PARALLEL_WORKERS,
@@ -397,7 +400,16 @@ class SessionManager:
                     "total_errors": len(all_errors),
                     "error_types": error_summary
                 },
+                "total_sessions": total_sessions,
             }
+            # Add top-level keys for test compatibility
+            analytics["total_queries"] = total_queries
+            analytics["cache_hits"] = total_cache_hits
+            analytics["parallel_executions"] = total_parallel
+            analytics["avg_response_time"] = total_response_time / max(1, total_queries)
+            analytics["cache_hit_rate"] = (total_cache_hits / max(1, total_queries)) * 100
+            analytics["tool_usage"] = tool_usage
+            return analytics
 
     def _empty_analytics(self) -> Dict[str, Any]:
         """Return empty nested analytics structure."""

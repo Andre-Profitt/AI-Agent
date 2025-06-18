@@ -13,7 +13,7 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
-def test_import(module_name: str, expected_version: str = None) -> Tuple[bool, str]:
+def import_test(module_name: str, expected_version: str = None) -> Tuple[bool, str]:
     """Test if a module can be imported and optionally check its version."""
     try:
         module = importlib.import_module(module_name)
@@ -62,7 +62,7 @@ def main():
     print("-" * 60)
     
     for module_name, expected_version in core_deps:
-        success, result = test_import(module_name, expected_version)
+        success, result = import_test(module_name, expected_version)
         
         if success:
             if "mismatch" in result:
@@ -110,7 +110,7 @@ def main():
     ]
     
     for module_name, _ in integrations:
-        success, result = test_import(module_name, None)
+        success, result = import_test(module_name, None)
         status = "✅ PASS" if success else "❌ FAIL"
         print(f"{status:12} {module_name:40} {result}")
         if success:

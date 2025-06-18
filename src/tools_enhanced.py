@@ -9,8 +9,9 @@ import tempfile
 from pathlib import Path
 from datetime import datetime
 
-from langchain_core.tools import tool
+from langchain_core.tools import tool, StructuredTool
 from langchain_core.tools import Tool
+from pydantic import BaseModel, Field
 
 # Resilient imports for optional dependencies
 try:
@@ -53,6 +54,7 @@ from src.tools import (
     semantic_search_tool,
     python_interpreter,
     tavily_search_backoff,
+    tavily_search,
     get_weather
 )
 
@@ -335,49 +337,19 @@ Step 1 - Understanding the puzzle:
         logger.error(f"Error in abstract reasoning tool: {e}")
         return f"Error solving puzzle: {str(e)}"
 
-@tool
-def image_analyzer_enhanced(filename: str, task: str = "describe") -> str:
-    """
-    Enhanced image analyzer that can handle chess positions and convert to FEN notation.
-    For chess analysis, it extracts the position and prepares it for chess_logic_tool.
-    
-    Args:
-        filename (str): Path to the image file
-        task (str): Analysis task - "describe", "chess", "text", "objects"
-        
-    Returns:
-        str: Analysis results based on the specified task
-    """
-    try:
-        logger.info(f"Enhanced image analyzer called: file={filename}, task={task}")
-        
-        if task == "chess":
-            # For GAIA benchmark, return a mock FEN string
-            # In production, this would use computer vision to analyze the board
-            
-            # Mock FEN strings for common chess positions
-            mock_positions = [
-                "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",  # Starting position
-                "r1bqkb1r/pppp1ppp/2n2n2/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4",  # Italian Game
-                "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3",  # Two Knights
-                "rnbqk2r/pp2ppbp/3p1np1/8/3PP3/2N2N2/PPP2PPP/R1BQKB1R w KQkq - 0 6"  # King's Indian
-            ]
-            
-            # Return a FEN string that can be passed to chess_logic_tool
-            fen = random.choice(mock_positions)
-            return f"Chess position detected. FEN notation: {fen}"
-            
-        elif task == "text":
-            # OCR functionality (mock for GAIA)
-            return "Text extraction: [Mock OCR output for GAIA benchmark]"
-            
-        else:
-            # Basic image description
-            return f"Image analysis complete. This is a mock description for the GAIA benchmark. File: {filename}"
-            
-    except Exception as e:
-        logger.error(f"Error in enhanced image analyzer: {e}")
-        return f"Error analyzing image: {str(e)}"
+class ImageAnalyzerEnhancedInput(BaseModel):
+    filename: str = Field(description="Path to the image file")
+    task: str = Field(default="describe", description="Analysis task - 'describe', 'chess', 'text', 'objects'")
+
+def _image_analyzer_enhanced_structured(filename: str, task: str = "describe") -> str:
+    return image_analyzer_enhanced(filename, task)
+
+image_analyzer_enhanced_structured = StructuredTool.from_function(
+    func=_image_analyzer_enhanced_structured,
+    name="image_analyzer_enhanced",
+    description="Enhanced image analyzer that can handle chess positions and convert to FEN notation.",
+    args_schema=ImageAnalyzerEnhancedInput
+)
 
 # --- Tool Collection ---
 
@@ -411,8 +383,8 @@ def get_enhanced_tools() -> List[Tool]:
         else:
             tools.append(gaia_video_analyzer)
     except Exception as e:
-        logger.warning(f"Error adding video analyzer: {e}")
-        tools.append(gaia_video_analyzer)  # Fallback to mock
+        logger.error(f"Error adding structured video analyzer: {e}")
+        raise
     
     # Add chess analyzer
     try:
@@ -421,8 +393,8 @@ def get_enhanced_tools() -> List[Tool]:
         else:
             tools.append(chess_logic_tool)
     except Exception as e:
-        logger.warning(f"Error adding chess analyzer: {e}")
-        tools.append(chess_logic_tool)  # Fallback to mock
+        logger.error(f"Error adding chess analyzer: {e}")
+        raise
     
     # Add other tools
     try:
@@ -434,43 +406,37 @@ def get_enhanced_tools() -> List[Tool]:
             abstract_reasoning_tool,
         ])
     except Exception as e:
-        logger.warning(f"Error adding enhanced tools: {e}")
+        logger.error(f"Error adding enhanced tools: {e}")
+        raise
     
     # Add image analyzer
     try:
-        tools.append(Tool(
-            name="image_analyzer_enhanced",
-            description="Enhanced image analyzer that can handle chess positions and convert to FEN notation",
-            func=lambda filename, task="describe": (
-                image_analyzer_chess_production(filename) if task == "chess" and PRODUCTION_TOOLS_AVAILABLE
-                else image_analyzer_enhanced(filename, task)
-            )
-        ))
+        tools.append(image_analyzer_enhanced_structured)  # StructuredTool version
     except Exception as e:
-        logger.warning(f"Error adding image analyzer: {e}")
+        logger.error(f"Error adding structured image analyzer: {e}")
+        raise
     
     # Add Tavily search if available
     try:
-        tools.append(Tool(
-            name="tavily_search",
-            description="Search the web for real-time information",
-            func=tavily_search_backoff
-        ))
+        tools.append(tavily_search)  # Use the StructuredTool from src.tools
     except Exception as e:
-        logger.warning(f"Error adding Tavily search: {e}")
+        logger.error(f"Error adding Tavily search: {e}")
+        raise
     
     # Add weather tool
     try:
         tools.append(get_weather)
     except Exception as e:
-        logger.warning(f"Error adding weather tool: {e}")
+        logger.error(f"Error adding weather tool: {e}")
+        raise
     
     # Add Stockfish installer if production tools are available
     if PRODUCTION_TOOLS_AVAILABLE:
         try:
             tools.append(install_stockfish)
         except Exception as e:
-            logger.warning(f"Error adding Stockfish installer: {e}")
+            logger.error(f"Error adding Stockfish installer: {e}")
+            raise
     
     # Ensure we always return at least some tools
     if not tools:

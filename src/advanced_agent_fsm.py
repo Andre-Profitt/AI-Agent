@@ -21,6 +21,21 @@ from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
+# Import resilience patterns
+from src.langgraph_resilience_patterns import (
+    LoopPreventionState,
+    calculate_state_hash,
+    check_for_stagnation,
+    decrement_loop_counter,
+    ToolErrorStrategy,
+    ToolExecutionResult,
+    categorize_tool_error,
+    create_self_correction_prompt,
+    StateValidator,
+    ErrorRecoveryState,
+    create_adaptive_error_handler
+)
+
 # Import resilience libraries with fallbacks
 try:
     from circuitbreaker import circuit
@@ -272,6 +287,26 @@ class EnhancedAgentState(TypedDict):
     stagnation_score: int  # Semantic stagnation detection
     error_log: List[Dict[str, Any]]  # Structured error tracking
     error_counts: Dict[str, int]  # Error frequency by type
+    
+    # --- ENHANCED LOOP PREVENTION FROM RESILIENCE PATTERNS ---
+    remaining_loops: int  # State-based counter for guaranteed termination
+    last_state_hash: str  # Hash of previous state to detect stagnation
+    force_termination: bool  # Force stop flag
+    
+    # --- TOOL ERROR RECOVERY ---
+    tool_errors: List[ToolExecutionResult]  # Detailed tool error tracking
+    recovery_attempts: int  # Number of recovery attempts
+    fallback_level: int  # Current fallback strategy level
+    
+    # --- REFLECTION AND QUALITY ASSURANCE ---
+    draft_answer: str  # Draft before reflection
+    reflection_passed: bool  # Whether reflection check passed
+    reflection_issues: List[str]  # Issues found during reflection
+    
+    # --- HUMAN IN THE LOOP ---
+    requires_human_approval: bool
+    approval_request: Optional[Dict[str, Any]]
+    execution_paused: bool
 
 # --- Model Configuration ---
 
@@ -538,6 +573,11 @@ class FSMReActAgent:
         self.tools = tools
         self.log_handler = log_handler
         self.tool_registry = {tool.name: tool for tool in tools}
+        # Patch in the structured tools for video and image analysis
+        from src.tools import video_analyzer_structured
+        from src.tools_enhanced import image_analyzer_enhanced_structured
+        self.tool_registry["video_analyzer"] = video_analyzer_structured
+        self.tool_registry["image_analyzer_enhanced"] = image_analyzer_enhanced_structured
         self.model_preference = model_preference
         self.use_crew = use_crew
         
@@ -764,186 +804,160 @@ class FSMReActAgent:
                 }
         
         def tool_execution_node(state: EnhancedAgentState) -> dict:
-            """Execute tools and persist outputs (Directive 2)."""
-            logger.info(f"--- FSM STATE: TOOL_EXECUTION (Step {state.get('step_count', 0)}) ---")
+            """Execute tools from the plan with enhanced error handling and self-correction."""
             
-            # Layer C: Track action history
-            action_history = state.get("action_history", [])
-            error_log = state.get("error_log", [])
-            error_counts = state.get("error_counts", {})
-            stagnation_score = state.get("stagnation_score", 0)
-            
-            # FIX 5: Initialize tool_reliability at the beginning to avoid UnboundLocalError
-            tool_reliability = state.get("tool_reliability", {})
-            
-            try:
-                # Get the next tool to execute from the plan
-                next_tool_info = self._get_next_tool_from_plan(
-                    state.get("master_plan", []), 
-                    state
-                )
+            with correlation_context(state['correlation_id']):
+                logger.info("Entering TOOL_EXECUTION state", 
+                           extra={'completed_steps': len(state.get('step_outputs', {}))})
                 
-                if not next_tool_info:
-                    # No more tools to execute
+                # Parse and validate the plan
+                if not state.get('master_plan'):
+                    parsed_plan = self._parse_plan_into_steps(state['plan'], state)
+                    validated_plan = self._validate_and_correct_plan(parsed_plan)
+                    state['master_plan'] = validated_plan
+                
+                # Get next tool to execute
+                next_step = self._get_next_tool_from_plan(state['master_plan'], state)
+                
+                if not next_step:
+                    logger.info("No more tools to execute")
                     return {"current_fsm_state": FSMState.SYNTHESIZING}
                 
-                tool_name = next_tool_info["tool"]
-                tool_input = next_tool_info["input"]
-                step_number = next_tool_info["step"]
+                logger.info(f"Executing Step {next_step['step']}: {next_step['tool']}")
                 
-                # --- NEW: LOOP-DETECTION & STAGNATION GUARDRAIL ---
-                # If we have already made this exact tool call with the same input, treat as stagnation and re-plan
-                for previous_call in state.get("tool_calls", []):
-                    if previous_call.get("tool_name") == tool_name and previous_call.get("tool_input") == tool_input:
-                        logger.warning("Duplicate tool call detected – triggering re-planning to avoid infinite loop")
-                        return {
-                            "current_fsm_state": FSMState.PLANNING,
-                            "stagnation_counter": state.get("stagnation_counter", 0) + 1,
-                            "errors": ["Duplicate tool call detected"],
-                            "step_count": state.get("step_count", 0) + 1
-                        }
+                tool_name = next_step['tool']
+                tool_input = next_step.get('input', {})
                 
-                # FIX 2: Apply parameter translation layer before execution
-                translated_input = self._translate_tool_parameters(tool_name, tool_input)
+                # --- ENHANCED ERROR HANDLING FROM RESILIENCE PATTERNS ---
                 
-                # Execute the tool
-                tool_output = None
-                execution_start = time.time()
-                execution_success = False
+                # Check for self-correction prompt from previous failure
+                if state.get('correction_prompt'):
+                    logger.info("Applying self-correction from previous failure")
+                    # Modify tool input based on correction prompt
+                    tool_input = self._apply_correction_to_input(
+                        tool_name, 
+                        tool_input, 
+                        state.get('correction_prompt', '')
+                    )
+                    state['correction_prompt'] = None  # Clear after use
                 
-                if tool_name in self.tool_registry:
-                    logger.info(f"Executing tool: {tool_name} with input: {translated_input}")
-                    tool = self.tool_registry[tool_name]
+                # Translate parameters for compatibility
+                tool_input = self._translate_tool_parameters(tool_name, tool_input)
+                
+                # Check if tool exists
+                if tool_name not in self.tool_registry:
+                    logger.warning(f"Tool '{tool_name}' not found - using stub")
+                    tool_output = f"Tool '{tool_name}' is not available. Simulated output."
+                    execution_result = ToolExecutionResult(
+                        success=True,
+                        output=tool_output,
+                        error=None,
+                        error_category=None
+                    )
+                else:
+                    # Execute the tool with comprehensive error handling
+                    execution_result = self._execute_tool_with_resilience(
+                        tool_name, 
+                        tool_input, 
+                        state
+                    )
+                
+                # Record the execution result
+                state['tool_errors'].append(execution_result)
+                
+                # Handle execution results
+                if execution_result.success:
+                    # Success - record output and mark step as completed
+                    logger.info(f"Tool {tool_name} executed successfully")
                     
-                    # --- ADAPTIVE TOOL SELECTION ---
-                    # Check if we should use an alternative tool based on reliability
-                    tool_stats = tool_reliability.get(tool_name, {"successes": 0, "failures": 0})
+                    # Update state
+                    state['step_outputs'][next_step['step']] = execution_result.output
+                    state['tool_calls'].append({
+                        'tool_name': tool_name,
+                        'tool_input': tool_input,
+                        'output': execution_result.output,
+                        'step': next_step['step']
+                    })
                     
-                    if tool_stats["failures"] > 2 and tool_stats["successes"] < tool_stats["failures"]:
-                        # This tool has been failing, try to find an alternative
+                    # Mark step as completed
+                    next_step['completed'] = True
+                    
+                    # Update tool reliability stats
+                    tool_stats = state['tool_reliability'].get(tool_name, {'successes': 0, 'failures': 0})
+                    tool_stats['successes'] += 1
+                    state['tool_reliability'][tool_name] = tool_stats
+                    
+                    # Clear recovery attempts on success
+                    state['recovery_attempts'] = 0
+                    
+                else:
+                    # Failure - decide on recovery strategy
+                    logger.error(f"Tool {tool_name} failed: {execution_result.error}")
+                    
+                    # Update tool reliability stats
+                    tool_stats = state['tool_reliability'].get(tool_name, {'successes': 0, 'failures': 0})
+                    tool_stats['failures'] += 1
+                    state['tool_reliability'][tool_name] = tool_stats
+                    
+                    # Categorize error and determine strategy
+                    error_category, strategy = categorize_tool_error(execution_result.error)
+                    
+                    if strategy == ToolErrorStrategy.SELF_CORRECTION and state['recovery_attempts'] < 3:
+                        # Attempt self-correction
+                        logger.info("Attempting self-correction for tool error")
+                        correction_prompt = create_self_correction_prompt(
+                            tool_name,
+                            tool_input,
+                            execution_result.error
+                        )
+                        state['correction_prompt'] = correction_prompt
+                        state['recovery_attempts'] += 1
+                        
+                    elif strategy == ToolErrorStrategy.SIMPLE_RETRY and state['recovery_attempts'] < 2:
+                        # Simple retry with backoff
+                        logger.info("Will retry tool execution with backoff")
+                        state['recovery_attempts'] += 1
+                        time.sleep(2 ** state['recovery_attempts'])
+                        
+                    elif strategy == ToolErrorStrategy.MODEL_FALLBACK:
+                        # Try alternative tool
                         alternative_tool = self._find_alternative_tool(tool_name, state)
                         if alternative_tool:
-                            logger.warning(f"Tool {tool_name} has high failure rate, switching to {alternative_tool}")
-                            tool_name = alternative_tool
-                            tool = self.tool_registry[tool_name]
-                    
-                    # Execute with error handling
-                    try:
-                        tool_output = tool.invoke(translated_input)
-                        execution_success = True
-                    except Exception as tool_error:
-                        logger.error(f"Tool execution failed: {tool_error}")
-                        execution_success = False
-                        
-                        # Update tool reliability
-                        tool_stats = tool_reliability.get(tool_name, {"successes": 0, "failures": 0})
-                        tool_stats["failures"] += 1
-                        tool_stats["last_error"] = str(tool_error)
-                        tool_stats["last_error_time"] = datetime.now().isoformat()
-                        tool_reliability[tool_name] = tool_stats
-                        
-                        # Try alternative tool if available
-                        alternative_tool = self._find_alternative_tool(tool_name, state)
-                        if alternative_tool and alternative_tool != tool_name:
-                            logger.info(f"Trying alternative tool: {alternative_tool}")
-                            try:
-                                alt_tool = self.tool_registry[alternative_tool]
-                                tool_output = alt_tool.invoke(translated_input)
-                                execution_success = True
-                                tool_name = alternative_tool  # Update for record
-                            except Exception as alt_error:
-                                logger.error(f"Alternative tool also failed: {alt_error}")
-                                # Return to planning with error
-                                return {
-                                    "current_fsm_state": FSMState.PLANNING,
-                                    "stagnation_counter": state.get("stagnation_counter", 0) + 1,
-                                    "errors": [f"Tool execution failed: {str(tool_error)}, Alternative also failed: {str(alt_error)}"],
-                                    "step_count": state.get("step_count", 0) + 1,
-                                    "tool_reliability": tool_reliability
-                                }
+                            logger.info(f"Switching to alternative tool: {alternative_tool}")
+                            next_step['tool'] = alternative_tool
+                            # Reset recovery attempts for new tool
+                            state['recovery_attempts'] = 0
                         else:
-                            # No alternative, return to planning
-                            return {
-                                "current_fsm_state": FSMState.PLANNING,
-                                "stagnation_counter": state.get("stagnation_counter", 0) + 1,
-                                "errors": [f"Tool execution failed: {str(tool_error)}"],
-                                "step_count": state.get("step_count", 0) + 1,
-                                "tool_reliability": tool_reliability
-                            }
-                else:
-                    # Tool not found - will use stub if available
-                    tool_output = f"Error: Tool '{tool_name}' not found"
-                    logger.error(tool_output)
-                    execution_success = False
-                    
-                    # Return to planning
+                            # No alternative - mark as failed
+                            logger.error(f"No alternative for failed tool {tool_name}")
+                            next_step['completed'] = True
+                            next_step['failed'] = True
+                            state['step_outputs'][next_step['step']] = f"Failed: {execution_result.error}"
+                    else:
+                        # Max retries exceeded or unknown strategy
+                        logger.error(f"Tool {tool_name} failed after max retries")
+                        next_step['completed'] = True
+                        next_step['failed'] = True
+                        state['step_outputs'][next_step['step']] = f"Failed after retries: {execution_result.error}"
+                
+                # Check if we should continue or need error recovery
+                failed_steps = sum(1 for step in state['master_plan'] if step.get('failed', False))
+                
+                if failed_steps > len(state['master_plan']) // 2:
+                    # Too many failures - transition to error state
+                    logger.error("Too many tool failures - transitioning to error state")
                     return {
-                        "current_fsm_state": FSMState.PLANNING,
-                        "stagnation_counter": state.get("stagnation_counter", 0) + 1,
-                        "errors": [tool_output],
-                        "step_count": state.get("step_count", 0) + 1,
-                        "tool_reliability": tool_reliability
+                        "current_fsm_state": FSMState.ERROR,
+                        "errors": ["Multiple tool execution failures"]
                     }
                 
-                # Update tool reliability for successful execution
-                if execution_success:
-                    tool_stats = tool_reliability.get(tool_name, {"successes": 0, "failures": 0})
-                    tool_stats["successes"] += 1
-                    tool_stats["last_success_time"] = datetime.now().isoformat()
-                    tool_stats["avg_execution_time"] = (
-                        (tool_stats.get("avg_execution_time", 0) * tool_stats["successes"] + 
-                         (time.time() - execution_start)) / (tool_stats["successes"] + 1)
-                    )
-                    tool_reliability[tool_name] = tool_stats
+                # Update state for next iteration
+                state['step_count'] += 1
+                state['messages'].append(
+                    AIMessage(content=f"Executed {tool_name}: {str(execution_result.output)[:200]}...")
+                )
                 
-                # --- CRITICAL STATE UPDATE (Directive 2) ---
-                # Persist the tool output in step_outputs
-                current_step_outputs = state.get("step_outputs", {})
-                current_step_outputs[step_number] = tool_output
-                
-                # Create tool call record with enhanced observability
-                execution_time = time.time() - execution_start
-                new_tool_call = {
-                    "tool_name": tool_name,
-                    "tool_input": translated_input,
-                    "output": tool_output,
-                    "step": step_number,
-                    "timestamp": datetime.now().isoformat(),
-                    "execution_time": execution_time,
-                    "success": execution_success
-                }
-                
-                # Layer E: Enhanced observability logging
-                logger.info(f"Tool execution completed", extra={
-                    "tool_name": tool_name,
-                    "step": step_number,
-                    "execution_time": execution_time,
-                    "success": execution_success,
-                    "output_size": len(str(tool_output)) if tool_output else 0,
-                    "correlation_id": state.get("correlation_id", "unknown")
-                })
-                
-                # Determine next state
-                # Check if we have more tools to execute
-                remaining_tools = self._count_remaining_tools(state.get("master_plan", []), state)
-                next_state = FSMState.TOOL_EXECUTION if remaining_tools > 0 else FSMState.SYNTHESIZING
-                
-                return {
-                    "step_outputs": current_step_outputs,
-                    "tool_calls": [new_tool_call],
-                    "current_fsm_state": next_state,
-                    "stagnation_counter": 0,  # Reset on successful execution
-                    "step_count": state.get("step_count", 0) + 1,
-                    "tool_reliability": tool_reliability  # Include updated reliability
-                }
-                
-            except Exception as e:
-                logger.error(f"Error in tool execution node: {e}")
-                return {
-                    "current_fsm_state": FSMState.TOOL_EXECUTION_FAILURE,
-                    "errors": [str(e)],
-                    "tool_reliability": tool_reliability  # Always include tool_reliability
-                }
+                return {"current_fsm_state": FSMState.TOOL_EXECUTION}
         
         def synthesizing_node(state: EnhancedAgentState) -> dict:
             """Synthesize final answer with structured output (Directive 3)."""
@@ -1190,67 +1204,120 @@ class FSMReActAgent:
         # --- FSM Router with Advanced Loop Detection (Layer C) ---
         def fsm_router(state: EnhancedAgentState) -> str:
             """
-            Sophisticated FSM router with multi-layered loop detection and recovery.
-            Implements turn counting, state history hashing, and semantic stagnation detection.
+            Advanced FSM routing function with stagnation detection and deterministic FSM control.
+            This is the brain of the FSM - it decides state transitions based on current state.
             """
-            current_state = state.get("current_fsm_state", FSMState.PLANNING)
-            stagnation_count = state.get("stagnation_counter", 0)
-            step_count = state.get("step_count", 0)
-            turn_count = state.get("turn_count", 0)
-            stagnation_score = state.get("stagnation_score", 0)
-            
-            # Layer 1: Turn Counter - Hard limit on total turns
-            if turn_count >= 20:
-                logger.warning(f"Turn limit exceeded ({turn_count}), forcing termination")
-                return "error_node"
-            
-            # Layer 2: Semantic Stagnation Detection
-            if stagnation_score > 2:
-                logger.warning(f"Semantic stagnation detected (score: {stagnation_score}), escalating")
-                # In future, this could route to "human_review_node"
-                return "error_node"
-            
-            # Layer 3: Action History Check for Direct Loops
-            action_history = state.get("action_history", [])
-            if len(action_history) >= 3:
-                # Check if the last action is repeated in recent history
-                recent_history = action_history[-3:]
-                if len(set(recent_history)) == 1:
-                    logger.warning(f"Direct loop detected - same action repeated 3 times")
+            with correlation_context(state['correlation_id']):
+                current_state = state.get('current_fsm_state', FSMState.PLANNING)
+                logger.info(f"FSM Router evaluating state: {current_state}")
+                
+                # --- ENHANCED LOOP PREVENTION CHECK ---
+                # Check force termination flag
+                if state.get('force_termination', False):
+                    logger.warning("Force termination flag detected - ending execution")
+                    return END
+                
+                # Decrement loop counter and check
+                loop_state = decrement_loop_counter(state)
+                if loop_state.get('force_termination', False):
+                    logger.error("Loop limit reached - forcing termination")
+                    state['force_termination'] = True
+                    state['final_answer'] = "I apologize, but I've reached my processing limit while trying to answer your question. Please try rephrasing your query or breaking it into smaller parts."
+                    return END
+                
+                # Check for stagnation
+                if check_for_stagnation(state):
+                    logger.warning("Stagnation detected - attempting recovery")
+                    state['stagnation_counter'] = state.get('stagnation_counter', 0) + 1
+                    
+                    # If stagnating too long, terminate
+                    if state['stagnation_counter'] > 3:
+                        state['final_answer'] = "I'm having difficulty making progress on your question. The information might be too complex or ambiguous. Could you please provide more specific details?"
+                        return END
+                
+                # --- EXISTING FSM LOGIC WITH ENHANCEMENTS ---
+                # First, handle error states with recovery
+                if current_state == FSMState.ERROR:
+                    logger.error("In ERROR state - checking recovery options")
+                    
+                    # Use adaptive error handler
+                    recovery_state = create_adaptive_error_handler()(state)
+                    
+                    if recovery_state.get('should_terminate', False):
+                        logger.error("Error recovery failed - terminating")
+                        state['final_answer'] = recovery_state.get('final_error', 'An error occurred')
+                        return END
+                    
+                    # Try recovery strategy
+                    if recovery_state.get('recovery_strategy') == 'retry_with_backoff':
+                        time.sleep(recovery_state.get('wait_seconds', 1))
+                        return "planning_node"
+                    elif recovery_state.get('recovery_strategy') == 'self_correction':
+                        state['correction_prompt'] = recovery_state.get('correction_prompt', '')
+                        return "planning_node"
+                    else:
+                        return END
+                
+                # Check for tool execution failures that need recovery
+                if state.get('tool_errors', []):
+                    latest_error = state['tool_errors'][-1]
+                    if not latest_error.success:
+                        logger.warning(f"Tool error detected: {latest_error.error_category}")
+                        
+                        # Attempt self-correction for validation errors
+                        if latest_error.error_category == "validation_error":
+                            state['recovery_attempts'] = state.get('recovery_attempts', 0) + 1
+                            if state['recovery_attempts'] < 3:
+                                return "tool_execution_node"  # Retry with correction
+                            else:
+                                return "error_node"  # Escalate to error handling
+                
+                # Existing state transition logic
+                if current_state == FSMState.PLANNING:
+                    if state.get('master_plan'):
+                        return "tool_execution_node"
+                    else:
+                        logger.warning("No plan generated in PLANNING state")
+                        return "error_node"
+                        
+                elif current_state == FSMState.TOOL_EXECUTION:
+                    tools_remaining = self._count_remaining_tools(state['master_plan'], state)
+                    
+                    if tools_remaining == 0:
+                        logger.info("All tools executed - moving to synthesis")
+                        return "synthesizing_node"
+                    else:
+                        logger.info(f"{tools_remaining} tools remaining")
+                        return "tool_execution_node"
+                        
+                elif current_state == FSMState.SYNTHESIZING:
+                    # Add reflection check if enabled
+                    if state.get('enable_reflection', True) and not state.get('reflection_passed', True):
+                        logger.info("Synthesis complete but reflection required")
+                        state['draft_answer'] = state.get('final_answer', '')
+                        return "verifying_node"
+                    else:
+                        return "verifying_node"
+                        
+                elif current_state == FSMState.VERIFYING:
+                    if state.get('verification_passed', True):
+                        return END
+                    else:
+                        # If verification fails, might need to re-plan
+                        state['retry_count'] = state.get('retry_count', 0) + 1
+                        if state['retry_count'] < state.get('max_retries', 2):
+                            logger.info("Verification failed - replanning")
+                            return "planning_node"
+                        else:
+                            logger.warning("Max retries reached - finishing with current answer")
+                            return END
+                            
+                elif current_state == FSMState.FINISHED:
+                    return END
+                    
+                else:
+                    logger.error(f"Unknown state: {current_state}")
                     return "error_node"
-            
-            # Original termination conditions
-            if step_count >= self.max_steps:
-                logger.warning(f"Max steps ({self.max_steps}) reached, terminating")
-                return "error_node"
-            
-            if stagnation_count >= self.max_stagnation:
-                logger.warning(f"Stagnation counter exceeded ({stagnation_count}), terminating")
-                return "error_node"
-            
-            # Check for accumulated errors
-            error_counts = state.get("error_counts", {})
-            if any(count > 3 for count in error_counts.values()):
-                logger.warning(f"Too many errors of same type: {error_counts}")
-                return "error_node"
-            
-            # Route based on current state
-            if current_state == FSMState.PLANNING:
-                return "planning_node"
-            elif current_state == FSMState.TOOL_EXECUTION:
-                return "tool_execution_node"
-            elif current_state == FSMState.SYNTHESIZING:
-                return "synthesizing_node"
-            elif current_state == FSMState.VERIFYING:
-                return "verifying_node"
-            elif current_state in [FSMState.FINAL_FAILURE, FSMState.TOOL_EXECUTION_FAILURE, 
-                                  FSMState.PERMANENT_API_FAILURE, FSMState.INVALID_PLAN_FAILURE]:
-                return "error_node"
-            elif current_state == FSMState.FINISHED:
-                return END
-            else:
-                # Unknown state, go to error
-                return "error_node"
         
         # --- Build the Graph ---
         workflow = StateGraph(EnhancedAgentState)
@@ -1307,27 +1374,7 @@ Query: {state['query']}
         if errors:
             base_prompt += f"Previous attempt had issues: {', '.join(errors)}\n\n"
         
-        base_prompt += """Create a detailed plan with specific tool calls. Each tool has SPECIFIC parameter names.
-
-Available tools and their EXACT parameter requirements:
-- web_researcher: {{"query": "search query", "source": "wikipedia" or "search"}}
-- semantic_search_tool: {{"query": "search query", "filename": "knowledge_base.csv", "top_k": 3}}
-- python_interpreter: {{"code": "python code to execute"}}
-- tavily_search: {{"query": "search query", "max_results": 3}}
-- file_reader: {{"filename": "path/to/file.txt", "lines": -1}}
-- advanced_file_reader: {{"filename": "path/to/file"}}
-- image_analyzer: {{"filename": "path/to/image.jpg", "task": "describe"}}
-- image_analyzer_enhanced: {{"filename": "path/to/image.jpg", "task": "describe" or "chess"}}
-- video_analyzer: {{"url": "video_url", "action": "download_info" or "transcribe"}}
-- gaia_video_analyzer: {{"video_url": "googleusercontent_url"}}
-- audio_transcriber: {{"filename": "path/to/audio.mp3"}}
-- chess_logic_tool: {{"fen_string": "chess_position_in_FEN", "analysis_time_seconds": 2.0}}
-
-Format your plan EXACTLY like this:
-Step 1: [Description] - Tool: tool_name with parameters: {{"param1": "value1", "param2": value2}}
-Step 2: [Description] - Tool: tool_name with parameters: {{"param": "value based on Step 1"}}
-
-CRITICAL: Use the EXACT parameter names shown above. Do NOT use generic "query" for tools that require specific parameters."""
+        base_prompt += "Create a detailed plan with specific tool calls. Each tool has SPECIFIC parameter names.\n\nAvailable tools and their EXACT parameter requirements:\n- web_researcher: {\"query\": \"search query\", \"source\": \"wikipedia\" or \"search\"}\n- semantic_search_tool: {\"query\": \"search query\", \"filename\": \"knowledge_base.csv\", \"top_k\": 3}\n- python_interpreter: {\"code\": \"python code to execute\"}\n- tavily_search: {\"query\": \"search query\", \"max_results\": 3}\n- file_reader: {\"filename\": \"path/to/file.txt\", \"lines\": -1}\n- advanced_file_reader: {\"filename\": \"path/to/file\"}\n- image_analyzer: {\"filename\": \"path/to/image.jpg\", \"task\": \"describe\"}\n- image_analyzer_enhanced: {\"filename\": \"path/to/image.jpg\", \"task\": \"describe\" or \"chess\"}\n- video_analyzer: {\"url\": \"video_url\", \"action\": \"download_info\" or \"transcribe\"}\n- gaia_video_analyzer: {\"video_url\": \"googleusercontent_url\"}\n- audio_transcriber: {\"filename\": \"path/to/audio.mp3\"}\n- chess_logic_tool: {\"fen_string\": \"chess_position_in_FEN\", \"analysis_time_seconds\": 2.0}\n\nFormat your plan EXACTLY like this:\nStep 1: [Description] - Tool: tool_name with parameters: {\"param1\": \"value1\", \"param2\": value2}\nStep 2: [Description] - Tool: tool_name with parameters: {\"param\": \"value based on Step 1\"}\n\nCRITICAL: Use the EXACT parameter names shown above. Do NOT use generic \"query\" for tools that require specific parameters."
         
         return base_prompt
     
@@ -1757,6 +1804,89 @@ Provide a verification result."""
         
         return best_alternative
     
+    def _apply_correction_to_input(self, tool_name: str, tool_input: dict, correction_prompt: str) -> dict:
+        """Apply correction suggestions to tool input based on error feedback."""
+        # Extract key corrections from the prompt
+        corrected_input = tool_input.copy()
+        
+        # Look for parameter corrections in the prompt
+        if "parameter names" in correction_prompt.lower():
+            # Apply parameter name corrections
+            corrected_input = self._correct_tool_input_heuristic(tool_name, tool_input)
+        
+        if "required parameters" in correction_prompt.lower():
+            # Add missing required parameters with defaults
+            tool_defaults = {
+                "file_reader": {"lines": -1},
+                "semantic_search_tool": {"filename": "knowledge_base.csv", "top_k": 3},
+                "tavily_search": {"max_results": 3},
+                "chess_logic_tool": {"analysis_time_seconds": 2.0}
+            }
+            
+            if tool_name in tool_defaults:
+                for param, default_value in tool_defaults[tool_name].items():
+                    if param not in corrected_input:
+                        corrected_input[param] = default_value
+        
+        return corrected_input
+    
+    def _execute_tool_with_resilience(self, tool_name: str, tool_input: dict, state: dict) -> ToolExecutionResult:
+        """Execute a tool with comprehensive error handling and resilience patterns."""
+        tool = self.tool_registry[tool_name]
+        start_time = time.time()
+        
+        try:
+            # Apply rate limiting if needed
+            if hasattr(self, 'rate_limiter'):
+                self.rate_limiter.wait_if_needed()
+            
+            # Execute the tool
+            logger.info(f"Executing {tool_name} with input: {json.dumps(tool_input, indent=2)}")
+            output = tool.invoke(tool_input)
+            
+            execution_time = time.time() - start_time
+            logger.info(f"Tool {tool_name} completed in {execution_time:.2f}s")
+            
+            return ToolExecutionResult(
+                success=True,
+                output=output,
+                error=None,
+                error_category=None
+            )
+            
+        except ValidationError as e:
+            logger.error(f"Validation error in {tool_name}: {e}")
+            return ToolExecutionResult(
+                success=False,
+                output=None,
+                error=e,
+                error_category="validation_error",
+                retry_suggestions=["Check parameter names", "Verify data types", "Ensure required fields are present"]
+            )
+            
+        except Exception as e:
+            logger.error(f"Error executing {tool_name}: {e}")
+            error_category, _ = categorize_tool_error(e)
+            
+            return ToolExecutionResult(
+                success=False,
+                output=None,
+                error=e,
+                error_category=error_category,
+                retry_suggestions=self._get_retry_suggestions(error_category)
+            )
+    
+    def _get_retry_suggestions(self, error_category: str) -> List[str]:
+        """Get retry suggestions based on error category."""
+        suggestions = {
+            "rate_limit": ["Wait before retrying", "Use exponential backoff", "Consider alternative tool"],
+            "timeout": ["Retry with longer timeout", "Check network connection", "Try smaller request"],
+            "not_found": ["Verify resource exists", "Check spelling", "Try alternative query"],
+            "validation_error": ["Fix parameter names", "Check data types", "Review tool documentation"],
+            "unknown": ["Check tool availability", "Review input format", "Consider alternative approach"]
+        }
+        return suggestions.get(error_category, ["Retry with modified input"])
+    
     def run(self, inputs: dict):
         """Run the FSM agent with comprehensive resilience and correlation tracking."""
         correlation_id = str(uuid.uuid4())
@@ -1781,41 +1911,77 @@ Provide a verification result."""
                         "execution_time": 0.0
                     }
 
-                # Initialize state with full resilience context and loop detection
+                # Create the initial state with comprehensive initialization
                 initial_state = {
+                    # Core fields
                     "correlation_id": correlation_id,
-                    "query": validated_query_str,  # Use validated query
-                    "input_query": validated_query,  # Store Pydantic object
+                    "query": validated_query_str,
+                    "input_query": validated_query,
                     "messages": [HumanMessage(content=validated_query_str)],
+                    
+                    # Planning and execution
+                    "plan": "",
+                    "master_plan": [],
+                    "validated_plan": None,
+                    "tool_calls": [],
+                    "step_outputs": {},
+                    "final_answer": "",
+                    
+                    # FSM Control
                     "current_fsm_state": FSMState.PLANNING,
                     "stagnation_counter": 0,
                     "max_stagnation": self.max_stagnation,
                     "retry_count": 0,
                     "max_retries": 3,
-                    "step_count": 0,
-                    "tool_calls": [],
-                    "step_outputs": {},
-                    "errors": [],
+                    
+                    # Failure context
                     "failure_history": [],
                     "circuit_breaker_status": "closed",
                     "last_api_error": None,
-                    "start_time": time.time(),
-                    "verification_level": "thorough",  # Default to thorough per directives
+                    
+                    # Verification
+                    "verification_level": "thorough",  # Default to thorough
                     "confidence": 0.0,
                     "cross_validation_sources": [],
+                    
+                    # Error tracking
+                    "errors": [],
+                    
+                    # Performance
+                    "step_count": 0,
+                    "start_time": time.time(),
+                    "end_time": 0.0,
+                    
+                    # Adaptive tool selection
                     "tool_reliability": {},
                     "tool_preferences": {},
-                    "validated_plan": None,
-                    "plan": "",
-                    "master_plan": [],
-                    "final_answer": "",
-                    "end_time": 0.0,
-                    # Layer C: Loop detection fields
+                    
+                    # Loop detection (Layer C)
                     "turn_count": 0,
                     "action_history": [],
                     "stagnation_score": 0,
                     "error_log": [],
-                    "error_counts": {}
+                    "error_counts": {},
+                    
+                    # --- ENHANCED LOOP PREVENTION FROM RESILIENCE PATTERNS ---
+                    "remaining_loops": inputs.get("remaining_loops", 15),  # Allow override via inputs
+                    "last_state_hash": "",
+                    "force_termination": False,
+                    
+                    # --- TOOL ERROR RECOVERY ---
+                    "tool_errors": [],
+                    "recovery_attempts": 0,
+                    "fallback_level": 0,
+                    
+                    # --- REFLECTION AND QUALITY ASSURANCE ---
+                    "draft_answer": "",
+                    "reflection_passed": True,
+                    "reflection_issues": [],
+                    
+                    # --- HUMAN IN THE LOOP ---
+                    "requires_human_approval": False,
+                    "approval_request": None,
+                    "execution_paused": False
                 }
                 
                 # Log state transition

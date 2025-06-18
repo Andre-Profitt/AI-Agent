@@ -11,12 +11,14 @@ from src.tools import (
     tavily_search,
     file_reader
 )
+import sys
 
 
 class TestWebResearcher:
     """Test web researcher tool"""
     
     @patch('src.tools.WikipediaAPIWrapper')
+    @patch('src.tools.WEB_SCRAPING_AVAILABLE', True)
     def test_web_researcher_success(self, mock_wikipedia):
         """Test successful web research"""
         # Mock the Wikipedia API
@@ -56,7 +58,12 @@ class TestSemanticSearchTool:
         ]
         mock_engine.return_value = mock_search
         
-        result = semantic_search_tool("test query", filename="test.csv", top_k=2)
+        # Call as a StructuredTool: pass all args as a dict
+        result = semantic_search_tool({
+            "query": "test query",
+            "filename": "test.csv",
+            "top_k": 2
+        })
         
         assert "Result 1" in result
         assert "Result 2" in result
