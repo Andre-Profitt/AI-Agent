@@ -28,6 +28,15 @@ from ui import (
 )
 from gaia_logic import GAIAEvaluator, GAIA_AVAILABLE
 
+# Only load .env file if not in a Hugging Face Space
+if config.environment != config.Environment.HUGGINGFACE_SPACE:
+    load_dotenv()
+
+# Configure logging based on config - MUST BE BEFORE ANY LOGGER USAGE
+logging.basicConfig(level=getattr(logging, config.logging.LOG_LEVEL))
+logger = logging.getLogger(__name__)
+logger.propagate = False
+
 # Import the new FSM agent instead of the old one
 from src.advanced_agent_fsm import FSMReActAgent, validate_user_prompt
 from src.database import get_supabase_client, SupabaseLogHandler
@@ -43,15 +52,6 @@ try:
 except ImportError as e:
     logger.warning(f"Next-gen modules not available: {e}")
     NEXT_GEN_AVAILABLE = False
-
-# Only load .env file if not in a Hugging Face Space
-if not config.environment != config.Environment.HUGGINGFACE_SPACE:
-    load_dotenv()
-
-# Configure logging based on config
-logging.basicConfig(level=getattr(logging, config.logging.LOG_LEVEL))
-logger = logging.getLogger(__name__)
-logger.propagate = False
 
 # --- Initialization ---
 # Initialize Supabase client and custom log handler

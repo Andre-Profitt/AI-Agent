@@ -12,7 +12,7 @@ from enum import Enum
 import anthropic
 from pydantic import BaseModel, Field
 
-from config import get_api_key
+from config import config
 
 
 class QueryCategory(str, Enum):
@@ -88,7 +88,8 @@ class QueryClassifier:
     
     def __init__(self, anthropic_api_key: Optional[str] = None):
         """Initialize the query classifier"""
-        self.api_key = anthropic_api_key or get_api_key("ANTHROPIC_API_KEY")
+        # Access the API key through the config object's api attribute
+        self.api_key = anthropic_api_key or getattr(config.api, 'ANTHROPIC_API_KEY', None) or config.api.OPENAI_API_KEY
         if self.api_key:
             self.client = anthropic.Anthropic(api_key=self.api_key)
         else:
