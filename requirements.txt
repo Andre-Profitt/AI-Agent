@@ -33,7 +33,7 @@ llama-index-readers-file==0.4.9
 llama-index-readers-llama-parse==0.4.0
 
 # Exact pypdf version that satisfies llama-index requirements
-pypdf==5.4.1
+pypdf==5.4.0
 
 # Tools
 tavily-python==0.7.6
