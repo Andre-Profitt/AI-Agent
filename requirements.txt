@@ -1,141 +1,87 @@
 # ==============================================================================
-# Unpinned Dependencies for AI Agent
+# Pinned Dependencies for AI Agent
 # Updated: 2025-01-23
-# This uses unpinned versions to allow pip to resolve dependencies automatically
+# These specific versions resolve dependency conflicts and ensure stable builds
 # ==============================================================================
 
-# -- Core Frameworks --
-pydantic>=2.0
-langchain
-langgraph
-langchain-core
-langchain-community
-langchain-openai
-langchain-groq
-langchain-tavily
-langchain-experimental
-langsmith
-langchain-text-splitters
-langgraph-checkpoint
-langgraph-prebuilt
-langgraph-sdk
+# Core LangChain/LangGraph
+langchain==0.3.25
+langgraph==0.4.8
+langchain-core==0.3.65
+langchain-groq==0.3.2
+langchain-openai==0.3.24
 
-# -- LlamaIndex --
-llama-index
-llama-index-core
-llama-index-embeddings-openai
-llama-index-vector-stores-supabase
-llama-index-readers-file
-llama-index-agent-openai
-llama-index-cli
-llama-index-indices-managed-llama-cloud
-llama-index-llms-openai
-llama-index-multi-modal-llms-openai
-llama-index-program-openai
-llama-index-question-gen-openai
-llama-index-readers-llama-parse
+# LlamaIndex and Supabase for Knowledge Base
+llama-index==0.12.42
+llama-index-core==0.12.42
+llama-index-embeddings-openai==0.3.1
+llama-index-vector-stores-supabase==0.3.0
 
-# -- AI/ML Tools --
-tavily-python
-groq
-wikipedia
-openai
-anthropic
-tiktoken
+# Tools
+langchain-tavily==0.2.3
+tavily-python==0.7.6
+langchain-experimental==0.3.4
 
-# -- Database --
-supabase
-psycopg2-binary
-vecs
-pgvector
+# Database Connector
+supabase==2.15.3
+psycopg2-binary==2.9.10
+vecs==0.4.5
 
-# -- UI --
-gradio
-gradio-client
-python-dotenv
+# UI and Environment
+gradio==5.25.2
+python-dotenv==1.1.0
+groq==0.28.0
 
-# -- PyTorch (keep minimum version for compatibility) --
-torch>=2.0.0
-torchvision
-torchaudio
+# Utilities
+ipython==8.37.0
+typing-extensions==4.13.2
+numpy==2.2.6
+requests==2.32.4
+pandas==2.2.3
+scikit-learn==1.7.0
+sentence-transformers==4.1.0
 
-# -- Media Processing --
-openai-whisper
-librosa
-pydub
-yt-dlp
-opencv-python
-moviepy
-Pillow
-ffmpeg-python
+# Async I/O for Ultra-Fast Processing
+aiohttp==3.12.12
+aiofiles==24.1.0
 
-# -- Web Tools --
-beautifulsoup4
-selenium
-requests-html
+# GPU Acceleration
+torch==2.7.1
+torchvision==0.22.1
 
-# -- File Processing --
-openpyxl
-python-docx
-PyPDF2
-pypdf>=5.1.0  # Keep minimum version to satisfy llama-index requirement
-unstructured
-python-magic
+# Multimedia Processing
+openai-whisper==20240930
+librosa==0.11.0
+pydub==0.25.1
+yt-dlp==2025.6.9
+opencv-python==4.11.0.86
+moviepy==2.2.1
+Pillow==11.2.1
+ffmpeg-python==0.2.0
 
-# -- Analysis Tools --
-chess
-python-chess
-stockfish
-matplotlib
-seaborn
-watchdog
+# Web Scraping & Research
+beautifulsoup4==4.13.4
+selenium==4.33.0
+requests-html==0.10.0
+wikipedia==1.4.0
 
-# -- Core Libraries --
-numpy
-pandas
-scikit-learn
-sentence-transformers
-transformers
-ipython
-typing-extensions
-requests
-aiohttp
-aiofiles
+# File Format Support
+openpyxl==3.1.5
+python-docx==1.2.0
+PyPDF2==3.0.1
+python-magic==0.4.27
 
-# -- Web Framework --
-httpx
-httpcore
-anyio
-fastapi
-uvicorn
+# Specialized Analysis
+chess==1.11.2
+matplotlib==3.10.3
+seaborn==0.13.2
 
-# -- Other Dependencies --
-SQLAlchemy
-tenacity
-jsonpatch
-packaging
-nest-asyncio
-deprecated
-wrapt
-networkx
-nltk
-scipy
-dataclasses-json
-filetype
-dirtyjson
-typing-inspect
-flupy
-banks
-async-timeout
-starlette
-h11
-sniffio
+# Production tool dependencies
+python-chess==1.999
+stockfish==3.28.0  # Python wrapper for Stockfish
+watchdog==6.0.0  # For file system monitoring
 
-# -- Resilience --
-circuitbreaker
-retrying
-
-# -- Selenium Dependencies --
-trio
-trio-websocket
-websocket-client 
+# Document processing
+pypdf==5.6.0
+unstructured==0.17.2
+llama-index-readers-file==0.4.9 
