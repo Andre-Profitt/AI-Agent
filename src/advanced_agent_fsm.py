@@ -7,6 +7,7 @@ import re
 import uuid
 import requests
 import os
+import hashlib
 from typing import Annotated, List, TypedDict, Dict, Any, Optional
 from uuid import UUID
 from datetime import datetime
@@ -18,7 +19,7 @@ from langchain_core.messages import AnyMessage, BaseMessage, SystemMessage, Huma
 from langchain_groq import ChatGroq
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 # Import resilience libraries with fallbacks
 try:
@@ -144,6 +145,55 @@ class ExecutionResult(BaseModel):
     error_message: Optional[str] = Field(description="Error message if execution failed")
     execution_time: float = Field(description="Time taken for execution")
 
+# --- INPUT VALIDATION LAYER (Layer B) ---
+class ValidatedQuery(BaseModel):
+    """Pydantic model for validated user queries with comprehensive sanitization"""
+    query: str
+    
+    @field_validator('query')
+    @classmethod
+    def query_must_be_valid_and_sanitized(cls, v: str) -> str:
+        """
+        Ensures the input query is not empty, a placeholder, or potentially malicious.
+        This is the first layer of the sanitization gateway.
+        """
+        if not v or not v.strip():
+            raise ValueError("Query cannot be empty.")
+        
+        # Explicitly block the placeholder literals that caused the original error
+        if v.strip() in ["{{", "}}", "{{}}", "{", "}", "{{user_question}}", "{{user_query}}"]:
+            raise ValueError(f"Invalid placeholder query received: '{v}'")
+        
+        # Block control characters except newlines and tabs
+        control_chars = ''.join(chr(i) for i in range(32) if i not in [9, 10, 13])
+        if any(char in v for char in control_chars):
+            raise ValueError("Query contains invalid control characters")
+        
+        # Basic prompt injection detection
+        injection_patterns = [
+            r"ignore\s+previous\s+instructions",
+            r"disregard\s+all\s+prior",
+            r"system\s*:\s*you\s+are",
+            r"<\|im_start\|>",
+            r"<\|im_end\|>",
+            r"\[INST\]",
+            r"\[/INST\]"
+        ]
+        
+        for pattern in injection_patterns:
+            if re.search(pattern, v, re.IGNORECASE):
+                raise ValueError(f"Query contains potential prompt injection pattern")
+        
+        # Length constraints
+        if len(v.strip()) < 3:
+            raise ValueError("Query must be at least 3 characters long")
+        
+        if len(v) > 10000:
+            raise ValueError("Query exceeds maximum length of 10000 characters")
+        
+        # Strip and normalize whitespace
+        return v.strip()
+
 # Note: FSMState enum already defined above with granular failure states
 
 # --- Enhanced State Tracking ---
@@ -168,8 +218,9 @@ class EnhancedAgentState(TypedDict):
     # Correlation and context
     correlation_id: str
     
-    # User input
+    # User input (now validated)
     query: str
+    input_query: ValidatedQuery  # Added validated query field
     
     # Planning and execution
     plan: str
@@ -214,6 +265,13 @@ class EnhancedAgentState(TypedDict):
     # --- Adaptive Tool Selection ---
     tool_reliability: Dict[str, Dict[str, Any]]
     tool_preferences: Dict[str, List[str]]
+    
+    # --- LOOP DETECTION FIELDS (Layer C) ---
+    turn_count: int
+    action_history: List[str]  # Hashes of recent actions
+    stagnation_score: int  # Semantic stagnation detection
+    error_log: List[Dict[str, Any]]  # Structured error tracking
+    error_counts: Dict[str, int]  # Error frequency by type
 
 # --- Model Configuration ---
 
@@ -601,6 +659,21 @@ class FSMReActAgent:
             """Strategic planning node that creates or updates the execution plan."""
             logger.info(f"--- FSM STATE: PLANNING (Step {state.get('step_count', 0)}) ---")
             
+            # Layer C: Increment turn count and track action history
+            current_turn = state.get("turn_count", 0)
+            new_turn_count = current_turn + 1
+            
+            # Track action history with hash
+            action_history = state.get("action_history", [])
+            plan_hash = hashlib.sha256("planning_node".encode()).hexdigest()[:8]
+            action_history.append(plan_hash)
+            
+            # Keep only last 10 actions
+            if len(action_history) > 10:
+                action_history = action_history[-10:]
+            
+            logger.debug(f"Turn count: {new_turn_count}, Action history length: {len(action_history)}")
+            
             try:
                 # Check if this is a complex query that should be delegated to crew
                 if self.use_crew and state.get("step_count", 0) == 0:
@@ -638,7 +711,9 @@ class FSMReActAgent:
                                 "tool_calls": tool_calls,
                                 "current_fsm_state": FSMState.VERIFYING,  # Still verify crew results
                                 "stagnation_counter": 0,
-                                "confidence": 0.85  # Crew results have good baseline confidence
+                                "confidence": 0.85,  # Crew results have good baseline confidence
+                                "turn_count": new_turn_count,
+                                "action_history": action_history
                             }
                         except ImportError:
                             logger.warning("CrewAI not available, falling back to standard planning")
@@ -674,19 +749,29 @@ class FSMReActAgent:
                     "master_plan": validated_plan,
                     "current_fsm_state": FSMState.TOOL_EXECUTION if next_tool else FSMState.SYNTHESIZING,
                     "messages": [response],
-                    "stagnation_counter": 0  # Reset on successful planning
+                    "stagnation_counter": 0,  # Reset on successful planning
+                    "turn_count": new_turn_count,
+                    "action_history": action_history
                 }
                 
             except Exception as e:
                 logger.error(f"Error in planning node: {e}")
                 return {
                     "current_fsm_state": FSMState.FINAL_FAILURE,
-                    "errors": [str(e)]
+                    "errors": [str(e)],
+                    "turn_count": new_turn_count,
+                    "action_history": action_history
                 }
         
         def tool_execution_node(state: EnhancedAgentState) -> dict:
             """Execute tools and persist outputs (Directive 2)."""
             logger.info(f"--- FSM STATE: TOOL_EXECUTION (Step {state.get('step_count', 0)}) ---")
+            
+            # Layer C: Track action history
+            action_history = state.get("action_history", [])
+            error_log = state.get("error_log", [])
+            error_counts = state.get("error_counts", {})
+            stagnation_score = state.get("stagnation_score", 0)
             
             # FIX 5: Initialize tool_reliability at the beginning to avoid UnboundLocalError
             tool_reliability = state.get("tool_reliability", {})
@@ -816,14 +901,27 @@ class FSMReActAgent:
                 current_step_outputs = state.get("step_outputs", {})
                 current_step_outputs[step_number] = tool_output
                 
-                # Create tool call record
+                # Create tool call record with enhanced observability
+                execution_time = time.time() - execution_start
                 new_tool_call = {
                     "tool_name": tool_name,
                     "tool_input": translated_input,
                     "output": tool_output,
                     "step": step_number,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
+                    "execution_time": execution_time,
+                    "success": execution_success
                 }
+                
+                # Layer E: Enhanced observability logging
+                logger.info(f"Tool execution completed", extra={
+                    "tool_name": tool_name,
+                    "step": step_number,
+                    "execution_time": execution_time,
+                    "success": execution_success,
+                    "output_size": len(str(tool_output)) if tool_output else 0,
+                    "correlation_id": state.get("correlation_id", "unknown")
+                })
                 
                 # Determine next state
                 # Check if we have more tools to execute
@@ -968,34 +1066,172 @@ class FSMReActAgent:
                 }
         
         def error_node(state: EnhancedAgentState) -> dict:
-            """Handle errors gracefully."""
+            """
+            Enhanced error handler with categorization and recovery patterns (Layer D).
+            Categorizes errors and attempts appropriate recovery strategies.
+            """
             logger.error(f"--- FSM STATE: ERROR ---")
             errors = state.get("errors", ["Unknown error"])
+            error_log = state.get("error_log", [])
+            error_counts = state.get("error_counts", {})
+            
+            # Categorize the latest error
+            latest_error = errors[-1] if errors else "Unknown error"
+            error_category = self._categorize_error(latest_error)
+            
+            # Update error tracking
+            error_counts[error_category] = error_counts.get(error_category, 0) + 1
+            error_log.append({
+                "error": latest_error,
+                "category": error_category,
+                "timestamp": datetime.now().isoformat(),
+                "state": state.get("current_fsm_state", "UNKNOWN"),
+                "step_count": state.get("step_count", 0)
+            })
+            
+            # Keep only last 50 errors in log
+            if len(error_log) > 50:
+                error_log = error_log[-50:]
+            
+            logger.error(f"Error category: {error_category}, Occurrences: {error_counts[error_category]}")
             logger.error(f"Errors: {errors}")
             
-            # Set a default error message as final answer
-            return {
-                "final_answer": f"I encountered an error while processing your request: {'; '.join(errors)}",
-                "current_fsm_state": FSMState.FINISHED
-            }
+            # Attempt recovery based on error category
+            if error_category == "RATE_LIMIT" and error_counts[error_category] <= 2:
+                # Wait and retry for rate limit errors
+                logger.info("Rate limit error - waiting before retry")
+                time.sleep(5)  # Wait 5 seconds
+                return {
+                    "current_fsm_state": FSMState.PLANNING,  # Retry from planning
+                    "errors": [],  # Clear errors for retry
+                    "error_log": error_log,
+                    "error_counts": error_counts,
+                    "stagnation_counter": state.get("stagnation_counter", 0) + 1
+                }
+            elif error_category == "TOOL_VALIDATION" and error_counts[error_category] <= 3:
+                # For validation errors, try to replan with better parameters
+                return {
+                    "current_fsm_state": FSMState.PLANNING,
+                    "errors": ["Tool validation failed - replanning with corrected parameters"],
+                    "error_log": error_log,
+                    "error_counts": error_counts,
+                    "stagnation_counter": state.get("stagnation_counter", 0) + 1
+                }
+            elif error_category == "NETWORK" and error_counts[error_category] <= 2:
+                # Network errors - wait and retry
+                logger.info("Network error - waiting before retry")
+                time.sleep(3)
+                return {
+                    "current_fsm_state": state.get("current_fsm_state", FSMState.PLANNING),
+                    "errors": [],
+                    "error_log": error_log,
+                    "error_counts": error_counts
+                }
+            else:
+                # Too many errors or unrecoverable error - graceful degradation
+                final_message = self._create_graceful_error_message(error_category, latest_error, state)
+                
+                return {
+                    "final_answer": final_message,
+                    "current_fsm_state": FSMState.FINISHED,
+                    "error_log": error_log,
+                    "error_counts": error_counts
+                }
         
-        # --- FSM Router ---
+        def _categorize_error(self, error_str: str) -> str:
+            """Categorize error for appropriate handling."""
+            error_lower = str(error_str).lower()
+            
+            if "429" in error_lower or "rate limit" in error_lower:
+                return "RATE_LIMIT"
+            elif "validation" in error_lower or "invalid" in error_lower:
+                return "TOOL_VALIDATION"
+            elif "timeout" in error_lower or "connection" in error_lower:
+                return "NETWORK"
+            elif "authentication" in error_lower or "401" in error_lower:
+                return "AUTH"
+            elif "not found" in error_lower or "404" in error_lower:
+                return "NOT_FOUND"
+            elif "model" in error_lower and "decommissioned" in error_lower:
+                return "MODEL_ERROR"
+            else:
+                return "GENERAL"
+        
+        def _create_graceful_error_message(self, error_category: str, error: str, state: dict) -> str:
+            """Create a helpful error message with partial results if available."""
+            # Check if we have any partial results
+            tool_calls = state.get("tool_calls", [])
+            step_outputs = state.get("step_outputs", {})
+            
+            if tool_calls or step_outputs:
+                # We have some partial results
+                partial_info = "I was able to gather some information before encountering an error:\n\n"
+                
+                for call in tool_calls[-3:]:  # Show last 3 tool results
+                    if isinstance(call.get("output"), str) and len(call["output"]) > 0:
+                        partial_info += f"• {call['tool_name']}: {call['output'][:200]}...\n"
+                
+                partial_info += f"\nUnfortunately, I encountered a {error_category} error and couldn't complete the full analysis."
+                return partial_info
+            else:
+                # No partial results - provide helpful error message
+                error_messages = {
+                    "RATE_LIMIT": "I've hit the API rate limit. Please try again in a few moments.",
+                    "TOOL_VALIDATION": "I had trouble with the parameters for one of my tools. Please try rephrasing your question.",
+                    "NETWORK": "I'm having network connectivity issues. Please check your connection and try again.",
+                    "AUTH": "There's an authentication issue with one of my services. Please contact support.",
+                    "NOT_FOUND": "I couldn't find the resource you're looking for. Please verify the information and try again.",
+                    "MODEL_ERROR": "There's a configuration issue with the AI model. Please try again later.",
+                    "GENERAL": f"I encountered an error: {error}"
+                }
+                
+                return error_messages.get(error_category, f"I encountered an error: {error}")
+        
+        # --- FSM Router with Advanced Loop Detection (Layer C) ---
         def fsm_router(state: EnhancedAgentState) -> str:
             """
-            Central FSM router that determines next state transitions.
-            Implements stagnation detection and termination guarantees.
+            Sophisticated FSM router with multi-layered loop detection and recovery.
+            Implements turn counting, state history hashing, and semantic stagnation detection.
             """
             current_state = state.get("current_fsm_state", FSMState.PLANNING)
             stagnation_count = state.get("stagnation_counter", 0)
             step_count = state.get("step_count", 0)
+            turn_count = state.get("turn_count", 0)
+            stagnation_score = state.get("stagnation_score", 0)
             
-            # Absolute termination conditions
+            # Layer 1: Turn Counter - Hard limit on total turns
+            if turn_count >= 20:
+                logger.warning(f"Turn limit exceeded ({turn_count}), forcing termination")
+                return "error_node"
+            
+            # Layer 2: Semantic Stagnation Detection
+            if stagnation_score > 2:
+                logger.warning(f"Semantic stagnation detected (score: {stagnation_score}), escalating")
+                # In future, this could route to "human_review_node"
+                return "error_node"
+            
+            # Layer 3: Action History Check for Direct Loops
+            action_history = state.get("action_history", [])
+            if len(action_history) >= 3:
+                # Check if the last action is repeated in recent history
+                recent_history = action_history[-3:]
+                if len(set(recent_history)) == 1:
+                    logger.warning(f"Direct loop detected - same action repeated 3 times")
+                    return "error_node"
+            
+            # Original termination conditions
             if step_count >= self.max_steps:
                 logger.warning(f"Max steps ({self.max_steps}) reached, terminating")
                 return "error_node"
             
             if stagnation_count >= self.max_stagnation:
-                logger.warning(f"Stagnation detected ({stagnation_count}), terminating")
+                logger.warning(f"Stagnation counter exceeded ({stagnation_count}), terminating")
+                return "error_node"
+            
+            # Check for accumulated errors
+            error_counts = state.get("error_counts", {})
+            if any(count > 3 for count in error_counts.values()):
+                logger.warning(f"Too many errors of same type: {error_counts}")
                 return "error_node"
             
             # Route based on current state
@@ -1424,6 +1660,55 @@ Check:
 
 Provide a verification result."""
     
+    def _categorize_error(self, error_str: str) -> str:
+        """Categorize error for appropriate handling."""
+        error_lower = str(error_str).lower()
+        
+        if "429" in error_lower or "rate limit" in error_lower:
+            return "RATE_LIMIT"
+        elif "validation" in error_lower or "invalid" in error_lower:
+            return "TOOL_VALIDATION"
+        elif "timeout" in error_lower or "connection" in error_lower:
+            return "NETWORK"
+        elif "authentication" in error_lower or "401" in error_lower:
+            return "AUTH"
+        elif "not found" in error_lower or "404" in error_lower:
+            return "NOT_FOUND"
+        elif "model" in error_lower and "decommissioned" in error_lower:
+            return "MODEL_ERROR"
+        else:
+            return "GENERAL"
+    
+    def _create_graceful_error_message(self, error_category: str, error: str, state: dict) -> str:
+        """Create a helpful error message with partial results if available."""
+        # Check if we have any partial results
+        tool_calls = state.get("tool_calls", [])
+        step_outputs = state.get("step_outputs", {})
+        
+        if tool_calls or step_outputs:
+            # We have some partial results
+            partial_info = "I was able to gather some information before encountering an error:\n\n"
+            
+            for call in tool_calls[-3:]:  # Show last 3 tool results
+                if isinstance(call.get("output"), str) and len(call["output"]) > 0:
+                    partial_info += f"• {call['tool_name']}: {call['output'][:200]}...\n"
+            
+            partial_info += f"\nUnfortunately, I encountered a {error_category} error and couldn't complete the full analysis."
+            return partial_info
+        else:
+            # No partial results - provide helpful error message
+            error_messages = {
+                "RATE_LIMIT": "I've hit the API rate limit. Please try again in a few moments.",
+                "TOOL_VALIDATION": "I had trouble with the parameters for one of my tools. Please try rephrasing your question.",
+                "NETWORK": "I'm having network connectivity issues. Please check your connection and try again.",
+                "AUTH": "There's an authentication issue with one of my services. Please contact support.",
+                "NOT_FOUND": "I couldn't find the resource you're looking for. Please verify the information and try again.",
+                "MODEL_ERROR": "There's a configuration issue with the AI model. Please try again later.",
+                "GENERAL": f"I encountered an error: {error}"
+            }
+            
+            return error_messages.get(error_category, f"I encountered an error: {error}")
+
     def _find_alternative_tool(self, failed_tool: str, state: EnhancedAgentState) -> Optional[str]:
         """Find an alternative tool based on the failed tool and query context."""
         # Define tool alternatives mapping
@@ -1481,11 +1766,14 @@ Provide a verification result."""
                 query = inputs.get("input", inputs.get("query", ""))
                 logger.info(f"Starting resilient FSM execution", extra={'query_length': len(query), 'query_preview': query[:100]})
                 
-                # Early validation to prevent "{{" type issues (Secondary defense)
-                if not validate_user_prompt(query):
-                    logger.warning(f"FSM agent rejecting invalid input: '{query}'")
+                # Layer B: Early validation using Pydantic
+                try:
+                    validated_query = ValidatedQuery(query=query)
+                    validated_query_str = validated_query.query
+                except ValidationError as e:
+                    logger.warning(f"FSM agent rejecting invalid input: '{query}' - {e}")
                     return {
-                        "output": "Please provide a meaningful question with at least 3 characters including letters or numbers.",
+                        "output": "❌ **Invalid Input**\n\nPlease provide a meaningful question with at least 3 characters including letters or numbers.\n\n**Examples:**\n- What is the weather today?\n- Calculate 2 + 2\n- Explain quantum computing",
                         "intermediate_steps": [],
                         "correlation_id": correlation_id,
                         "confidence": 0.0,
@@ -1493,11 +1781,12 @@ Provide a verification result."""
                         "execution_time": 0.0
                     }
 
-                # Initialize state with full resilience context
+                # Initialize state with full resilience context and loop detection
                 initial_state = {
                     "correlation_id": correlation_id,
-                    "query": query,
-                    "messages": [HumanMessage(content=query)],
+                    "query": validated_query_str,  # Use validated query
+                    "input_query": validated_query,  # Store Pydantic object
+                    "messages": [HumanMessage(content=validated_query_str)],
                     "current_fsm_state": FSMState.PLANNING,
                     "stagnation_counter": 0,
                     "max_stagnation": self.max_stagnation,
@@ -1520,7 +1809,13 @@ Provide a verification result."""
                     "plan": "",
                     "master_plan": [],
                     "final_answer": "",
-                    "end_time": 0.0
+                    "end_time": 0.0,
+                    # Layer C: Loop detection fields
+                    "turn_count": 0,
+                    "action_history": [],
+                    "stagnation_score": 0,
+                    "error_log": [],
+                    "error_counts": {}
                 }
                 
                 # Log state transition
