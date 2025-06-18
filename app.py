@@ -5,43 +5,44 @@ import re
 import json
 import time
 import datetime
-import concurrent.futures
 from typing import List, Tuple, Dict, Any, Optional
 from pathlib import Path
 import pandas as pd
-from functools import lru_cache
 import threading
-from queue import Queue
-import requests
 
 import gradio as gr
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
+# Import modular components
+from config import config
+from session import SessionManager, ParallelAgentPool
+from ui import (
+    create_main_chat_interface, 
+    create_gaia_evaluation_tab, 
+    create_analytics_tab,
+    create_documentation_tab,
+    create_custom_css,
+    format_message_with_steps,
+    export_conversation_to_file
+)
+from gaia_logic import GAIAEvaluator, GAIA_AVAILABLE
+
 # Import the new FSM agent instead of the old one
-from src.advanced_agent_fsm import FSMReActAgent
+from src.advanced_agent_fsm import FSMReActAgent, validate_user_prompt
 from src.database import get_supabase_client, SupabaseLogHandler
 # Import enhanced tools for GAIA
 from src.tools_enhanced import get_enhanced_tools
 from src.knowledge_ingestion import KnowledgeIngestionService
 
-# Import GAIA agent functionality
-# Load environment variables
-load_dotenv()
+# Only load .env file if not in a Hugging Face Space
+if not config.environment != config.Environment.HUGGINGFACE_SPACE:
+    load_dotenv()
 
-# Configure root logger to be very permissive
-logging.basicConfig(level=logging.DEBUG)
-# Get a specific logger for our application
+# Configure logging based on config
+logging.basicConfig(level=getattr(logging, config.logging.LOG_LEVEL))
 logger = logging.getLogger(__name__)
-# Prevent passing logs to the root logger's handlers
 logger.propagate = False
-
-try:
-    from agent import build_graph
-    GAIA_AVAILABLE = True
-except ImportError:
-    logger.warning("⚠️ GAIA agent.py not available - GAIA evaluation will be disabled")
-    GAIA_AVAILABLE = False
 
 # --- Initialization ---
 # Initialize Supabase client and custom log handler
@@ -88,527 +89,19 @@ except Exception as e:
     traceback.print_exc()
     exit("Critical error: Agent could not be initialized. Check logs above for details.")
 
-# --- GAIA Constants ---
-DEFAULT_API_URL = "https://agents-course-unit4-scoring.hf.space"
-
-# --- API Rate Limiting Constants ---
-MAX_PARALLEL_WORKERS = 8  # Reduced from 20 to respect Groq rate limits (6000 TPM)
-API_RATE_LIMIT_BUFFER = 5  # Extra seconds between API calls for safety
-GROQ_TPM_LIMIT = 6000  # Groq tokens per minute limit
-REQUEST_SPACING = 0.5  # Minimum seconds between requests
-
-# --- Advanced GAIA Agent (FSM version) ---------------------------
-class AdvancedGAIAAgent:
-    """
-    GAIA wrapper that delegates every question to the FSM-based agent,
-    guaranteeing deterministic execution and GAIA-ready tools.
-    """
-    def __init__(self):
-        tools = get_enhanced_tools()
-        self.fsm_agent = FSMReActAgent(
-            tools           = tools,
-            log_handler     = supabase_handler if LOGGING_ENABLED else None,
-            model_preference= "balanced"
-        )
-        self.performance_stats = {
-            "total_questions": 0,
-            "successful_answers": 0,
-            "avg_processing_time": 0.0,
-            "tool_usage": {tool.name: 0 for tool in tools},
-            "start_time": time.time()
-        }
-
-    def __call__(self, question: str) -> str:
-        start = time.time()
-        result = self.fsm_agent.run({"input": question})   # ✅ FSM
-        answer = self._extract_clean_answer(result["output"])
-        self._update_stats(time.time() - start, success=True)
-        return answer
-    
-    def _extract_clean_answer(self, response: str) -> str:
-        """Extract clean answer for GAIA submission - no formatting, just the answer."""
-        if not response:
-            return "No answer provided"
-        
-        # Use the enhanced answer extraction
-        clean_answer = extract_final_answer(response)
-        
-        # Additional GAIA-specific cleaning for concise answers
-        if len(clean_answer) > 200:  # GAIA prefers very concise answers
-            lines = [line.strip() for line in clean_answer.split('\n') if line.strip()]
-            
-            # Look for the most direct answer line
-            for line in lines:
-                if len(line) < 100 and line:
-                    # Prefer short, factual answers
-                    if (any(char.isdigit() for char in line) or 
-                        len(line.split()) <= 10 or
-                        line.isupper() or  # Country codes, etc.
-                        ',' in line and len(line) < 80):  # Lists
-                        clean_answer = line
-                        break
-            
-            # If still too long, take first 150 chars
-            if len(clean_answer) > 150:
-                clean_answer = clean_answer[:150].strip()
-        
-        # Remove any remaining artifacts
-        clean_answer = re.sub(r'^(the\s+)?answer\s*(is\s*)?:?\s*', '', clean_answer, flags=re.IGNORECASE)
-        clean_answer = clean_answer.strip('"\'.,!?()[]{}')
-        
-        return clean_answer.strip() if clean_answer.strip() else "Unable to determine answer"
-    
-    def _update_stats(self, processing_time: float, success: bool):
-        """Update performance statistics."""
-        self.performance_stats["total_questions"] += 1
-        if success:
-            self.performance_stats["successful_answers"] += 1
-        
-        # Update average processing time
-        total_time = (self.performance_stats["avg_processing_time"] * 
-                     (self.performance_stats["total_questions"] - 1) + processing_time)
-        self.performance_stats["avg_processing_time"] = total_time / self.performance_stats["total_questions"]
-    
-    def get_performance_summary(self) -> str:
-        """Get performance summary for monitoring."""
-        stats = self.performance_stats
-        uptime = time.time() - stats["start_time"]
-        success_rate = (stats["successful_answers"] / max(1, stats["total_questions"])) * 100
-        
-        return f"""
-🎯 **Advanced GAIA Agent Performance**
-- Questions Processed: {stats["total_questions"]}
-- Success Rate: {success_rate:.1f}%
-- Avg Processing Time: {stats["avg_processing_time"]:.2f}s
-- Uptime: {uptime/3600:.1f} hours
-- Tools Available: {len(tools)}
-- Advanced Features: ✅ Enabled
-"""
-
-# --- GAIA Evaluation Functions ---
-def run_and_submit_all(profile: gr.OAuthProfile | None):
-    """
-    Enhanced GAIA evaluation with advanced agent capabilities.
-    Fetches questions, processes with sophisticated reasoning, and submits answers.
-    """
-    if not GAIA_AVAILABLE:
-        return "❌ GAIA functionality not available - agent.py not found", None
-    
-    # Determine space configuration
-    space_id = os.getenv("SPACE_ID")
-    
-    if profile:
-        username = f"{profile.username}"
-        logger.info(f"👤 User logged in: {username}")
-    else:
-        logger.warning("❌ User not logged in")
-        return "Please Login to Hugging Face with the button.", None
-    
-    api_url = DEFAULT_API_URL
-    questions_url = f"{api_url}/questions"
-    submit_url = f"{api_url}/submit"
-    
-    # Initialize Advanced GAIA Agent
-    try:
-        logger.info("🚀 Initializing Advanced GAIA Agent for evaluation...")
-        agent = AdvancedGAIAAgent()
-    except Exception as e:
-        error_msg = f"❌ Error initializing advanced agent: {e}"
-        logger.error(error_msg)
-        return error_msg, None
-    
-    # Agent code URL for submission
-    agent_code = f"https://huggingface.co/spaces/{space_id}/tree/main" if space_id else "Local deployment"
-    logger.info(f"📂 Agent code location: {agent_code}")
-    
-    # Fetch questions from GAIA API
-    logger.info(f"📥 Fetching questions from: {questions_url}")
-    try:
-        response = requests.get(questions_url, timeout=15)
-        response.raise_for_status()
-        questions_data = response.json()
-        
-        if not questions_data:
-            logger.warning("⚠️ No questions received")
-            return "No questions received from GAIA API.", None
-            
-        logger.info(f"✅ Fetched {len(questions_data)} questions for evaluation")
-        
-    except requests.exceptions.RequestException as e:
-        error_msg = f"❌ Error fetching questions: {e}"
-        logger.error(error_msg)
-        return error_msg, None
-    except Exception as e:
-        error_msg = f"❌ Unexpected error fetching questions: {e}"
-        logger.error(error_msg)
-        return error_msg, None
-    
-    # Process questions with advanced agent
-    results_log = []
-    answers_payload = []
-    start_time = time.time()
-    
-    logger.info(f"🧠 Starting advanced processing of {len(questions_data)} questions...")
-    
-    for i, item in enumerate(questions_data, 1):
-        task_id = item.get("task_id")
-        question_text = item.get("question")
-        
-        if not task_id or question_text is None:
-            logger.warning(f"⚠️ Skipping invalid question item: {item}")
-            continue
-        
-        try:
-            logger.info(f"🔄 Processing question {i}/{len(questions_data)} (ID: {task_id})")
-            
-            # Process with advanced agent
-            question_start = time.time()
-            submitted_answer = agent(question_text)
-            question_time = time.time() - question_start
-            
-            # Store results
-            answers_payload.append({
-                "task_id": task_id, 
-                "submitted_answer": submitted_answer
-            })
-            
-            results_log.append({
-                "Task ID": task_id,
-                "Question": question_text[:200] + "..." if len(question_text) > 200 else question_text,
-                "Submitted Answer": submitted_answer,
-                "Processing Time": f"{question_time:.1f}s"
-            })
-            
-            logger.info(f"✅ Question {i} completed in {question_time:.1f}s")
-            
-        except Exception as e:
-            error_msg = f"AGENT ERROR: {e}"
-            logger.error(f"❌ Error on question {i} (ID: {task_id}): {e}")
-            
-            results_log.append({
-                "Task ID": task_id,
-                "Question": question_text[:200] + "..." if len(question_text) > 200 else question_text,
-                "Submitted Answer": error_msg,
-                "Processing Time": "Error"
-            })
-    
-    total_time = time.time() - start_time
-    
-    if not answers_payload:
-        logger.error("❌ No answers generated")
-        return "Advanced agent did not produce any answers to submit.", pd.DataFrame(results_log)
-    
-    # Prepare submission with enhanced data
-    submission_data = {
-        "username": username.strip(),
-        "agent_code": agent_code,
-        "answers": answers_payload
-    }
-    
-    logger.info(f"📤 Submitting {len(answers_payload)} answers for user '{username}'")
-    logger.info(f"⏱️ Total processing time: {total_time:.1f}s")
-    logger.info(f"📊 Average time per question: {total_time/len(questions_data):.1f}s")
-    
-    # Submit to GAIA API
-    try:
-        logger.info(f"🚀 Submitting to: {submit_url}")
-        response = requests.post(submit_url, json=submission_data, timeout=60)
-        response.raise_for_status()
-        result_data = response.json()
-        
-        # Enhanced success message with performance stats
-        performance_summary = agent.get_performance_summary()
-        
-        final_status = f"""
-🎉 **GAIA Submission Successful!**
-
-📊 **Results:**
-- User: {result_data.get('username')}
-- Overall Score: {result_data.get('score', 'N/A')}% 
-- Correct: {result_data.get('correct_count', '?')}/{result_data.get('total_attempted', '?')}
-- Message: {result_data.get('message', 'No message received.')}
-
-⏱️ **Performance:**
-- Total Processing Time: {total_time:.1f}s
-- Avg Time/Question: {total_time/len(questions_data):.1f}s
-
-{performance_summary}
-"""
-        
-        logger.info("🎉 GAIA submission completed successfully!")
-        results_df = pd.DataFrame(results_log)
-        return final_status, results_df
-        
-    except requests.exceptions.HTTPError as e:
-        error_detail = f"Server responded with status {e.response.status_code}."
-        try:
-            error_json = e.response.json()
-            error_detail += f" Detail: {error_json.get('detail', e.response.text)}"
-        except:
-            error_detail += f" Response: {e.response.text[:500]}"
-        
-        status_message = f"❌ Submission Failed: {error_detail}"
-        logger.error(status_message)
-        results_df = pd.DataFrame(results_log)
-        return status_message, results_df
-        
-    except Exception as e:
-        status_message = f"❌ Unexpected submission error: {e}"
-        logger.error(status_message)
-        results_df = pd.DataFrame(results_log)
-        return status_message, results_df
-
-# --- Advanced Parallel Processing & Caching ---
-
-class ParallelAgentPool:
-    """High-performance parallel agent execution with worker pool."""
-    
-    def __init__(self, max_workers: int = MAX_PARALLEL_WORKERS):
-        self.max_workers = min(max_workers, MAX_PARALLEL_WORKERS)  # Enforce API limits
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers)
-        self.active_tasks = {}
-        self.task_queue = Queue()
-        self.response_cache = {}
-        self.cache_lock = threading.Lock()
-        self.last_request_time = 0
-        self.request_count = 0
-        self.rate_limit_lock = threading.Lock()
-        
-        logger.info(f"🚀 Initialized ParallelAgentPool with {self.max_workers} workers (API rate-limited)")
-        logger.info(f"📊 Configured for Groq TPM limit: {GROQ_TPM_LIMIT}")
-        
-    def _enforce_rate_limit(self):
-        """Enforce API rate limiting between requests."""
-        with self.rate_limit_lock:
-            current_time = time.time()
-            time_since_last = current_time - self.last_request_time
-            
-            if time_since_last < REQUEST_SPACING:
-                sleep_time = REQUEST_SPACING - time_since_last + (API_RATE_LIMIT_BUFFER / 10)
-                logger.debug(f"⏳ Rate limiting: sleeping {sleep_time:.2f}s")
-                time.sleep(sleep_time)
-            
-            self.last_request_time = time.time()
-            self.request_count += 1
-    
-    @lru_cache(maxsize=1000)
-    def _get_cache_key(self, message: str, session_id: str) -> str:
-        """Generate cache key for response caching."""
-        return f"{hash(message)}_{session_id}"
-    
-    def get_cached_response(self, message: str, session_id: str) -> Optional[str]:
-        """Get cached response if available."""
-        cache_key = self._get_cache_key(message, session_id)
-        with self.cache_lock:
-            return self.response_cache.get(cache_key)
-    
-    def cache_response(self, message: str, session_id: str, response: str):
-        """Cache response for future use."""
-        cache_key = self._get_cache_key(message, session_id)
-        with self.cache_lock:
-            # Keep cache size manageable
-            if len(self.response_cache) > 500:
-                # Remove oldest 100 entries
-                keys_to_remove = list(self.response_cache.keys())[:100]
-                for key in keys_to_remove:
-                    del self.response_cache[key]
-            
-            self.response_cache[cache_key] = response
-    
-    def execute_agent_parallel(self, message: str, history: List[List[str]], 
-                               log_to_db: bool, session_id: str):
-        """Execute agent with parallel processing and API rate limiting."""
-        
-        # Check cache first
-        cached_response = self.get_cached_response(message, session_id)
-        if cached_response:
-            logger.info(f"🎯 Cache hit for message: {message[:50]}...")
-            yield "📋 **Retrieved from cache** (Ultra-fast response!)\n\n", cached_response, session_id
-            return
-        
-        # Enforce API rate limiting before making request
-        self._enforce_rate_limit()
-        
-        # Execute in thread pool with rate limiting
-        logger.info(f"🔄 Executing with rate limiting (request #{self.request_count})")
-        future = self.executor.submit(chat_interface_logic_sync, message, history, log_to_db, session_id)
-        
-        try:
-            # Get the generator from the future
-            generator = future.result(timeout=300)  # 5 minute timeout
-            
-            final_response = ""
-            for steps, response, updated_session_id in generator:
-                final_response = response
-                yield steps, response, updated_session_id
-            
-            # Cache the final response
-            if final_response and "error" not in final_response.lower():
-                self.cache_response(message, session_id, final_response)
-                
-        except concurrent.futures.TimeoutError:
-            logger.error(f"Parallel execution timeout for message: {message[:50]}...")
-            yield "❌ **Timeout Error:** Request took too long to process", "Request timeout", session_id
-        except Exception as e:
-            logger.error(f"Parallel execution error: {e}")
-            yield f"❌ **Parallel Execution Error:** {e}", f"Error: {e}", session_id
-    
-    def get_pool_status(self) -> Dict[str, Any]:
-        """Get current pool status for monitoring."""
-        return {
-            "max_workers": self.max_workers,
-            "active_threads": threading.active_count(),
-            "cache_size": len(self.response_cache),
-            "pending_tasks": self.task_queue.qsize() if hasattr(self.task_queue, 'qsize') else 0,
-            "total_requests": self.request_count,
-            "last_request_time": self.last_request_time,
-            "rate_limiting_active": True
-        }
-
-# Global parallel agent pool - REDUCED for API rate limits
-# Groq has 6000 TPM (tokens per minute) limits, so we use fewer workers
-parallel_pool = ParallelAgentPool(max_workers=8)  # Reduced from 20 to respect API limits
-
-class AsyncResponseCache:
-    """Advanced response caching with TTL and intelligent invalidation."""
-    
-    def __init__(self, max_size: int = 1000, ttl_seconds: int = 3600):
-        self.cache = {}
-        self.timestamps = {}
-        self.max_size = max_size
-        self.ttl_seconds = ttl_seconds
-        self.lock = threading.RLock()
-        
-        # Start cleanup thread
-        self.cleanup_thread = threading.Thread(target=self._cleanup_expired, daemon=True)
-        self.cleanup_thread.start()
-    
-    def _cleanup_expired(self):
-        """Background thread to clean up expired cache entries."""
-        while True:
-            try:
-                current_time = time.time()
-                with self.lock:
-                    expired_keys = [
-                        key for key, timestamp in self.timestamps.items()
-                        if current_time - timestamp > self.ttl_seconds
-                    ]
-                    
-                    for key in expired_keys:
-                        self.cache.pop(key, None)
-                        self.timestamps.pop(key, None)
-                
-                time.sleep(300)  # Cleanup every 5 minutes
-            except Exception as e:
-                logger.error(f"Cache cleanup error: {e}")
-                time.sleep(60)
-    
-    def get(self, key: str) -> Optional[Any]:
-        """Get cached value if not expired."""
-        with self.lock:
-            if key in self.cache:
-                if time.time() - self.timestamps[key] < self.ttl_seconds:
-                    return self.cache[key]
-                else:
-                    # Expired
-                    del self.cache[key]
-                    del self.timestamps[key]
-        return None
-    
-    def set(self, key: str, value: Any):
-        """Set cached value with timestamp."""
-        with self.lock:
-            # Size management
-            if len(self.cache) >= self.max_size:
-                # Remove oldest 20% of entries
-                sorted_items = sorted(self.timestamps.items(), key=lambda x: x[1])
-                to_remove = sorted_items[:max(1, len(sorted_items) // 5)]
-                
-                for old_key, _ in to_remove:
-                    self.cache.pop(old_key, None)
-                    self.timestamps.pop(old_key, None)
-            
-            self.cache[key] = value
-            self.timestamps[key] = time.time()
-
-# Global response cache
-response_cache = AsyncResponseCache(max_size=2000, ttl_seconds=1800)  # 30 min TTL
-
-# --- Advanced State Management ---
-class SessionManager:
-    """Manages user sessions, conversation history, and analytics."""
-    
-    def __init__(self):
-        self.sessions = {}
-        self.tool_analytics = {tool.name: {"calls": 0, "successes": 0, "failures": 0, "avg_time": 0.0} for tool in tools}
-        self.performance_metrics = {
-            "total_queries": 0,
-            "avg_response_time": 0.0,
-            "total_tool_calls": 0,
-            "uptime_start": time.time(),
-            "cache_hits": 0,
-            "parallel_executions": 0
-        }
-    
-    def create_session(self, session_id: str = None):
-        """Create a new session."""
-        if session_id is None:
-            session_id = str(uuid.uuid4())
-        
-        self.sessions[session_id] = {
-            "created_at": datetime.datetime.now(),
-            "messages": [],
-            "total_queries": 0,
-            "total_response_time": 0.0,
-            "tool_usage": {tool.name: 0 for tool in tools},
-            "cache_hits": 0,
-            "parallel_tasks": 0
-        }
-        return session_id
-    
-    def update_tool_analytics(self, tool_name: str, success: bool, execution_time: float):
-        """Update tool performance analytics."""
-        if tool_name in self.tool_analytics:
-            analytics = self.tool_analytics[tool_name]
-            analytics["calls"] += 1
-            if success:
-                analytics["successes"] += 1
-            else:
-                analytics["failures"] += 1
-            
-            # Update average time
-            total_time = analytics["avg_time"] * (analytics["calls"] - 1) + execution_time
-            analytics["avg_time"] = total_time / analytics["calls"]
-    
-    def update_performance_metrics(self, cache_hit: bool = False, parallel_execution: bool = False):
-        """Update global performance metrics."""
-        if cache_hit:
-            self.performance_metrics["cache_hits"] += 1
-        if parallel_execution:
-            self.performance_metrics["parallel_executions"] += 1
-    
-    def get_analytics_summary(self) -> Dict[str, Any]:
-        """Get comprehensive analytics summary."""
-        uptime = time.time() - self.performance_metrics["uptime_start"]
-        pool_status = parallel_pool.get_pool_status()
-        
-        return {
-            "performance": self.performance_metrics,
-            "tool_analytics": self.tool_analytics,
-            "active_sessions": len(self.sessions),
-            "uptime_hours": uptime / 3600,
-            "parallel_pool": pool_status,
-            "cache_efficiency": {
-                "hits": self.performance_metrics["cache_hits"],
-                "size": len(response_cache.cache),
-                "hit_rate": self.performance_metrics["cache_hits"] / max(1, self.performance_metrics["total_queries"])
-            }
-        }
-
-# Global session manager
+# Global instances
 session_manager = SessionManager()
+parallel_pool = ParallelAgentPool()
+gaia_evaluator = GAIAEvaluator()
 
-# --- Gradio Interface Logic ---
+# --- Helper Functions ---
+
+# Delegate GAIA evaluation to the modular evaluator
+def run_and_submit_all(profile: gr.OAuthProfile | None):
+    """Wrapper function for GAIA evaluation using the modular evaluator"""
+    return gaia_evaluator.run_evaluation(profile)
+
+# --- Core Chat Logic ---
 
 def format_chat_history(chat_history: List[List[str]]) -> List:
     """Formats Gradio's chat history into a list of LangChain messages."""
@@ -775,9 +268,7 @@ def chat_interface_logic_sync(message: str, history: List[List[str]], log_to_db:
     start_time = time.time()
     logger.info(f"Received new message: '{message}'")
     
-    # Import and validate user input (FIX for "{{" issue)
-    from src.advanced_agent_fsm import validate_user_prompt
-    
+    # Validate user input (FIX for "{{" issue)
     if not validate_user_prompt(message):
         logger.warning(f"Invalid user input rejected: '{message}'")
         yield "❌ **Invalid Input**\n\nPlease provide a meaningful question or instruction with at least 3 characters including letters or numbers.\n\n**Examples:**\n- What is the weather today?\n- Calculate 2 + 2\n- Explain quantum computing", "Please provide a valid question", session_id or session_manager.create_session()
@@ -887,27 +378,14 @@ def chat_interface_logic_sync(message: str, history: List[List[str]], log_to_db:
 
 def chat_interface_logic_parallel(message: str, history: List[List[str]], log_to_db: bool, session_id: str = None):
     """
-    Ultra-fast parallel chat interface logic with intelligent caching.
-    Uses the thread pool for concurrent processing.
+    Parallel chat interface logic with intelligent caching.
+    Uses the modular thread pool for concurrent processing.
     """
-    # Execute with parallel thread pool
-    future = parallel_pool.executor.submit(
+    # Delegate to the modular parallel pool
+    for steps, response, updated_session_id in parallel_pool.execute_agent_parallel(
         chat_interface_logic_sync, message, history, log_to_db, session_id
-    )
-    
-    try:
-        # Get the generator result
-        generator = future.result(timeout=300)  # 5 minute timeout
-        
-        for steps, response, updated_session_id in generator:
-            yield steps, response, updated_session_id
-            
-    except concurrent.futures.TimeoutError:
-        logger.error(f"Parallel execution timeout for message: {message[:50]}...")
-        yield "❌ **Timeout Error:** Request took too long to process", "Request timeout", session_id
-    except Exception as e:
-        logger.error(f"Parallel execution error: {e}")
-        yield f"❌ **Parallel Execution Error:** {e}", f"Error: {e}", session_id
+    ):
+        yield steps, response, updated_session_id
 
 def create_analytics_display():
     """Create analytics dashboard content with parallel processing metrics."""
@@ -944,7 +422,7 @@ def create_analytics_display():
             <div><strong>Parallel Tasks:</strong> {analytics['performance']['parallel_executions']}</div>
         </div>
         <div style="margin-top: 10px; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 5px; font-size: 0.9em;">
-            <strong>📊 Groq API Limits:</strong> {GROQ_TPM_LIMIT} TPM | <strong>🔄 Request Spacing:</strong> {REQUEST_SPACING}s | <strong>⏳ Buffer:</strong> {API_RATE_LIMIT_BUFFER}s
+            <strong>📊 Groq API Limits:</strong> {config.api.GROQ_TPM_LIMIT} TPM | <strong>🔄 Request Spacing:</strong> {config.performance.REQUEST_SPACING}s | <strong>⏳ Buffer:</strong> {config.performance.API_RATE_LIMIT_BUFFER}s
         </div>
     </div>
     """
@@ -1034,7 +512,7 @@ def build_gradio_interface():
                 • Advanced ReAct reasoning • GAIA evaluation • Multi-modal processing • Real-time analytics • GPU acceleration • Intelligent caching
             </p>
             <div style="margin-top: 10px; padding: 8px; background: linear-gradient(45deg, #ff6b6b, #ee5a24); color: white; border-radius: 15px; display: inline-block;">
-                <strong>📊 Groq API Safe:</strong> {GROQ_TPM_LIMIT} TPM limit respected | <strong>🔄 Smart Rate Limiting</strong>
+                <strong>📊 Groq API Safe:</strong> {config.api.GROQ_TPM_LIMIT} TPM limit respected | <strong>🔄 Smart Rate Limiting</strong>
                 {' | <strong>🎯 GAIA:</strong> ' + ('✅ Available' if GAIA_AVAILABLE else '❌ Unavailable')}
             </div>
         </div>
@@ -1203,9 +681,9 @@ def build_gradio_interface():
                             <h3>⚡ API-Safe Parallel Processing Engine</h3>
                             <div style="margin: 15px 0;">
                                 <strong>🚀 Worker Pool:</strong> {parallel_pool.max_workers} API-limited workers<br>
-                                <strong>📊 Groq Limits:</strong> {GROQ_TPM_LIMIT} TPM respected<br>
+                                <strong>📊 Groq Limits:</strong> {config.api.GROQ_TPM_LIMIT} TPM respected<br>
                                 <strong>💾 Cache System:</strong> Intelligent response caching with TTL<br>
-                                <strong>🔄 Rate Limiting:</strong> {REQUEST_SPACING}s spacing + {API_RATE_LIMIT_BUFFER}s buffer<br>
+                                <strong>🔄 Rate Limiting:</strong> {config.performance.REQUEST_SPACING}s spacing + {config.performance.API_RATE_LIMIT_BUFFER}s buffer<br>
                                 <strong>📈 Performance Boost:</strong> Up to 10x faster responses (API-safe)<br>
                             </div>
                             <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 5px;">
@@ -1320,7 +798,7 @@ def build_gradio_interface():
                 - **Vision Models**: Image and visual content analysis
                 
                 ### API-Safe Processing
-                - **Rate Limiting**: {GROQ_TPM_LIMIT} TPM limit with {REQUEST_SPACING}s spacing
+                - **Rate Limiting**: {config.api.GROQ_TPM_LIMIT} TPM limit with {config.performance.REQUEST_SPACING}s spacing
                 - **Parallel Workers**: {parallel_pool.max_workers} concurrent workers (API-safe)
                 - **Smart Caching**: Reduces API calls and improves response times
                 - **Error Recovery**: Graceful handling of rate limits and failures
@@ -1366,7 +844,7 @@ def build_gradio_interface():
                 </span>
                 <br><br>
                 <span style="background: linear-gradient(45deg, #ff6b6b, #ee5a24); padding: 3px 10px; border-radius: 15px; color: white; font-size: 0.9em;">
-                    🛡️ Groq API Protection: {GROQ_TPM_LIMIT} TPM | {REQUEST_SPACING}s spacing | {API_RATE_LIMIT_BUFFER}s buffer
+                    🛡️ Groq API Protection: {config.api.GROQ_TPM_LIMIT} TPM | {config.performance.REQUEST_SPACING}s spacing | {config.performance.API_RATE_LIMIT_BUFFER}s buffer
                 </span>
                 <br>
                 <span style="background: linear-gradient(45deg, #667eea, #764ba2); padding: 3px 10px; border-radius: 15px; color: white; font-size: 0.9em;">
@@ -1388,8 +866,7 @@ def build_gradio_interface():
             chat_history.append([message, None])
             
             # Check cache first for instant responses
-            cache_key = f"{hash(message)}_{session_id}"
-            cached_response = response_cache.get(cache_key)
+            cached_response = parallel_pool.get_cached_response(message, session_id)
             
             if cached_response:
                 session_manager.update_performance_metrics(cache_hit=True)
@@ -1416,7 +893,7 @@ def build_gradio_interface():
                 
                 # Cache successful responses
                 if final_response and not any(error_word in final_response.lower() for error_word in ["error", "failed", "exception"]):
-                    response_cache.set(cache_key, final_response)
+                    parallel_pool.cache_response(message, session_id, final_response)
             except Exception as e:
                 logger.error(f"Error in on_submit: {e}", exc_info=True)
                 error_response = f"An error occurred: {str(e)}"
@@ -1486,7 +963,7 @@ def start_knowledge_ingestion():
     """Initialize knowledge ingestion service for Hugging Face Spaces."""
     try:
         # Configure knowledge ingestion for Space environment
-        config = {
+        ingestion_config = {
             "watch_directories": ["/home/user/app/documents"],  # Space-specific path
             "poll_urls": []  # Add any URLs to poll if needed
         }
@@ -1495,7 +972,7 @@ def start_knowledge_ingestion():
         os.makedirs("/home/user/app/documents", exist_ok=True)
         
         # Initialize and start the service
-        service = run_ingestion_service(config)
+        service = KnowledgeIngestionService(ingestion_config)
         logger.info("Knowledge ingestion service started successfully")
         return service
     except Exception as e:
@@ -1534,8 +1011,8 @@ if __name__ == "__main__":
     
     # Performance info
     logger.info(f"📊 Workers: {parallel_pool.max_workers} (API rate-limited)")
-    logger.info(f"🛡️ Groq TPM Limit: {GROQ_TPM_LIMIT}")
-    logger.info(f"⏳ Request Spacing: {REQUEST_SPACING}s + {API_RATE_LIMIT_BUFFER}s buffer")
+    logger.info(f"🛡️ Groq TPM Limit: {config.api.GROQ_TPM_LIMIT}")
+    logger.info(f"⏳ Request Spacing: {config.performance.REQUEST_SPACING}s + {config.performance.API_RATE_LIMIT_BUFFER}s buffer")
     
     logger.info("="*60)
     

@@ -121,6 +121,7 @@ class FSMState(str, Enum):
     INVALID_PLAN_FAILURE = "INVALID_PLAN_FAILURE"
     TOOL_EXECUTION_FAILURE = "TOOL_EXECUTION_FAILURE"
     FINAL_FAILURE = "FINAL_FAILURE"
+    ERROR = "ERROR"  # Add ERROR state for backward compatibility
 
 # --- PYDANTIC DATA CONTRACTS FOR API RESPONSES ---
 class PlanStep(BaseModel):
