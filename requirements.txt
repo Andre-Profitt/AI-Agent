@@ -80,7 +80,7 @@ stockfish==3.28.0  # Pinned from >=3.28.0
 watchdog==3.0.0  # Pinned from >=3.0.0
 
 # Document processing
-pypdf==3.17.4  # Pinned from >=3.17.0
+pypdf>=5.1.0  # Updated to resolve llama-index compatibility (was 3.17.4)
 unstructured==0.11.8  # Pinned from >=0.11.0
 
 # Resilience and production patterns
