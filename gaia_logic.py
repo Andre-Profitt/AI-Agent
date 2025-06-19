@@ -12,6 +12,7 @@ import requests
 import pandas as pd
 from typing import List, Dict, Any, Optional
 import gradio as gr
+import re
 
 from config import config
 from src.advanced_agent_fsm import FSMReActAgent
@@ -56,50 +57,64 @@ class AdvancedGAIAAgent:
             return f"Error: {str(e)}"
     
     def _extract_clean_answer(self, response: str) -> str:
-        """Extract clean answer for GAIA submission - no formatting, just the answer"""
+        """Enhanced answer extraction for GAIA submission"""
         if not response:
             return "No answer provided"
         
         # Remove common formatting artifacts
-        import re
-        
-        # Remove LaTeX boxing
         response = re.sub(r'\$\\boxed{([^}]+)}\$', r'\1', response)
         response = re.sub(r'\\boxed{([^}]+)}', r'\1', response)
+        response = re.sub(r'final answer:', '', response, flags=re.IGNORECASE)
+        response = re.sub(r'the answer is:', '', response, flags=re.IGNORECASE)
         
-        # Remove "final answer" prefixes
-        response = re.sub(r'^(the\s+)?final\s+answer\s*(is\s*)?:?\s*', '', response, flags=re.IGNORECASE)
-        response = re.sub(r'^(my\s+)?answer\s*(is\s*)?:?\s*', '', response, flags=re.IGNORECASE)
-        
-        # Extract from common answer patterns
-        answer_match = re.search(r'(?:answer|result)\s*(?:is|:)\s*([^\n.]+)', response, re.IGNORECASE)
-        if answer_match:
-            response = answer_match.group(1)
-        
-        # Clean up
-        response = response.strip()
-        response = response.strip('"\'.,!?()[]{}')
-        
-        # For GAIA, prefer concise answers
-        if len(response) > 200:
-            lines = [line.strip() for line in response.split('\n') if line.strip()]
-            
-            # Look for the most direct answer line
+        # Handle numbered lists for multi-part answers
+        if re.match(r'^\d+\.', response.strip()):
+            lines = response.strip().split('\n')
+            answers = []
             for line in lines:
-                if len(line) < 100 and line:
-                    # Prefer short, factual answers
-                    if (any(char.isdigit() for char in line) or 
-                        len(line.split()) <= 10 or
-                        line.isupper() or  # Country codes, etc.
-                        ',' in line and len(line) < 80):  # Lists
-                        response = line
-                        break
-            
-            # If still too long, truncate
-            if len(response) > 150:
-                response = response[:150].strip()
+                match = re.match(r'^\d+\.\s*(.+)', line.strip())
+                if match:
+                    answers.append(match.group(1).strip())
+            if answers:
+                response = ', '.join(answers)
         
-        return response.strip() if response.strip() else "Unable to determine answer"
+        # Handle coordinate formats (common in GAIA)
+        coord_match = re.search(r'(\d+\.?\d*)[°º]\s*([NS])\s*,?\s*(\d+\.?\d*)[°º]\s*([EW])', response)
+        if coord_match:
+            return f"{coord_match.group(1)}°{coord_match.group(2)}, {coord_match.group(3)}°{coord_match.group(4)}"
+        
+        # Handle date formats
+        date_patterns = [
+            r'(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})',  # MM/DD/YYYY or similar
+            r'(\d{4})[/-](\d{1,2})[/-](\d{1,2})',     # YYYY-MM-DD
+            r'(\w+)\s+(\d{1,2}),?\s+(\d{4})'          # Month DD, YYYY
+        ]
+        for pattern in date_patterns:
+            if re.search(pattern, response):
+                match = re.search(pattern, response)
+                if match:
+                    return match.group(0)
+        
+        # Handle currency amounts
+        currency_match = re.search(r'[\$€£¥]\s*(\d+(?:,\d{3})*(?:\.\d{2})?)', response)
+        if currency_match:
+            return currency_match.group(0)
+        
+        # Handle percentages
+        percent_match = re.search(r'(\d+(?:\.\d+)?)\s*%', response)
+        if percent_match:
+            return percent_match.group(0)
+        
+        # Handle scientific notation
+        sci_match = re.search(r'(\d+(?:\.\d+)?)\s*[×x]\s*10\^?(-?\d+)', response)
+        if sci_match:
+            return f"{sci_match.group(1)}×10^{sci_match.group(2)}"
+        
+        # Clean up and return
+        response = response.strip()
+        response = re.sub(r'\s+', ' ', response)  # Normalize whitespace
+        
+        return response if response else "Unable to determine answer"
     
     def _update_stats(self, processing_time: float, success: bool):
         """Update performance statistics"""

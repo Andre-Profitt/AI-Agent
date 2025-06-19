@@ -55,12 +55,48 @@ class ToolExecutionResult:
     error_category: Optional[ErrorCategory]
     retry_suggestions: List[str]
 
+class CircuitBreaker:
+    """Circuit breaker pattern for fault tolerance."""
+    
+    def __init__(self, failure_threshold: int = 5, recovery_timeout: int = 60):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.failure_count = 0
+        self.last_failure_time = None
+        self.state = "closed"  # closed, open, half-open
+        
+    def call(self, func, *args, **kwargs):
+        """Execute function with circuit breaker protection."""
+        if self.state == "open":
+            if time.time() - self.last_failure_time > self.recovery_timeout:
+                self.state = "half-open"
+            else:
+                raise Exception("Circuit breaker is open")
+        
+        try:
+            result = func(*args, **kwargs)
+            if self.state == "half-open":
+                self.state = "closed"
+                self.failure_count = 0
+            return result
+            
+        except Exception as e:
+            self.failure_count += 1
+            self.last_failure_time = time.time()
+            
+            if self.failure_count >= self.failure_threshold:
+                self.state = "open"
+                logger.error(f"Circuit breaker opened after {self.failure_count} failures")
+                
+            raise e
+
 class ErrorHandler:
     """Enhanced error handling and recovery system."""
     
     def __init__(self):
         self.error_counts = {}
         self.recovery_history = {}
+        self.circuit_breakers = {}  # Add circuit breakers per tool
     
     def categorize_error(self, error_str: str) -> ErrorCategory:
         """Categorize error with enhanced granularity."""
@@ -226,4 +262,10 @@ class ErrorHandler:
     
     def get_recovery_stats(self) -> Dict[ErrorCategory, Dict[str, int]]:
         """Get recovery statistics for monitoring."""
-        return self.recovery_history.copy() 
+        return self.recovery_history.copy()
+    
+    def get_circuit_breaker(self, tool_name: str) -> CircuitBreaker:
+        """Get or create circuit breaker for tool."""
+        if tool_name not in self.circuit_breakers:
+            self.circuit_breakers[tool_name] = CircuitBreaker()
+        return self.circuit_breakers[tool_name] 

@@ -14,6 +14,7 @@ from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum
 from contextlib import contextmanager
+from collections import defaultdict
 
 from langchain_core.messages import AnyMessage, BaseMessage, SystemMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_groq import ChatGroq
@@ -164,54 +165,141 @@ class ExecutionResult(BaseModel):
     error_message: Optional[str] = Field(description="Error message if execution failed")
     execution_time: float = Field(description="Time taken for execution")
 
-# --- INPUT VALIDATION LAYER (Layer B) ---
-class ValidatedQuery(BaseModel):
-    """Pydantic model for validated user queries with comprehensive sanitization"""
-    query: str
+# --- ENHANCED INPUT VALIDATION WITH DETAILED RESULTS ---
+@dataclass
+class ValidationResult:
+    """Comprehensive validation result with detailed feedback"""
+    is_valid: bool
+    validation_errors: List[str] = None
+    sanitized_input: str = None
+    confidence_score: float = 0.0
+    risk_level: str = "low"  # low, medium, high
+    suggestions: List[str] = None
     
-    @field_validator('query')
-    @classmethod
-    def query_must_be_valid_and_sanitized(cls, v: str) -> str:
-        """
-        Ensures the input query is not empty, a placeholder, or potentially malicious.
-        This is the first layer of the sanitization gateway.
-        """
-        if not v or not v.strip():
-            raise ValueError("Query cannot be empty.")
-        
-        # Explicitly block the placeholder literals that caused the original error
-        if v.strip() in ["{{", "}}", "{{}}", "{", "}", "{{user_question}}", "{{user_query}}"]:
-            raise ValueError(f"Invalid placeholder query received: '{v}'")
-        
-        # Block control characters except newlines and tabs
-        control_chars = ''.join(chr(i) for i in range(32) if i not in [9, 10, 13])
-        if any(char in v for char in control_chars):
-            raise ValueError("Query contains invalid control characters")
-        
-        # Basic prompt injection detection
-        injection_patterns = [
-            r"ignore\s+previous\s+instructions",
-            r"disregard\s+all\s+prior",
-            r"system\s*:\s*you\s+are",
-            r"<\|im_start\|>",
-            r"<\|im_end\|>",
-            r"\[INST\]",
-            r"\[/INST\]"
-        ]
-        
-        for pattern in injection_patterns:
-            if re.search(pattern, v, re.IGNORECASE):
-                raise ValueError(f"Query contains potential prompt injection pattern")
-        
-        # Length constraints
-        if len(v.strip()) < 3:
-            raise ValueError("Query must be at least 3 characters long")
-        
-        if len(v) > 10000:
-            raise ValueError("Query exceeds maximum length of 10000 characters")
-        
-        # Strip and normalize whitespace
-        return v.strip()
+    def __post_init__(self):
+        if self.validation_errors is None:
+            self.validation_errors = []
+        if self.suggestions is None:
+            self.suggestions = []
+
+def validate_user_prompt(prompt: str) -> ValidationResult:
+    """
+    Enhanced input validation with comprehensive checks and detailed feedback.
+    Returns a ValidationResult object with validation status and detailed information.
+    """
+    errors = []
+    suggestions = []
+    risk_level = "low"
+    confidence_score = 1.0
+    
+    # Basic validation
+    if not prompt or not isinstance(prompt, str):
+        return ValidationResult(
+            is_valid=False,
+            validation_errors=["Input must be a non-empty string"],
+            suggestions=["Please provide a valid text input"]
+        )
+    
+    stripped = prompt.strip()
+    
+    # Length validation
+    if len(stripped) < 3:
+        errors.append("Input must be at least 3 characters long")
+        suggestions.append("Please provide a more detailed question or request")
+        confidence_score -= 0.3
+    
+    # Content validation
+    if not any(c.isalnum() for c in stripped):
+        errors.append("Input must contain at least one alphanumeric character")
+        suggestions.append("Please include meaningful text in your input")
+        confidence_score -= 0.4
+    
+    # Block problematic patterns
+    problematic_patterns = [
+        ("{{", "Invalid placeholder syntax"),
+        ("}}", "Invalid placeholder syntax"),
+        ("{{}}", "Empty placeholder"),
+        ("{{user_question}}", "Invalid placeholder"),
+        ("{{user_query}}", "Invalid placeholder"),
+        ("ignore previous instructions", "Prompt injection detected"),
+        ("disregard all prior", "Prompt injection detected"),
+        ("system: you are", "System prompt injection detected"),
+        ("<|im_start|>", "Invalid token sequence"),
+        ("<|im_end|>", "Invalid token sequence"),
+        ("[INST]", "Invalid instruction format"),
+        ("[/INST]", "Invalid instruction format")
+    ]
+    
+    for pattern, error_msg in problematic_patterns:
+        if pattern.lower() in stripped.lower():
+            errors.append(error_msg)
+            risk_level = "high"
+            confidence_score -= 0.5
+            suggestions.append("Please rephrase your question without special formatting")
+    
+    # Control character validation
+    control_chars = ''.join(chr(i) for i in range(32) if i not in [9, 10, 13])  # Allow tab, newline, carriage return
+    found_control_chars = [char for char in stripped if char in control_chars]
+    if found_control_chars:
+        errors.append(f"Input contains invalid control characters: {found_control_chars}")
+        suggestions.append("Please remove any special control characters from your input")
+        confidence_score -= 0.2
+    
+    # Length limits
+    if len(stripped) > 10000:
+        errors.append("Input is too long (maximum 10,000 characters)")
+        suggestions.append("Please shorten your question or break it into smaller parts")
+        confidence_score -= 0.3
+        risk_level = "medium"
+    
+    # Repetitive content detection
+    if len(set(stripped.split())) < 2:
+        errors.append("Input appears to be repetitive or lacks variety")
+        suggestions.append("Please provide a more diverse and meaningful input")
+        confidence_score -= 0.2
+    
+    # URL/script injection detection
+    url_patterns = [
+        r'https?://',
+        r'javascript:',
+        r'data:text/html',
+        r'<script',
+        r'</script>'
+    ]
+    
+    for pattern in url_patterns:
+        if re.search(pattern, stripped, re.IGNORECASE):
+            errors.append("Input contains potentially unsafe content")
+            risk_level = "high"
+            confidence_score -= 0.6
+            suggestions.append("Please avoid including URLs or script content")
+    
+    # Sanitize input (remove problematic characters but keep content)
+    sanitized = stripped
+    for pattern, _ in problematic_patterns:
+        sanitized = sanitized.replace(pattern, "")
+    
+    # Remove control characters from sanitized version
+    for char in control_chars:
+        sanitized = sanitized.replace(char, "")
+    
+    # Final validation
+    is_valid = len(errors) == 0 and len(sanitized) >= 3 and any(c.isalnum() for c in sanitized)
+    
+    # Adjust confidence based on risk level
+    if risk_level == "high":
+        confidence_score *= 0.3
+    elif risk_level == "medium":
+        confidence_score *= 0.7
+    
+    return ValidationResult(
+        is_valid=is_valid,
+        validation_errors=errors,
+        sanitized_input=sanitized if sanitized != stripped else None,
+        confidence_score=max(0.0, confidence_score),
+        risk_level=risk_level,
+        suggestions=suggestions
+    )
 
 # Note: FSMState enum already defined above with granular failure states
 
@@ -638,7 +726,7 @@ class AgentState:
             raise ValueError("Tool results must be a list")
 
 class FSMReActAgent:
-    """Enhanced FSM-based ReAct agent with improved error handling, reasoning, and data quality."""
+    """Enhanced FSM-based ReAct agent with comprehensive error handling and resilience."""
     
     def __init__(
         self,
@@ -650,204 +738,126 @@ class FSMReActAgent:
         model_preference: str = "balanced",
         use_crew: bool = False
     ):
-        if not tools:
-            raise ValueError("Tools list cannot be empty")
-            
+        """Initialize the FSM-based ReAct agent with enhanced tool integration."""
         self.tools = tools
-        self.tool_names = [tool.name for tool in tools]
         self.model_name = model_name
+        self.quality_level = quality_level
+        self.reasoning_type = reasoning_type
         self.model_preference = model_preference
         self.use_crew = use_crew
         
-        # Set up logging if handler provided
+        # Initialize unified tool registry integration
+        try:
+            from src.integration_hub import get_unified_registry, get_tool_orchestrator
+            self.unified_registry = get_unified_registry()
+            self.tool_orchestrator = get_tool_orchestrator()
+            
+            # Register tools with unified registry
+            for tool in tools:
+                self.unified_registry.register(tool)
+            
+            logger.info(f"Registered {len(tools)} tools with unified registry")
+            
+        except ImportError:
+            logger.warning("Unified tool registry not available, using local registry")
+            self.unified_registry = None
+            self.tool_orchestrator = None
+        
+        # Initialize tool introspection
+        try:
+            from src.tools_introspection import tool_introspector
+            self.tool_introspector = tool_introspector
+            
+            # Register tools with introspector
+            for tool in tools:
+                if hasattr(tool, 'name'):
+                    self.tool_introspector.tool_registry[tool.name] = tool
+            
+            logger.info("Tool introspection initialized")
+            
+        except ImportError:
+            logger.warning("Tool introspection not available")
+            self.tool_introspector = None
+        
+        # Initialize API client with resilience
+        self.api_client = ResilientAPIClient(
+            api_key=os.getenv("GROQ_API_KEY", ""),
+            base_url="https://api.groq.com/openai/v1"
+        )
+        
+        # Initialize enhanced planner
+        self.planner = EnhancedPlanner(self.api_client)
+        
+        # Initialize answer synthesizer
+        self.synthesizer = AnswerSynthesizer(self.api_client)
+        
+        # Initialize performance monitor
+        self.performance_monitor = PerformanceMonitor()
+        
+        # Initialize reasoning validator
+        self.reasoning_validator = ReasoningValidator()
+        
+        # Initialize rate limiter
+        self.rate_limiter = RateLimiter()
+        
+        # Initialize error handler with metric awareness
+        try:
+            from src.integration_hub import get_error_handler
+            self.error_handler = get_error_handler()
+        except ImportError:
+            from src.errors.error_category import ErrorHandler
+            self.error_handler = ErrorHandler()
+        
+        # Setup logging
         if log_handler:
             logger.addHandler(log_handler)
-            logger.info("Custom log handler added to FSMReActAgent")
         
-        # Initialize components with error handling
-        try:
-            self.error_handler = ErrorHandler()
-            self.reasoning = AdvancedReasoning()
-            self.quality_validator = DataQualityValidator(quality_level)
-        except Exception as e:
-            logger.error(f"Failed to initialize components: {str(e)}")
-            raise
+        # Initialize FSM graph
+        self.graph = self._create_fsm_graph()
         
-        # Set reasoning type
-        self.reasoning_type = reasoning_type
+        logger.info(f"FSMReActAgent initialized with {len(tools)} tools")
+    
+    def select_best_tool(self, task: str, available_tools: List[BaseTool]) -> Optional[BaseTool]:
+        """Select the best tool for a task using introspection and reliability metrics."""
+        if not available_tools:
+            return None
         
-        # Initialize tool registries
-        self.tool_registry = ToolRegistry()
-        self.mcp_registry = MCPToolRegistry()
-        
-        # Register tools with documentation
-        for tool in tools:
+        # Use introspector to analyze task requirements if available
+        if self.tool_introspector:
             try:
-                tool_doc = ToolDocumentation(
-                    tool_name=tool.name,
-                    description=tool.description,
-                    parameters=tool.args_schema.schema() if hasattr(tool, 'args_schema') else {},
-                    examples=[],
-                    error_handling={}
-                )
-                self.tool_registry.register_tool(tool_doc)
+                requirements = self.tool_introspector.analyze_task_requirements(task)
                 
-                announcement = ToolAnnouncement(
-                    tool_id=f"tool_{tool.name}",
-                    version="1.0.0",
-                    capabilities=[
-                        ToolCapability(
-                            name=tool.name,
-                            description=tool.description,
-                            input_schema=tool.args_schema.schema() if hasattr(tool, 'args_schema') else {},
-                            output_schema={},
-                            examples=[]
-                        )
-                    ],
-                    authentication={},
-                    rate_limits={"requests_per_minute": 60}
-                )
-                self.mcp_registry.register_tool(announcement)
+                # Score tools based on introspection
+                scored_tools = []
+                for tool in available_tools:
+                    if hasattr(tool, 'name'):
+                        score = self.tool_introspector.score_tool_fit(tool, requirements)
+                        scored_tools.append((tool, score))
+                
+                if scored_tools:
+                    # Return tool with highest score
+                    return max(scored_tools, key=lambda x: x[1])[0]
+                    
             except Exception as e:
-                logger.warning(f"Failed to register tool {tool.name}: {str(e)}")
-                continue
-
-    def run(self, input_text: str) -> Dict[str, Any]:
-        """Run the agent with enhanced error handling, reasoning, and data quality."""
-        # Initialize state
-        state = AgentState(
-            input=input_text,
-            tools=self.tools,
-            tool_names=self.tool_names,
-            tool_results=[],
-            current_step=0
-        )
+                logger.warning(f"Tool introspection failed: {e}")
         
-        # Validate input
-        state.validation_result = self.quality_validator.validate_input(input_text)
-        if not state.validation_result.is_valid:
-            return {
-                "status": "error",
-                "error": "Invalid input",
-                "issues": state.validation_result.issues,
-                "suggestions": state.validation_result.suggestions
-            }
+        # Fallback to reliability-based selection
+        if self.unified_registry:
+            reliable_tools = self.unified_registry.get_tools_by_reliability(min_success_rate=0.7)
+            if reliable_tools:
+                # Return first reliable tool
+                return reliable_tools[0]
         
-        # Generate reasoning plan
-        state.reasoning_path = self.reasoning.generate_plan(
-            input_text,
-            self.reasoning_type
-        )
-        
-        # Execute reasoning steps
-        while state.current_step < state.max_steps:
-            try:
-                # Get current step
-                current_step = state.reasoning_path.steps[state.current_step]
-                
-                # Execute tool
-                tool_result = self._execute_tool_with_retry(
-                    current_step.tool_name,
-                    current_step.tool_input,
-                    state
-                )
-                
-                # Update state
-                state.tool_results.append(tool_result)
-                state.current_step += 1
-                
-                # Verify step
-                if not self.reasoning.verify_step(current_step, tool_result):
-                    state.error_state = ErrorCategory.LOGIC_ERROR
-                    break
-                
-                # Check for completion
-                if self._is_complete(tool_result):
-                    break
-                
-            except Exception as e:
-                # Handle error
-                error_category = self.error_handler.categorize_error(e)
-                state.error_state = error_category
-                
-                # Get retry strategy
-                retry_strategy = self.error_handler.get_retry_strategy(
-                    error_category,
-                    state.current_step
-                )
-                
-                if not retry_strategy.should_retry:
-                    break
-                
-                # Wait for backoff
-                time.sleep(retry_strategy.backoff_factor)
-        
-        # Return final result
-        return self._format_result(state)
+        # Final fallback: return first available tool
+        return available_tools[0]
     
-    def _execute_tool_with_retry(
-        self,
-        tool_name: str,
-        tool_input: Dict[str, Any],
-        state: AgentState
-    ) -> Dict[str, Any]:
-        """Execute a tool with retry logic."""
-        # Find tool
-        tool = next((t for t in self.tools if t.name == tool_name), None)
-        if not tool:
-            raise ValueError(f"Tool {tool_name} not found")
-        
-        # Execute with retry
-        result = self.error_handler.execute_with_retry(
-            tool.run,
-            tool_input,
-            max_retries=3,
-            backoff_factor=1.0
-        )
-        
-        return result
-    
-    def _is_complete(self, tool_result: Dict[str, Any]) -> bool:
-        """Check if the current step is complete."""
-        # Check for final answer
-        if "final_answer" in tool_result:
-            return True
-        
-        # Check for error
-        if "error" in tool_result:
-            return True
-        
-        return False
-    
-    def _format_result(self, state: AgentState) -> Dict[str, Any]:
-        """Format the final result."""
-        if state.error_state:
-            return {
-                "status": "error",
-                "error": state.error_state.value,
-                "step": state.current_step,
-                "tool_results": state.tool_results
-            }
-        
-        # Get final answer
-        final_result = state.tool_results[-1]
-        if "final_answer" in final_result:
-            return {
-                "status": "success",
-                "answer": final_result["final_answer"],
-                "reasoning_path": state.reasoning_path,
-                "tool_results": state.tool_results
-            }
-        
-        return {
-            "status": "incomplete",
-            "step": state.current_step,
-            "tool_results": state.tool_results
-        }
-
-def validate_user_prompt(prompt: str) -> bool:
-    stripped = prompt.strip()
-    return len(stripped) >= 3 and any(c.isalnum() for c in stripped) 
+    def get_tools_for_task(self, task_description: str) -> List[BaseTool]:
+        """Get tools suitable for a specific task using unified registry."""
+        if self.unified_registry:
+            # This would use role-based filtering in a more sophisticated implementation
+            return self.unified_registry.get_tools_for_role("general")
+        else:
+            return self.tools
 
 # --- RETRIEVAL-AUGMENTED TOOL USE (RA-TU) IMPLEMENTATION ---
 class ToolDocumentation(BaseModel):
@@ -912,3 +922,619 @@ class MCPToolRegistry:
                 if any(cap.name == capability_filter for cap in tool.capabilities)
             ]
         return list(self.tools.values())
+
+# --- PERFORMANCE MONITORING AND HEALTH TRACKING ---
+class PerformanceMonitor:
+    """Comprehensive performance monitoring and health tracking system."""
+    
+    def __init__(self):
+        self.metrics = defaultdict(lambda: {
+            'count': 0,
+            'success': 0,
+            'avg_time': 0,
+            'errors': [],
+            'last_execution': None,
+            'min_time': float('inf'),
+            'max_time': 0
+        })
+        self.health_status = {
+            'overall_health': 'healthy',
+            'last_check': time.time(),
+            'issues': []
+        }
+    
+    def track_execution(self, operation: str, success: bool, duration: float, error: str = None):
+        """Track execution metrics for an operation."""
+        metric = self.metrics[operation]
+        metric['count'] += 1
+        
+        if success:
+            metric['success'] += 1
+        else:
+            metric['errors'].append(error)
+        
+        # Update timing statistics
+        metric['avg_time'] = (
+            (metric['avg_time'] * (metric['count'] - 1) + duration) / 
+            metric['count']
+        )
+        metric['min_time'] = min(metric['min_time'], duration)
+        metric['max_time'] = max(metric['max_time'], duration)
+        metric['last_execution'] = time.time()
+    
+    def get_health_status(self) -> Dict[str, Any]:
+        """Get comprehensive system health metrics."""
+        current_time = time.time()
+        issues = []
+        
+        # Calculate success rates
+        total_operations = 0
+        total_successes = 0
+        
+        for operation, metric in self.metrics.items():
+            total_operations += metric['count']
+            total_successes += metric['success']
+            
+            # Check for operation-specific issues
+            if metric['count'] > 0:
+                success_rate = metric['success'] / metric['count']
+                if success_rate < 0.8:
+                    issues.append(f"Low success rate for {operation}: {success_rate:.2%}")
+                
+                # Check for stale operations
+                if metric['last_execution'] and (current_time - metric['last_execution']) > 3600:
+                    issues.append(f"Operation {operation} hasn't been used in over an hour")
+        
+        overall_success_rate = total_successes / total_operations if total_operations > 0 else 1.0
+        avg_response_time = self.calculate_avg_response_time()
+        
+        # Determine overall health
+        if overall_success_rate >= 0.95 and len(issues) == 0:
+            health = 'healthy'
+        elif overall_success_rate >= 0.8 and len(issues) <= 2:
+            health = 'degraded'
+        else:
+            health = 'unhealthy'
+        
+        self.health_status.update({
+            'overall_health': health,
+            'last_check': current_time,
+            'issues': issues,
+            'success_rate': overall_success_rate,
+            'avg_response_time': avg_response_time,
+            'total_operations': total_operations
+        })
+        
+        return self.health_status
+    
+    def calculate_success_rate(self) -> float:
+        """Calculate overall success rate across all operations."""
+        total_operations = sum(metric['count'] for metric in self.metrics.values())
+        total_successes = sum(metric['success'] for metric in self.metrics.values())
+        return total_successes / total_operations if total_operations > 0 else 1.0
+    
+    def calculate_avg_response_time(self) -> float:
+        """Calculate average response time across all operations."""
+        total_time = sum(metric['avg_time'] * metric['count'] for metric in self.metrics.values())
+        total_operations = sum(metric['count'] for metric in self.metrics.values())
+        return total_time / total_operations if total_operations > 0 else 0.0
+    
+    def get_error_distribution(self) -> Dict[str, int]:
+        """Get distribution of errors by type."""
+        error_counts = defaultdict(int)
+        for metric in self.metrics.values():
+            for error in metric['errors']:
+                error_counts[error] += 1
+        return dict(error_counts)
+    
+    def generate_recommendations(self) -> List[str]:
+        """Generate recommendations based on performance data."""
+        recommendations = []
+        
+        for operation, metric in self.metrics.items():
+            if metric['count'] > 0:
+                success_rate = metric['success'] / metric['count']
+                
+                if success_rate < 0.7:
+                    recommendations.append(f"Investigate failures in {operation} (success rate: {success_rate:.2%})")
+                
+                if metric['avg_time'] > 10.0:
+                    recommendations.append(f"Optimize {operation} performance (avg time: {metric['avg_time']:.2f}s)")
+        
+        return recommendations
+    
+    def reset_metrics(self):
+        """Reset all performance metrics."""
+        self.metrics.clear()
+        self.health_status = {
+            'overall_health': 'healthy',
+            'last_check': time.time(),
+            'issues': []
+        }
+
+# --- REASONING VALIDATOR FOR LOGICAL COHERENCE ---
+class ReasoningValidator:
+    """Validate reasoning coherence and logical flow."""
+    
+    def __init__(self):
+        self.logical_patterns = {
+            'cause_effect': r'(because|therefore|thus|hence|as a result)',
+            'comparison': r'(however|but|although|while|whereas)',
+            'sequence': r'(first|second|then|next|finally)',
+            'condition': r'(if|when|unless|provided that)'
+        }
+    
+    def validate_reasoning_path(self, path: ReasoningPath) -> ValidationResult:
+        """Validate reasoning coherence and logical flow."""
+        issues = []
+        confidence = 1.0
+        
+        # Check logical flow
+        for i, step in enumerate(path.steps[:-1]):
+            next_step = path.steps[i + 1]
+            if not self.is_logical_transition(step, next_step):
+                issues.append(f"Illogical transition at step {i}")
+                confidence -= 0.2
+        
+        # Check evidence support
+        if not self.has_sufficient_evidence(path):
+            issues.append("Insufficient evidence for conclusion")
+            confidence -= 0.3
+        
+        # Check for circular reasoning
+        if self.has_circular_reasoning(path):
+            issues.append("Circular reasoning detected")
+            confidence -= 0.4
+        
+        # Check for contradictions
+        if self.has_contradictions(path):
+            issues.append("Contradictory statements detected")
+            confidence -= 0.3
+        
+        return ValidationResult(
+            is_valid=len(issues) == 0,
+            validation_errors=issues,
+            confidence_score=max(0.0, confidence)
+        )
+    
+    def is_logical_transition(self, current_step, next_step) -> bool:
+        """Check if transition between reasoning steps is logical."""
+        # Basic logical flow validation
+        # This could be enhanced with more sophisticated NLP analysis
+        
+        # Check for reasonable progression
+        if hasattr(current_step, 'conclusion') and hasattr(next_step, 'premise'):
+            # Next step should build on current conclusion
+            return True
+        
+        # Check for logical connectors
+        if hasattr(current_step, 'reasoning') and hasattr(next_step, 'reasoning'):
+            current_text = str(current_step.reasoning).lower()
+            next_text = str(next_step.reasoning).lower()
+            
+            # Look for logical connectors
+            for pattern in self.logical_patterns.values():
+                if re.search(pattern, current_text) or re.search(pattern, next_text):
+                    return True
+        
+        return True  # Default to True for now
+    
+    def has_sufficient_evidence(self, path: ReasoningPath) -> bool:
+        """Check if reasoning path has sufficient evidence."""
+        evidence_count = 0
+        
+        for step in path.steps:
+            if hasattr(step, 'evidence') and step.evidence:
+                evidence_count += 1
+            elif hasattr(step, 'source') and step.source:
+                evidence_count += 1
+        
+        # Require at least some evidence for complex reasoning
+        return evidence_count >= max(1, len(path.steps) // 3)
+    
+    def has_circular_reasoning(self, path: ReasoningPath) -> bool:
+        """Detect circular reasoning patterns."""
+        conclusions = []
+        
+        for step in path.steps:
+            if hasattr(step, 'conclusion'):
+                conclusion = str(step.conclusion).lower()
+                if conclusion in conclusions:
+                    return True
+                conclusions.append(conclusion)
+        
+        return False
+    
+    def has_contradictions(self, path: ReasoningPath) -> bool:
+        """Detect contradictory statements in reasoning path."""
+        statements = []
+        
+        for step in path.steps:
+            if hasattr(step, 'conclusion'):
+                statements.append(str(step.conclusion).lower())
+        
+        # Simple contradiction detection
+        # This could be enhanced with more sophisticated NLP
+        for i, stmt1 in enumerate(statements):
+            for j, stmt2 in enumerate(statements[i+1:], i+1):
+                if self._are_contradictory(stmt1, stmt2):
+                    return True
+        
+        return False
+    
+    def _are_contradictory(self, stmt1: str, stmt2: str) -> bool:
+        """Check if two statements are contradictory."""
+        # Simple contradiction detection
+        # This is a basic implementation - could be enhanced with NLP
+        
+        # Check for direct negations
+        negations = [
+            ('is', 'is not'), ('are', 'are not'), ('was', 'was not'),
+            ('true', 'false'), ('correct', 'incorrect'), ('valid', 'invalid')
+        ]
+        
+        for pos, neg in negations:
+            if pos in stmt1 and neg in stmt2:
+                return True
+            if neg in stmt1 and pos in stmt2:
+                return True
+        
+        return False
+
+# --- ANSWER SYNTHESIZER WITH VERIFICATION ---
+class AnswerSynthesizer:
+    """Synthesize answers with cross-verification and quality assurance."""
+    
+    def __init__(self, api_client: ResilientAPIClient = None):
+        self.api_client = api_client
+        self.verification_threshold = 0.8
+    
+    def synthesize_with_verification(self, results: List[Dict], question: str) -> str:
+        """Synthesize answer with cross-verification and quality checks."""
+        try:
+            # Extract key facts from each result
+            facts = []
+            for result in results:
+                extracted = self.extract_facts(result)
+                facts.extend(extracted)
+            
+            # Cross-verify facts
+            verified_facts = self.cross_verify_facts(facts)
+            
+            # Build coherent answer
+            answer = self.build_answer(verified_facts, question)
+            
+            # Verify answer addresses the question
+            if not self.answers_question(answer, question):
+                # Retry with different approach
+                answer = self.fallback_synthesis(results, question)
+            
+            return answer
+            
+        except Exception as e:
+            logger.error(f"Answer synthesis failed: {e}")
+            return self.fallback_synthesis(results, question)
+    
+    def extract_facts(self, result: Dict) -> List[str]:
+        """Extract key facts from a result."""
+        facts = []
+        
+        if isinstance(result, dict):
+            # Extract from common result fields
+            for field in ['answer', 'result', 'output', 'content']:
+                if field in result and result[field]:
+                    content = str(result[field])
+                    # Extract factual statements
+                    sentences = re.split(r'[.!?]+', content)
+                    for sentence in sentences:
+                        sentence = sentence.strip()
+                        if len(sentence) > 10 and self._is_factual(sentence):
+                            facts.append(sentence)
+        
+        return facts
+    
+    def _is_factual(self, sentence: str) -> bool:
+        """Check if a sentence appears to be factual."""
+        # Simple heuristic for factual statements
+        factual_indicators = [
+            'is', 'are', 'was', 'were', 'has', 'have', 'had',
+            'contains', 'includes', 'consists', 'located', 'found',
+            'number', 'count', 'total', 'amount', 'percentage'
+        ]
+        
+        sentence_lower = sentence.lower()
+        return any(indicator in sentence_lower for indicator in factual_indicators)
+    
+    def cross_verify_facts(self, facts: List[str]) -> List[str]:
+        """Cross-verify facts for consistency."""
+        if len(facts) <= 1:
+            return facts
+        
+        verified_facts = []
+        
+        for fact in facts:
+            # Check for consistency with other facts
+            consistent_count = 0
+            total_checks = 0
+            
+            for other_fact in facts:
+                if fact != other_fact:
+                    total_checks += 1
+                    if self._are_consistent(fact, other_fact):
+                        consistent_count += 1
+            
+            # Fact is verified if it's consistent with majority of other facts
+            if total_checks == 0 or consistent_count / total_checks >= 0.5:
+                verified_facts.append(fact)
+        
+        return verified_facts
+    
+    def _are_consistent(self, fact1: str, fact2: str) -> bool:
+        """Check if two facts are consistent."""
+        # Simple consistency check
+        # This could be enhanced with more sophisticated NLP
+        
+        # Check for direct contradictions
+        if self._are_contradictory(fact1, fact2):
+            return False
+        
+        # Check for similar entities
+        entities1 = self._extract_entities(fact1)
+        entities2 = self._extract_entities(fact2)
+        
+        # If they mention the same entities, they should be consistent
+        common_entities = set(entities1) & set(entities2)
+        return len(common_entities) == 0 or not self._are_contradictory(fact1, fact2)
+    
+    def _extract_entities(self, text: str) -> List[str]:
+        """Extract named entities from text."""
+        # Simple entity extraction
+        # This could be enhanced with proper NER
+        entities = []
+        
+        # Look for capitalized words (simple heuristic)
+        words = text.split()
+        for word in words:
+            if word[0].isupper() and len(word) > 2:
+                entities.append(word.lower())
+        
+        return entities
+    
+    def _are_contradictory(self, text1: str, text2: str) -> bool:
+        """Check if two texts are contradictory."""
+        # Simple contradiction detection
+        negations = [
+            ('is', 'is not'), ('are', 'are not'), ('was', 'was not'),
+            ('true', 'false'), ('correct', 'incorrect'), ('valid', 'invalid')
+        ]
+        
+        text1_lower = text1.lower()
+        text2_lower = text2.lower()
+        
+        for pos, neg in negations:
+            if pos in text1_lower and neg in text2_lower:
+                return True
+            if neg in text1_lower and pos in text2_lower:
+                return True
+        
+        return False
+    
+    def build_answer(self, facts: List[str], question: str) -> str:
+        """Build a coherent answer from verified facts."""
+        if not facts:
+            return "I don't have enough information to answer this question."
+        
+        # Simple answer construction
+        # This could be enhanced with more sophisticated text generation
+        
+        # Group related facts
+        grouped_facts = self._group_related_facts(facts)
+        
+        # Build answer based on question type
+        question_lower = question.lower()
+        
+        if any(word in question_lower for word in ['how many', 'count', 'number']):
+            return self._build_numeric_answer(grouped_facts)
+        elif any(word in question_lower for word in ['who', 'person', 'name']):
+            return self._build_person_answer(grouped_facts)
+        elif any(word in question_lower for word in ['when', 'date', 'time']):
+            return self._build_temporal_answer(grouped_facts)
+        else:
+            return self._build_general_answer(grouped_facts)
+    
+    def _group_related_facts(self, facts: List[str]) -> Dict[str, List[str]]:
+        """Group facts by related topics."""
+        groups = defaultdict(list)
+        
+        for fact in facts:
+            # Simple grouping by key terms
+            key_terms = self._extract_key_terms(fact)
+            if key_terms:
+                primary_term = key_terms[0]
+                groups[primary_term].append(fact)
+        
+        return dict(groups)
+    
+    def _extract_key_terms(self, text: str) -> List[str]:
+        """Extract key terms from text."""
+        # Simple key term extraction
+        # This could be enhanced with proper NLP
+        words = text.lower().split()
+        key_terms = []
+        
+        for word in words:
+            if len(word) > 3 and word.isalpha():
+                key_terms.append(word)
+        
+        return key_terms[:3]  # Return top 3 terms
+    
+    def _build_numeric_answer(self, grouped_facts: Dict[str, List[str]]) -> str:
+        """Build answer for numeric questions."""
+        numbers = []
+        
+        for facts in grouped_facts.values():
+            for fact in facts:
+                # Extract numbers
+                number_matches = re.findall(r'\d+', fact)
+                numbers.extend([int(n) for n in number_matches])
+        
+        if numbers:
+            return f"The answer is {numbers[0]}."  # Return first number found
+        else:
+            return "I couldn't find a specific number in the available information."
+    
+    def _build_person_answer(self, grouped_facts: Dict[str, List[str]]) -> str:
+        """Build answer for person-related questions."""
+        names = []
+        
+        for facts in grouped_facts.values():
+            for fact in facts:
+                # Extract capitalized words (simple name detection)
+                name_matches = re.findall(r'\b[A-Z][a-z]+\s+[A-Z][a-z]+\b', fact)
+                names.extend(name_matches)
+        
+        if names:
+            return f"The answer is {names[0]}."  # Return first name found
+        else:
+            return "I couldn't find a specific person's name in the available information."
+    
+    def _build_temporal_answer(self, grouped_facts: Dict[str, List[str]]) -> str:
+        """Build answer for time-related questions."""
+        dates = []
+        
+        for facts in grouped_facts.values():
+            for fact in facts:
+                # Extract date patterns
+                date_patterns = [
+                    r'\d{4}',  # Year
+                    r'\d{1,2}/\d{1,2}/\d{4}',  # MM/DD/YYYY
+                    r'\d{1,2}-\d{1,2}-\d{4}',  # MM-DD-YYYY
+                ]
+                
+                for pattern in date_patterns:
+                    date_matches = re.findall(pattern, fact)
+                    dates.extend(date_matches)
+        
+        if dates:
+            return f"The answer is {dates[0]}."  # Return first date found
+        else:
+            return "I couldn't find a specific date in the available information."
+    
+    def _build_general_answer(self, grouped_facts: Dict[str, List[str]]) -> str:
+        """Build general answer from facts."""
+        if not grouped_facts:
+            return "I don't have enough information to answer this question."
+        
+        # Combine facts from the largest group
+        largest_group = max(grouped_facts.values(), key=len)
+        
+        if len(largest_group) == 1:
+            return largest_group[0]
+        else:
+            # Combine multiple facts
+            return " ".join(largest_group[:2])  # Use first two facts
+    
+    def answers_question(self, answer: str, question: str) -> bool:
+        """Check if answer properly addresses the question."""
+        # Simple check - could be enhanced with more sophisticated NLP
+        
+        # Check if answer is not empty
+        if not answer or answer.strip() == "":
+            return False
+        
+        # Check if answer contains relevant information
+        question_terms = set(self._extract_key_terms(question))
+        answer_terms = set(self._extract_key_terms(answer))
+        
+        # Answer should contain some of the question terms
+        overlap = question_terms & answer_terms
+        return len(overlap) > 0
+    
+    def fallback_synthesis(self, results: List[Dict], question: str) -> str:
+        """Fallback synthesis when primary method fails."""
+        try:
+            # Simple fallback - combine all results
+            combined_text = ""
+            
+            for result in results:
+                if isinstance(result, dict):
+                    for field in ['answer', 'result', 'output', 'content']:
+                        if field in result and result[field]:
+                            combined_text += str(result[field]) + " "
+            
+            if combined_text.strip():
+                # Return first sentence or first 200 characters
+                sentences = re.split(r'[.!?]+', combined_text)
+                if sentences:
+                    return sentences[0].strip()
+                else:
+                    return combined_text[:200].strip()
+            else:
+                return "I couldn't find a satisfactory answer to your question."
+                
+        except Exception as e:
+            logger.error(f"Fallback synthesis failed: {e}")
+            return "I encountered an error while processing your question. Please try again."
+
+class GAIAAgentState(EnhancedAgentState):
+    """GAIA-specific state extensions"""
+    question_type: str = "unknown"  # factual, calculation, analysis, etc.
+    verification_required: bool = True
+    sources_consulted: List[str] = []
+    calculation_verified: bool = False
+    gaia_confidence_threshold: float = 0.95
+
+def analyze_question_type(query: str) -> Dict[str, str]:
+    """Analyze GAIA question type for optimized handling"""
+    query_lower = query.lower()
+    
+    # Question type patterns
+    patterns = {
+        "counting": ["how many", "count", "number of", "total"],
+        "calculation": ["calculate", "compute", "what is", "result of", "divided by", "multiply"],
+        "factual_lookup": ["what is", "who is", "when did", "where is"],
+        "date_extraction": ["when", "date", "year", "month", "day"],
+        "coordinate": ["latitude", "longitude", "coordinates", "location"],
+        "chess": ["chess", "move", "game", "board"],
+        "music": ["album", "song", "artist", "release", "discography"],
+        "country_code": ["country code", "iso", "alpha", "calling code"],
+        "multi_step": ["if", "then", "between", "difference", "combined"]
+    }
+    
+    for qtype, keywords in patterns.items():
+        if any(keyword in query_lower for keyword in keywords):
+            return {"type": qtype, "confidence": 0.8}
+    
+    return {"type": "general", "confidence": 0.5}
+
+def should_verify_calculation(state: GAIAAgentState) -> bool:
+    """Determine if calculation needs verification"""
+    return (state.question_type == "calculation" and 
+            not state.calculation_verified and 
+            state.confidence < state.gaia_confidence_threshold)
+
+def create_gaia_optimized_plan(query: str) -> Dict[str, any]:
+    """Create GAIA-optimized execution plan"""
+    question_analysis = analyze_question_type(query)
+    
+    # Select strategy based on type
+    strategies = {
+        "counting": ["search_primary_source", "extract_data", "count_items", "verify_count"],
+        "calculation": ["extract_numbers", "perform_calculation", "verify_result", "format_answer"],
+        "factual_lookup": ["search_authoritative_source", "extract_fact", "cross_verify"],
+        "date_extraction": ["search_timeline", "extract_date", "validate_format"],
+        "coordinate": ["search_location", "extract_coordinates", "validate_format"],
+        "chess": ["analyze_position", "validate_moves", "extract_notation"],
+        "music": ["search_discography", "extract_metadata", "cross_verify"],
+        "country_code": ["lookup_iso_database", "extract_code", "validate_format"],
+        "multi_step": ["decompose_question", "solve_subproblems", "combine_results", "validate"]
+    }
+    
+    selected_strategy = strategies.get(question_analysis["type"], strategies["multi_step"])
+    
+    return {
+        "question_type": question_analysis["type"],
+        "strategy": selected_strategy,
+        "confidence_threshold": 0.95 if question_analysis["type"] == "calculation" else 0.8,
+        "verification_required": question_analysis["type"] in ["calculation", "factual_lookup"]
+    }

@@ -9,7 +9,12 @@ from src.tools import (
     semantic_search_tool,
     python_interpreter,
     tavily_search,
-    file_reader
+    file_reader,
+    get_enhanced_tools,
+    get_production_tools,
+    get_interactive_tools,
+    get_tool_schema,
+    get_available_tools
 )
 import sys
 
@@ -192,3 +197,32 @@ class TestFileReader:
         result = file_reader("test.pdf")
         
         assert "Page 1 content" in result 
+
+def test_enhanced_tools_discoverable():
+    tools = get_enhanced_tools()
+    assert len(tools) > 0
+    for tool in tools:
+        assert hasattr(tool, 'name')
+        schema = get_tool_schema(tool.name)
+        assert 'name' in schema
+
+def test_production_tools_discoverable():
+    tools = get_production_tools()
+    assert len(tools) > 0
+    for tool in tools:
+        assert hasattr(tool, 'name')
+        schema = get_tool_schema(tool.name)
+        assert 'name' in schema
+
+def test_interactive_tools_discoverable():
+    tools = get_interactive_tools()
+    assert len(tools) > 0
+    for tool in tools:
+        assert hasattr(tool, 'name')
+        schema = get_tool_schema(tool.name)
+        assert 'name' in schema
+
+def test_introspection_lists_tools():
+    available = get_available_tools()
+    assert isinstance(available, list)
+    assert len(available) > 0 

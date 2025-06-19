@@ -7,8 +7,18 @@ from typing import Optional, List, Dict, Any
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 import pandas as pd
-from sentence_transformers import SentenceTransformer
-import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Try to import sentence transformers with fallback
+try:
+    from sentence_transformers import SentenceTransformer
+    import numpy as np
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
+    logger.warning("sentence_transformers not available - semantic search disabled")
 
 class SemanticSearchInput(BaseModel):
     """Input schema for semantic search tool."""
@@ -29,6 +39,9 @@ def semantic_search_tool(query: str, filename: str, top_k: int = 3) -> str:
     Returns:
         str: Search results or error message
     """
+    if not SENTENCE_TRANSFORMERS_AVAILABLE:
+        return "Error: sentence_transformers not available. Please install with: pip install sentence-transformers"
+    
     try:
         if not os.path.exists(filename):
             return f"Error: Knowledge base file not found: {filename}"

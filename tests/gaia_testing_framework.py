@@ -52,6 +52,28 @@ class GAIATestSuite:
         self.questions = self._create_comprehensive_test_set()
         self.results: List[AgentTestResult] = []
         
+        # Add regression test suite
+        self.regression_tests = [
+            {
+                "id": "edge_case_1",
+                "question": "What is the result of 0 divided by 0?",
+                "expected_behavior": "handle_gracefully",
+                "category": "error_handling"
+            },
+            {
+                "id": "edge_case_2", 
+                "question": "Parse this JSON: {invalid json}",
+                "expected_behavior": "return_error_message",
+                "category": "error_handling"
+            },
+            {
+                "id": "performance_1",
+                "question": "Calculate the 50th Fibonacci number",
+                "expected_behavior": "complete_within_30s",
+                "category": "performance"
+            }
+        ]
+        
     def _create_comprehensive_test_set(self) -> List[GAIAQuestion]:
         """Create comprehensive GAIA-style test questions across domains."""
         return [
@@ -681,7 +703,7 @@ class GAIATestSuite:
 
         system_prompt = (
             "You are an automated grader. You will get a question, correct answer, and agent answer. "
-            "Return strictly JSON as {\\"score\\": \\"Pass|Fail\\", \\"justification\\": \\"...\\"}."
+            'Return strictly JSON as {"score": "Pass|Fail", "justification": "..."}.'
         )
         user_prompt = f"Question: {result.question}\nCorrect: {result.expected_answer}\nAgent: {result.agent_answer}"
 
@@ -701,6 +723,45 @@ class GAIATestSuite:
             self._grader = False
             result.error_messages.append(f"GraderError:{e}")
         return result
+
+    def run_regression_tests(self, agent) -> Dict[str, Any]:
+        """Run regression tests to ensure stability."""
+        results = []
+        
+        for test in self.regression_tests:
+            start_time = time.time()
+            try:
+                result = agent(test["question"])
+                passed = self._check_expected_behavior(
+                    result, test["expected_behavior"], time.time() - start_time
+                )
+                results.append({
+                    "test_id": test["id"],
+                    "passed": passed,
+                    "category": test["category"]
+                })
+            except Exception as e:
+                results.append({
+                    "test_id": test["id"],
+                    "passed": False,
+                    "error": str(e)
+                })
+                
+        return {
+            "total_tests": len(results),
+            "passed": sum(1 for r in results if r.get("passed", False)),
+            "results": results
+        }
+    
+    def _check_expected_behavior(self, result, expected_behavior, duration):
+        """Check if result matches expected behavior."""
+        if expected_behavior == "handle_gracefully":
+            return "error" not in str(result).lower() or "unable" in str(result).lower()
+        elif expected_behavior == "return_error_message":
+            return "error" in str(result).lower() or "invalid" in str(result).lower()
+        elif expected_behavior == "complete_within_30s":
+            return duration < 30
+        return True
 
 def main():
     """Main function for standalone testing."""
