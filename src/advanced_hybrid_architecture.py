@@ -1,1001 +1,678 @@
 """
-Advanced AI Agent Architecture Implementation
-A comprehensive framework combining FSM, ReAct, and Chain of Thought approaches
-Integrated with existing codebase structure
+Advanced Hybrid AI Agent Architecture
+Combining FSM, ReAct, and Chain of Thought approaches with advanced features
 """
 
 import asyncio
 import json
 import logging
 import time
-from abc import ABC, abstractmethod
-from collections import defaultdict, deque
+from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Dict, List, Optional, Set, Tuple, Any, Callable, Union
 import numpy as np
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+import threading
+from collections import defaultdict, deque
+import random
 import hashlib
-import pickle
-import operator
-from datetime import datetime
-from contextlib import contextmanager
+from datetime import datetime, timedelta
 
-# Import existing codebase components
-from src.advanced_agent_fsm import (
-    FSMReActAgent, EnhancedAgentState, ResilientAPIClient, 
-    PlanResponse, PlanStep, ValidationResult, validate_user_prompt
-)
-from src.tools.base_tool import BaseTool
-from src.reasoning.reasoning_path import ReasoningPath, ReasoningType
-from src.errors.error_category import ErrorCategory
-from src.core.services.data_quality import DataQualityLevel
+# Import existing components with relative imports
+try:
+    from .advanced_agent_fsm import FSMReActAgent
+    from .tools.base_tool import BaseTool
+    from .tools.semantic_search_tool import SemanticSearchTool
+    from .tools.python_interpreter import PythonInterpreter
+    from .tools.weather import WeatherTool
+except ImportError:
+    # Fallback for direct execution
+    from advanced_agent_fsm import FSMReActAgent
+    from tools.base_tool import BaseTool
+    from tools.semantic_search_tool import SemanticSearchTool
+    from tools.python_interpreter import PythonInterpreter
+    from tools.weather import WeatherTool
+
+# Import the new Optimized Chain of Thought system
+try:
+    from .optimized_chain_of_thought import (
+        OptimizedChainOfThought, ReasoningPath, ReasoningStep, ReasoningType,
+        ComplexityAnalyzer, TemplateLibrary, ReasoningCache, MultiPathReasoning,
+        MetacognitiveLayer
+    )
+except ImportError:
+    # Fallback for direct execution
+    from optimized_chain_of_thought import (
+        OptimizedChainOfThought, ReasoningPath, ReasoningStep, ReasoningType,
+        ComplexityAnalyzer, TemplateLibrary, ReasoningCache, MultiPathReasoning,
+        MetacognitiveLayer
+    )
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # =============================
-# Core Data Structures
+# Enhanced Data Structures
 # =============================
+
+class AgentMode(Enum):
+    """Enhanced agent operation modes"""
+    FSM_REACT = auto()           # Finite State Machine with ReAct
+    CHAIN_OF_THOUGHT = auto()    # Optimized Chain of Thought
+    HYBRID_ADAPTIVE = auto()     # Adaptive mode selection
+    MULTI_AGENT = auto()         # Multi-agent collaboration
+    EMERGENT_BEHAVIOR = auto()   # Emergent behavior detection
+    PROBABILISTIC_FSM = auto()   # Probabilistic FSM
+    HIERARCHICAL_FSM = auto()    # Hierarchical FSM
+    PARALLEL_REASONING = auto()  # Parallel reasoning paths
 
 @dataclass
 class AgentState:
-    """Represents the current state of an agent"""
-    name: str
-    data: Dict[str, Any] = field(default_factory=dict)
-    confidence: float = 1.0
+    """Enhanced agent state with CoT integration"""
+    mode: AgentMode
+    current_query: str
+    reasoning_path: Optional[ReasoningPath] = None
+    fsm_state: Optional[str] = None
+    confidence: float = 0.0
+    execution_time: float = 0.0
+    metadata: Dict[str, Any] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
-    
+
 @dataclass
-class Transition:
-    """Represents a state transition"""
-    from_state: str
-    to_state: str
-    condition: Callable
-    probability: float = 1.0
-    action: Optional[Callable] = None
-    
-@dataclass
-class ReasoningStep:
-    """Represents a step in chain of thought reasoning"""
-    step_id: int
-    thought: str
-    action: Optional[str] = None
-    observation: Optional[str] = None
-    confidence: float = 1.0
-    
-@dataclass
-class Tool:
-    """Represents an external tool that agents can use"""
-    name: str
-    description: str
-    function: Callable
-    input_schema: Dict[str, Any]
-    output_schema: Dict[str, Any]
+class PerformanceMetrics:
+    """Enhanced performance tracking"""
+    total_queries: int = 0
+    mode_usage: Dict[AgentMode, int] = field(default_factory=dict)
+    average_confidence: float = 0.0
+    average_execution_time: float = 0.0
+    cache_hit_rate: float = 0.0
+    cot_performance: Dict[str, Any] = field(default_factory=dict)
+    fsm_performance: Dict[str, Any] = field(default_factory=dict)
 
 # =============================
-# Enhanced FSM Implementation
+# Enhanced Hybrid Agent
 # =============================
 
-class ProbabilisticFSM:
-    """Enhanced FSM with probabilistic transitions and learning capabilities"""
+class AdvancedHybridAgent:
+    """Advanced hybrid agent with CoT integration"""
     
-    def __init__(self, name: str):
+    def __init__(self, name: str, config: Optional[Dict[str, Any]] = None):
         self.name = name
-        self.states: Dict[str, AgentState] = {}
-        self.transitions: List[Transition] = []
-        self.current_state: Optional[AgentState] = None
-        self.state_history: deque = deque(maxlen=100)
-        self.transition_history: deque = deque(maxlen=1000)
-        self.learned_transitions: Dict[Tuple[str, str], float] = {}
+        self.config = config or {}
         
-    def add_state(self, state: AgentState):
-        """Add a state to the FSM"""
-        self.states[state.name] = state
-        
-    def add_transition(self, transition: Transition):
-        """Add a transition between states"""
-        self.transitions.append(transition)
-        
-    def set_initial_state(self, state_name: str):
-        """Set the initial state"""
-        if state_name not in self.states:
-            raise ValueError(f"State {state_name} not found")
-        self.current_state = self.states[state_name]
-        self.state_history.append(self.current_state)
-        
-    def evaluate_transitions(self) -> List[Tuple[Transition, float]]:
-        """Evaluate all possible transitions from current state"""
-        if not self.current_state:
-            return []
-            
-        possible_transitions = []
-        for transition in self.transitions:
-            if transition.from_state == self.current_state.name:
-                if transition.condition(self.current_state):
-                    # Apply learned probabilities
-                    key = (transition.from_state, transition.to_state)
-                    learned_prob = self.learned_transitions.get(key, transition.probability)
-                    final_prob = 0.7 * transition.probability + 0.3 * learned_prob
-                    possible_transitions.append((transition, final_prob))
-                    
-        return sorted(possible_transitions, key=lambda x: x[1], reverse=True)
-        
-    def execute_transition(self, transition: Transition):
-        """Execute a state transition"""
-        if transition.action:
-            transition.action(self.current_state)
-            
-        self.current_state = self.states[transition.to_state]
-        self.state_history.append(self.current_state)
-        self.transition_history.append((transition, time.time()))
-        
-        # Update learned probabilities
-        self.update_learning(transition)
-        
-    def update_learning(self, transition: Transition):
-        """Update learned transition probabilities based on success"""
-        key = (transition.from_state, transition.to_state)
-        current = self.learned_transitions.get(key, transition.probability)
-        # Simple exponential moving average
-        self.learned_transitions[key] = 0.9 * current + 0.1
-        
-    def step(self) -> bool:
-        """Execute one step of the FSM"""
-        transitions = self.evaluate_transitions()
-        if not transitions:
-            return False
-            
-        # Probabilistic selection
-        if len(transitions) == 1:
-            selected = transitions[0][0]
-        else:
-            probs = [t[1] for t in transitions]
-            probs = np.array(probs) / sum(probs)
-            idx = np.random.choice(len(transitions), p=probs)
-            selected = transitions[idx][0]
-            
-        self.execute_transition(selected)
-        return True
-
-# =============================
-# Hierarchical FSM
-# =============================
-
-class HierarchicalFSM(ProbabilisticFSM):
-    """Hierarchical FSM with parent-child relationships"""
-    
-    def __init__(self, name: str):
-        super().__init__(name)
-        self.child_fsms: Dict[str, ProbabilisticFSM] = {}
-        self.parent_fsm: Optional[HierarchicalFSM] = None
-        
-    def add_child_fsm(self, state_name: str, child_fsm: ProbabilisticFSM):
-        """Add a child FSM to a state"""
-        if state_name not in self.states:
-            raise ValueError(f"State {state_name} not found")
-        self.child_fsms[state_name] = child_fsm
-        if isinstance(child_fsm, HierarchicalFSM):
-            child_fsm.parent_fsm = self
-            
-    def step(self) -> bool:
-        """Execute one step, including child FSMs"""
-        # Check if current state has a child FSM
-        if self.current_state and self.current_state.name in self.child_fsms:
-            child_fsm = self.child_fsms[self.current_state.name]
-            child_result = child_fsm.step()
-            
-            # If child FSM completed, transition in parent
-            if not child_result:
-                return super().step()
-            return True
-        else:
-            return super().step()
-
-# =============================
-# Advanced ReAct Implementation
-# =============================
-
-class ReActAgent:
-    """Enhanced ReAct agent with parallel reasoning and dynamic tool discovery"""
-    
-    def __init__(self, name: str, tools: List[BaseTool], max_steps: int = 10):
-        self.name = name
-        self.tools = {tool.name: tool for tool in tools}
-        self.max_steps = max_steps
-        self.reasoning_history: List[ReasoningStep] = []
-        self.tool_usage_stats: Dict[str, int] = defaultdict(int)
-        self.discovered_tools: Set[str] = set()
-        self.executor = ThreadPoolExecutor(max_workers=4)
-        
-    def think(self, observation: str, context: Dict[str, Any]) -> str:
-        """Generate a thought based on observation"""
-        # Simplified - in practice, this would call an LLM
-        thought = f"Analyzing: {observation}. Context indicates we need to use available tools."
-        return thought
-        
-    def act(self, thought: str, context: Dict[str, Any]) -> Tuple[str, Any]:
-        """Decide on an action based on thought"""
-        # Simplified tool selection - in practice, use LLM
-        available_tools = list(self.tools.keys())
-        if available_tools:
-            selected_tool = available_tools[0]  # Simple selection
-            self.tool_usage_stats[selected_tool] += 1
-            return selected_tool, {}
-        return "no_action", None
-        
-    def execute_tool(self, tool_name: str, args: Dict[str, Any]) -> str:
-        """Execute a tool and return observation"""
-        if tool_name not in self.tools:
-            return f"Tool {tool_name} not found"
-            
-        tool = self.tools[tool_name]
+        # Initialize core components
         try:
-            result = tool.run(**args)
-            return json.dumps(result)
+            self.fsm_agent = FSMReActAgent(
+                name=f"{name}_fsm",
+                tools=self._initialize_tools(),
+                config=self.config.get('fsm', {})
+            )
         except Exception as e:
-            return f"Error executing tool: {str(e)}"
-            
-    async def parallel_reasoning(self, query: str, context: Dict[str, Any], 
-                               num_paths: int = 3) -> List[List[ReasoningStep]]:
-        """Execute multiple reasoning paths in parallel"""
-        tasks = []
-        for i in range(num_paths):
-            task = asyncio.create_task(self.reasoning_path(query, context.copy(), i))
-            tasks.append(task)
-            
-        paths = await asyncio.gather(*tasks)
-        return paths
+            logger.warning(f"FSM agent initialization failed: {e}")
+            self.fsm_agent = None
         
-    async def reasoning_path(self, query: str, context: Dict[str, Any], 
-                           path_id: int) -> List[ReasoningStep]:
-        """Execute a single reasoning path"""
-        steps = []
-        observation = query
-        
-        for step_num in range(self.max_steps):
-            # Think
-            thought = self.think(observation, context)
-            
-            # Act
-            action, args = self.act(thought, context)
-            
-            # Execute
-            if action != "no_action":
-                observation = self.execute_tool(action, args or {})
-            else:
-                observation = "No action taken"
-                
-            step = ReasoningStep(
-                step_id=step_num,
-                thought=thought,
-                action=action,
-                observation=observation,
-                confidence=0.8 + 0.2 * np.random.random()  # Simulated confidence
-            )
-            steps.append(step)
-            
-            # Check if we have a final answer
-            if "final_answer" in observation.lower():
-                break
-                
-        return steps
-        
-    def discover_tool(self, tool: BaseTool):
-        """Dynamically discover and add a new tool"""
-        self.tools[tool.name] = tool
-        self.discovered_tools.add(tool.name)
-        logger.info(f"Discovered new tool: {tool.name}")
-
-# =============================
-# Optimized Chain of Thought
-# =============================
-
-class ChainOfThought:
-    """Optimized CoT with adaptive depth and caching"""
-    
-    def __init__(self, name: str):
-        self.name = name
-        self.reasoning_cache: Dict[str, List[ReasoningStep]] = {}
-        self.complexity_analyzer = ComplexityAnalyzer()
-        self.template_library = TemplateLibrary()
-        
-    def analyze_complexity(self, query: str) -> float:
-        """Analyze query complexity to determine reasoning depth"""
-        return self.complexity_analyzer.analyze(query)
-        
-    def get_cached_reasoning(self, query: str) -> Optional[List[ReasoningStep]]:
-        """Check if we have cached reasoning for similar queries"""
-        query_hash = hashlib.md5(query.encode()).hexdigest()
-        return self.reasoning_cache.get(query_hash)
-        
-    def reason(self, query: str, max_depth: Optional[int] = None) -> List[ReasoningStep]:
-        """Execute chain of thought reasoning"""
-        # Check cache first
-        cached = self.get_cached_reasoning(query)
-        if cached:
-            logger.info("Using cached reasoning")
-            return cached
-            
-        # Determine reasoning depth based on complexity
-        complexity = self.analyze_complexity(query)
-        if max_depth is None:
-            max_depth = min(int(complexity * 10), 20)
-            
-        # Select appropriate template
-        template = self.template_library.select_template(query)
-        
-        # Execute reasoning
-        steps = self.execute_reasoning(query, template, max_depth)
-        
-        # Cache successful reasoning
-        if steps and steps[-1].confidence > 0.8:
-            query_hash = hashlib.md5(query.encode()).hexdigest()
-            self.reasoning_cache[query_hash] = steps
-            
-        return steps
-        
-    def execute_reasoning(self, query: str, template: str, 
-                         max_depth: int) -> List[ReasoningStep]:
-        """Execute the actual reasoning process"""
-        steps = []
-        current_thought = query
-        
-        for i in range(max_depth):
-            # Generate next thought based on template
-            next_thought = f"{template} Step {i+1}: Analyzing '{current_thought}'"
-            
-            step = ReasoningStep(
-                step_id=i,
-                thought=next_thought,
-                confidence=0.9 - (i * 0.05)  # Decreasing confidence with depth
-            )
-            steps.append(step)
-            
-            # Check if we've reached a conclusion
-            if "therefore" in next_thought.lower() or i == max_depth - 1:
-                break
-                
-            current_thought = next_thought
-            
-        return steps
-
-class ComplexityAnalyzer:
-    """Analyzes query complexity"""
-    
-    def analyze(self, query: str) -> float:
-        """Return complexity score between 0 and 1"""
-        # Simplified implementation
-        factors = {
-            'length': len(query) / 500,
-            'questions': query.count('?') / 5,
-            'conjunctions': sum(query.count(w) for w in ['and', 'or', 'but']) / 10,
-            'technical_terms': sum(query.count(w) for w in ['calculate', 'analyze', 'evaluate']) / 5
-        }
-        
-        complexity = min(sum(factors.values()) / len(factors), 1.0)
-        return complexity
-
-class TemplateLibrary:
-    """Library of reasoning templates"""
-    
-    def __init__(self):
-        self.templates = {
-            'mathematical': "Let me solve this step by step using mathematical principles.",
-            'analytical': "I'll analyze this by breaking it down into components.",
-            'comparative': "I'll compare and contrast the different aspects.",
-            'default': "Let me think through this systematically."
-        }
-        
-    def select_template(self, query: str) -> str:
-        """Select appropriate template based on query"""
-        query_lower = query.lower()
-        
-        if any(word in query_lower for word in ['calculate', 'solve', 'compute']):
-            return self.templates['mathematical']
-        elif any(word in query_lower for word in ['analyze', 'examine', 'investigate']):
-            return self.templates['analytical']
-        elif any(word in query_lower for word in ['compare', 'contrast', 'difference']):
-            return self.templates['comparative']
-        else:
-            return self.templates['default']
-
-# =============================
-# Unified Hybrid Architecture
-# =============================
-
-class HybridAgent:
-    """Unified agent combining FSM, ReAct, and CoT with existing FSMReActAgent integration"""
-    
-    def __init__(self, name: str, tools: List[BaseTool] = None):
-        self.name = name
-        self.fsm = HierarchicalFSM(f"{name}_fsm")
-        self.react = ReActAgent(f"{name}_react", tools or [])
-        self.cot = ChainOfThought(f"{name}_cot")
-        
-        # Integrate with existing FSMReActAgent
-        self.fsm_react_agent = FSMReActAgent(
-            tools=tools or [],
-            model_name="llama-3.3-70b-versatile",
-            quality_level=DataQualityLevel.THOROUGH,
-            reasoning_type=ReasoningType.LAYERED
+        # Initialize Optimized Chain of Thought system
+        self.cot_system = OptimizedChainOfThought(
+            name=f"{name}_cot",
+            config=self.config.get('cot', {
+                'max_paths': 5,
+                'cache_size': 1000,
+                'cache_ttl': 24
+            })
         )
         
-        self.current_mode = "fsm"
-        self.mode_performance: Dict[str, float] = {
-            "fsm": 0.5,
-            "react": 0.5,
-            "cot": 0.5,
-            "fsm_react": 0.5
-        }
+        # Initialize enhanced components
+        self.complexity_analyzer = ComplexityAnalyzer()
+        self.mode_selector = AdaptiveModeSelector()
+        self.performance_tracker = PerformanceTracker()
+        self.multi_agent_coordinator = MultiAgentCoordinator()
+        self.emergent_behavior_detector = EmergentBehaviorDetector()
         
-    def select_mode(self, task: Dict[str, Any]) -> str:
-        """Select the best mode for the current task"""
-        task_type = task.get("type", "unknown")
+        # State management
+        self.current_state = AgentState(mode=AgentMode.HYBRID_ADAPTIVE)
+        self.state_history: List[AgentState] = []
         
-        # Simple heuristics for mode selection
-        if task_type == "navigation" or task_type == "state_based":
-            return "fsm"
-        elif task_type == "tool_use" or task_type == "external_interaction":
-            return "react"
-        elif task_type == "reasoning" or task_type == "analysis":
-            return "cot"
-        elif task_type == "complex" or task_type == "gaia":
-            return "fsm_react"  # Use existing FSMReActAgent for complex tasks
-        else:
-            # Select based on past performance
-            return max(self.mode_performance.items(), key=lambda x: x[1])[0]
-            
-    async def execute_task(self, task: Dict[str, Any]) -> Any:
-        """Execute a task using the appropriate mode"""
-        mode = self.select_mode(task)
-        self.current_mode = mode
+        # Performance optimization
+        self.executor = ThreadPoolExecutor(max_workers=4)
+        self.cache = {}
         
-        start_time = time.time()
-        result = None
-        success = False
+        logger.info(f"Advanced Hybrid Agent '{name}' initialized successfully")
+    
+    def _initialize_tools(self) -> List[BaseTool]:
+        """Initialize tools for the agent"""
+        tools = []
+        try:
+            tools.append(SemanticSearchTool())
+        except Exception as e:
+            logger.warning(f"SemanticSearchTool not available: {e}")
         
         try:
-            if mode == "fsm":
-                result = await self.execute_fsm_task(task)
-            elif mode == "react":
-                result = await self.execute_react_task(task)
-            elif mode == "cot":
-                result = await self.execute_cot_task(task)
-            elif mode == "fsm_react":
-                result = await self.execute_fsm_react_task(task)
-                
-            success = result is not None
-            
+            tools.append(PythonInterpreter())
         except Exception as e:
-            logger.error(f"Error executing task in {mode} mode: {str(e)}")
-            
+            logger.warning(f"PythonInterpreter not available: {e}")
+        
+        try:
+            tools.append(WeatherTool())
+        except Exception as e:
+            logger.warning(f"WeatherTool not available: {e}")
+        
+        return tools
+    
+    async def process_query(self, query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Main query processing method with enhanced capabilities"""
+        start_time = time.time()
+        
+        # Update state
+        self.current_state.current_query = query
+        self.current_state.timestamp = time.time()
+        
+        # Analyze query complexity
+        complexity_score, features = self.complexity_analyzer.analyze(query)
+        logger.info(f"Query complexity: {complexity_score:.2f}")
+        
+        # Select optimal mode
+        selected_mode = self.mode_selector.select_mode(
+            query, complexity_score, features, self.current_state
+        )
+        self.current_state.mode = selected_mode
+        
+        # Process based on selected mode
+        if selected_mode == AgentMode.CHAIN_OF_THOUGHT:
+            result = await self._process_with_cot(query, context, complexity_score)
+        elif selected_mode == AgentMode.FSM_REACT and self.fsm_agent:
+            result = await self._process_with_fsm(query, context)
+        elif selected_mode == AgentMode.HYBRID_ADAPTIVE:
+            result = await self._process_hybrid(query, context, complexity_score)
+        elif selected_mode == AgentMode.MULTI_AGENT:
+            result = await self._process_multi_agent(query, context)
+        elif selected_mode == AgentMode.PARALLEL_REASONING:
+            result = await self._process_parallel(query, context, complexity_score)
+        else:
+            # Fallback to CoT if FSM is not available
+            result = await self._process_with_cot(query, context, complexity_score)
+        
         # Update performance metrics
         execution_time = time.time() - start_time
-        self.update_performance(mode, success, execution_time)
-        
-        return result
-        
-    async def execute_fsm_task(self, task: Dict[str, Any]) -> Any:
-        """Execute task using FSM"""
-        # Setup FSM for the task
-        states = task.get("states", [])
-        for state_data in states:
-            state = AgentState(name=state_data["name"], data=state_data.get("data", {}))
-            self.fsm.add_state(state)
-            
-        # Run FSM
-        self.fsm.set_initial_state(states[0]["name"])
-        
-        while self.fsm.step():
-            await asyncio.sleep(0.1)  # Simulate processing
-            
-        return {"final_state": self.fsm.current_state.name}
-        
-    async def execute_react_task(self, task: Dict[str, Any]) -> Any:
-        """Execute task using ReAct"""
-        query = task.get("query", "")
-        context = task.get("context", {})
-        
-        # Add tools for the task
-        tools = task.get("tools", [])
-        for tool_data in tools:
-            tool = Tool(**tool_data)
-            self.react.discover_tool(tool)
-            
-        # Execute parallel reasoning
-        paths = await self.react.parallel_reasoning(query, context)
-        
-        # Select best path based on confidence
-        best_path = max(paths, key=lambda p: sum(s.confidence for s in p))
-        
-        return {"reasoning_path": best_path}
-        
-    async def execute_cot_task(self, task: Dict[str, Any]) -> Any:
-        """Execute task using Chain of Thought"""
-        query = task.get("query", "")
-        
-        # Execute reasoning
-        steps = self.cot.reason(query)
-        
-        return {"reasoning_steps": steps}
-        
-    async def execute_fsm_react_task(self, task: Dict[str, Any]) -> Any:
-        """Execute task using existing FSMReActAgent"""
-        query = task.get("query", "")
-        
-        # Validate input
-        validation_result = validate_user_prompt(query)
-        if not validation_result.is_valid:
-            return {"error": "Invalid input", "details": validation_result.validation_errors}
-        
-        # Create initial state
-        initial_state = {
-            "query": query,
-            "input_query": validation_result,
-            "plan": "",
-            "master_plan": [],
-            "validated_plan": None,
-            "tool_calls": [],
-            "step_outputs": {},
-            "final_answer": "",
-            "current_fsm_state": "PLANNING",
-            "stagnation_counter": 0,
-            "max_stagnation": 5,
-            "retry_count": 0,
-            "max_retries": 3,
-            "failure_history": [],
-            "circuit_breaker_status": "closed",
-            "last_api_error": None,
-            "verification_level": "thorough",
-            "confidence": 1.0,
-            "cross_validation_sources": [],
-            "messages": [],
-            "errors": [],
-            "step_count": 0,
-            "start_time": time.time(),
-            "end_time": 0.0,
-            "tool_reliability": {},
-            "tool_preferences": {},
-            "turn_count": 0,
-            "action_history": [],
-            "stagnation_score": 0,
-            "error_log": [],
-            "error_counts": {},
-            "remaining_loops": 15,
-            "last_state_hash": "",
-            "force_termination": False,
-            "tool_errors": [],
-            "recovery_attempts": 0,
-            "fallback_level": 0,
-            "draft_answer": "",
-            "reflection_passed": False,
-            "reflection_issues": [],
-            "requires_human_approval": False,
-            "approval_request": None,
-            "execution_paused": False
-        }
-        
-        # Execute using FSMReActAgent
-        result = await self.fsm_react_agent.run(initial_state)
-        
-        return result
-        
-    def update_performance(self, mode: str, success: bool, execution_time: float):
-        """Update performance metrics for mode selection"""
-        # Simple exponential moving average
-        alpha = 0.1
-        performance_score = (1.0 if success else 0.0) * (1.0 / (1.0 + execution_time))
-        
-        self.mode_performance[mode] = (
-            (1 - alpha) * self.mode_performance[mode] + 
-            alpha * performance_score
+        self.performance_tracker.update_metrics(
+            selected_mode, result.get('confidence', 0.0), execution_time
         )
-
-# =============================
-# Multi-Agent Collaboration
-# =============================
-
-class AgentRegistry:
-    """Registry for agent discovery and management"""
-    
-    def __init__(self):
-        self.agents: Dict[str, HybridAgent] = {}
-        self.capabilities: Dict[str, List[str]] = defaultdict(list)
         
-    def register_agent(self, agent: HybridAgent, capabilities: List[str]):
-        """Register an agent with its capabilities"""
-        self.agents[agent.name] = agent
-        for capability in capabilities:
-            self.capabilities[capability].append(agent.name)
-            
-    def find_agents_by_capability(self, capability: str) -> List[HybridAgent]:
-        """Find agents with a specific capability"""
-        agent_names = self.capabilities.get(capability, [])
-        return [self.agents[name] for name in agent_names if name in self.agents]
-
-class MultiAgentSystem:
-    """Orchestrates collaboration between multiple agents"""
-    
-    def __init__(self):
-        self.registry = AgentRegistry()
-        self.shared_memory = SharedMemory()
-        self.task_queue = asyncio.Queue()
-        self.results_queue = asyncio.Queue()
+        # Store state
+        self.current_state.reasoning_path = result.get('reasoning_path')
+        self.current_state.confidence = result.get('confidence', 0.0)
+        self.current_state.execution_time = execution_time
+        self.state_history.append(self.current_state)
         
-    def add_agent(self, agent: HybridAgent, capabilities: List[str]):
-        """Add an agent to the system"""
-        self.registry.register_agent(agent, capabilities)
-        
-    async def distribute_task(self, task: Dict[str, Any]) -> Any:
-        """Distribute a task to appropriate agents"""
-        required_capability = task.get("required_capability", "general")
-        agents = self.registry.find_agents_by_capability(required_capability)
-        
-        if not agents:
-            logger.warning(f"No agents found for capability: {required_capability}")
-            return None
-            
-        # Simple round-robin distribution
-        agent = agents[0]  # In practice, use more sophisticated selection
-        
-        # Share task context
-        task_id = task.get("id", str(time.time()))
-        self.shared_memory.store(f"task_{task_id}_context", task.get("context", {}))
-        
-        # Execute task
-        result = await agent.execute_task(task)
-        
-        # Store result in shared memory
-        self.shared_memory.store(f"task_{task_id}_result", result)
+        # Detect emergent behavior
+        emergent_insights = self.emergent_behavior_detector.analyze(
+            self.state_history, result
+        )
+        if emergent_insights:
+            result['emergent_insights'] = emergent_insights
         
         return result
+    
+    async def _process_with_cot(self, query: str, context: Optional[Dict[str, Any]], 
+                              complexity: float) -> Dict[str, Any]:
+        """Process query using Optimized Chain of Thought"""
+        logger.info("Processing with Optimized Chain of Thought")
         
-    async def collaborate_on_task(self, complex_task: Dict[str, Any]) -> Any:
-        """Multiple agents collaborate on a complex task"""
-        subtasks = complex_task.get("subtasks", [])
-        results = []
+        # Execute CoT reasoning
+        reasoning_path = await self.cot_system.reason(query, context)
         
-        # Execute subtasks in parallel
-        tasks = []
-        for subtask in subtasks:
-            task = asyncio.create_task(self.distribute_task(subtask))
-            tasks.append(task)
-            
+        # Extract insights from reasoning path
+        insights = self._extract_cot_insights(reasoning_path)
+        
+        return {
+            'mode': 'chain_of_thought',
+            'reasoning_path': reasoning_path,
+            'answer': reasoning_path.final_answer,
+            'confidence': reasoning_path.total_confidence,
+            'insights': insights,
+            'steps_count': len(reasoning_path.steps),
+            'template_used': reasoning_path.template_used,
+            'complexity_score': reasoning_path.complexity_score
+        }
+    
+    async def _process_with_fsm(self, query: str, context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Process query using FSM ReAct agent"""
+        logger.info("Processing with FSM ReAct")
+        
+        if not self.fsm_agent:
+            # Fallback to CoT if FSM is not available
+            return await self._process_with_cot(query, context, 0.5)
+        
+        # Execute FSM reasoning
+        result = await self.fsm_agent.run(query)
+        
+        return {
+            'mode': 'fsm_react',
+            'answer': result.get('answer', ''),
+            'confidence': result.get('confidence', 0.7),
+            'steps': result.get('steps', []),
+            'tools_used': result.get('tools_used', [])
+        }
+    
+    async def _process_hybrid(self, query: str, context: Optional[Dict[str, Any]], 
+                            complexity: float) -> Dict[str, Any]:
+        """Process query using hybrid approach"""
+        logger.info("Processing with hybrid approach")
+        
+        # Start both approaches in parallel
+        cot_task = asyncio.create_task(self._process_with_cot(query, context, complexity))
+        
+        if self.fsm_agent:
+            fsm_task = asyncio.create_task(self._process_with_fsm(query, context))
+            # Wait for both to complete
+            cot_result, fsm_result = await asyncio.gather(cot_task, fsm_task)
+        else:
+            # Only CoT available
+            cot_result = await cot_task
+            fsm_result = {'answer': '', 'confidence': 0.0, 'steps': [], 'tools_used': []}
+        
+        # Synthesize results
+        hybrid_result = self._synthesize_hybrid_results(cot_result, fsm_result)
+        
+        return hybrid_result
+    
+    async def _process_multi_agent(self, query: str, context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Process query using multi-agent collaboration"""
+        logger.info("Processing with multi-agent collaboration")
+        
+        # Coordinate multiple agents
+        result = await self.multi_agent_coordinator.coordinate(
+            query, context, self.fsm_agent, self.cot_system
+        )
+        
+        return result
+    
+    async def _process_parallel(self, query: str, context: Optional[Dict[str, Any]], 
+                              complexity: float) -> Dict[str, Any]:
+        """Process query using parallel reasoning paths"""
+        logger.info("Processing with parallel reasoning")
+        
+        # Execute multiple reasoning approaches in parallel
+        tasks = [
+            asyncio.create_task(self._process_with_cot(query, context, complexity)),
+            asyncio.create_task(self._process_with_cot(query, context, complexity))  # Second CoT path
+        ]
+        
+        if self.fsm_agent:
+            tasks.append(asyncio.create_task(self._process_with_fsm(query, context)))
+        
         results = await asyncio.gather(*tasks)
         
-        # Aggregate results
-        return self.aggregate_results(results)
+        # Select best result or synthesize
+        best_result = max(results, key=lambda r: r.get('confidence', 0))
         
-    def aggregate_results(self, results: List[Any]) -> Any:
-        """Aggregate results from multiple agents"""
-        # Simple aggregation - in practice, use more sophisticated methods
         return {
-            "aggregated_results": results,
-            "summary": f"Completed {len(results)} subtasks"
+            'mode': 'parallel_reasoning',
+            'best_result': best_result,
+            'all_results': results,
+            'confidence': best_result.get('confidence', 0)
         }
-
-class SharedMemory:
-    """Shared memory for inter-agent communication"""
     
-    def __init__(self):
-        self.memory: Dict[str, Any] = {}
-        self.access_log: List[Tuple[str, str, float]] = []
+    def _extract_cot_insights(self, reasoning_path: ReasoningPath) -> Dict[str, Any]:
+        """Extract insights from Chain of Thought reasoning path"""
+        insights = {
+            'reasoning_types_used': list(set(step.reasoning_type for step in reasoning_path.steps)),
+            'confidence_progression': [step.confidence for step in reasoning_path.steps],
+            'key_thoughts': [step.thought for step in reasoning_path.steps[-3:]],  # Last 3 steps
+            'reflection_steps': [
+                step for step in reasoning_path.steps 
+                if step.reasoning_type == ReasoningType.METACOGNITIVE
+            ]
+        }
         
-    def store(self, key: str, value: Any):
-        """Store a value in shared memory"""
-        self.memory[key] = value
-        self.access_log.append(("store", key, time.time()))
-        
-    def retrieve(self, key: str) -> Optional[Any]:
-        """Retrieve a value from shared memory"""
-        self.access_log.append(("retrieve", key, time.time()))
-        return self.memory.get(key)
-        
-    def search(self, pattern: str) -> Dict[str, Any]:
-        """Search for keys matching a pattern"""
-        results = {}
-        for key, value in self.memory.items():
-            if pattern in key:
-                results[key] = value
-        return results
-
-# =============================
-# Emergent Behavior System
-# =============================
-
-class EmergentBehaviorEngine:
-    """Enables agents to discover and evolve new behaviors"""
+        return insights
     
-    def __init__(self):
-        self.behavior_patterns: List[BehaviorPattern] = []
-        self.success_threshold = 0.8
-        self.mutation_rate = 0.1
+    def _synthesize_hybrid_results(self, cot_result: Dict[str, Any], 
+                                 fsm_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Synthesize results from CoT and FSM approaches"""
+        # Weight the results based on confidence
+        cot_weight = cot_result.get('confidence', 0)
+        fsm_weight = fsm_result.get('confidence', 0)
         
-    def observe_behavior(self, agent: HybridAgent, task: Dict[str, Any], 
-                        result: Any, success: bool):
-        """Observe and record agent behavior"""
-        pattern = BehaviorPattern(
-            agent_name=agent.name,
-            task_type=task.get("type", "unknown"),
-            mode_used=agent.current_mode,
-            success=success,
-            timestamp=time.time()
-        )
-        self.behavior_patterns.append(pattern)
+        total_weight = cot_weight + fsm_weight
+        if total_weight == 0:
+            total_weight = 1
         
-        # Check for emergent patterns
-        self.analyze_patterns()
+        # Combine answers
+        if cot_weight > fsm_weight:
+            primary_answer = cot_result.get('answer', '')
+            secondary_answer = fsm_result.get('answer', '')
+        else:
+            primary_answer = fsm_result.get('answer', '')
+            secondary_answer = cot_result.get('answer', '')
         
-    def analyze_patterns(self):
-        """Analyze behavior patterns for emergent behaviors"""
-        if len(self.behavior_patterns) < 100:
-            return
-            
-        # Group by task type and mode
-        pattern_groups = defaultdict(list)
-        for pattern in self.behavior_patterns[-1000:]:  # Last 1000 patterns
-            key = (pattern.task_type, pattern.mode_used)
-            pattern_groups[key].append(pattern)
-            
-        # Find successful patterns
-        for key, patterns in pattern_groups.items():
-            success_rate = sum(p.success for p in patterns) / len(patterns)
-            if success_rate > self.success_threshold:
-                logger.info(f"Successful pattern found: {key} with {success_rate:.2%} success rate")
-                
-    def evolve_behavior(self, agent: HybridAgent, behavior: Dict[str, Any]) -> Dict[str, Any]:
-        """Evolve a behavior through mutation"""
-        evolved = behavior.copy()
+        # Calculate combined confidence
+        combined_confidence = (cot_weight + fsm_weight) / 2
         
-        # Simple mutation
-        if np.random.random() < self.mutation_rate:
-            # Mutate some aspect of the behavior
-            if "parameters" in evolved:
-                for param, value in evolved["parameters"].items():
-                    if isinstance(value, (int, float)):
-                        evolved["parameters"][param] = value * (1 + np.random.normal(0, 0.1))
-                        
-        return evolved
-
-@dataclass
-class BehaviorPattern:
-    """Represents an observed behavior pattern"""
-    agent_name: str
-    task_type: str
-    mode_used: str
-    success: bool
-    timestamp: float
-
-# =============================
-# Performance Optimization
-# =============================
-
-class PerformanceOptimizer:
-    """Optimizes agent performance through caching and prediction"""
-    
-    def __init__(self):
-        self.result_cache = ResultCache()
-        self.predictor = TaskPredictor()
-        self.resource_monitor = ResourceMonitor()
-        
-    def optimize_execution(self, agent: HybridAgent, task: Dict[str, Any]) -> Any:
-        """Optimize task execution"""
-        # Check cache first
-        cached_result = self.result_cache.get(task)
-        if cached_result:
-            logger.info("Using cached result")
-            return cached_result
-            
-        # Predict next likely tasks
-        predictions = self.predictor.predict_next_tasks(task)
-        
-        # Precompute likely tasks
-        for predicted_task in predictions[:3]:  # Top 3 predictions
-            asyncio.create_task(self.precompute_task(agent, predicted_task))
-            
-        return None
-        
-    async def precompute_task(self, agent: HybridAgent, task: Dict[str, Any]):
-        """Precompute a predicted task"""
-        result = await agent.execute_task(task)
-        self.result_cache.store(task, result)
-
-class ResultCache:
-    """Caches task results"""
-    
-    def __init__(self, max_size: int = 1000):
-        self.cache: Dict[str, Any] = {}
-        self.max_size = max_size
-        self.access_times: Dict[str, float] = {}
-        
-    def get(self, task: Dict[str, Any]) -> Optional[Any]:
-        """Get cached result for a task"""
-        key = self._task_key(task)
-        if key in self.cache:
-            self.access_times[key] = time.time()
-            return self.cache[key]
-        return None
-        
-    def store(self, task: Dict[str, Any], result: Any):
-        """Store a result in cache"""
-        key = self._task_key(task)
-        
-        # Evict old entries if needed
-        if len(self.cache) >= self.max_size:
-            oldest_key = min(self.access_times.items(), key=lambda x: x[1])[0]
-            del self.cache[oldest_key]
-            del self.access_times[oldest_key]
-            
-        self.cache[key] = result
-        self.access_times[key] = time.time()
-        
-    def _task_key(self, task: Dict[str, Any]) -> str:
-        """Generate a unique key for a task"""
-        # Simple hash of task dict
-        task_str = json.dumps(task, sort_keys=True)
-        return hashlib.md5(task_str.encode()).hexdigest()
-
-class TaskPredictor:
-    """Predicts likely next tasks"""
-    
-    def __init__(self):
-        self.task_sequences: List[List[Dict[str, Any]]] = []
-        
-    def record_sequence(self, tasks: List[Dict[str, Any]]):
-        """Record a sequence of tasks"""
-        self.task_sequences.append(tasks)
-        
-    def predict_next_tasks(self, current_task: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Predict likely next tasks based on patterns"""
-        predictions = []
-        
-        # Find similar tasks in history
-        for sequence in self.task_sequences:
-            for i, task in enumerate(sequence[:-1]):
-                if self._tasks_similar(task, current_task):
-                    next_task = sequence[i + 1]
-                    predictions.append(next_task)
-                    
-        # Return most common predictions
-        # Simplified - in practice, use more sophisticated prediction
-        return predictions[:5]
-        
-    def _tasks_similar(self, task1: Dict[str, Any], task2: Dict[str, Any]) -> bool:
-        """Check if two tasks are similar"""
-        return task1.get("type") == task2.get("type")
-
-class ResourceMonitor:
-    """Monitors and optimizes resource usage"""
-    
-    def __init__(self):
-        self.usage_stats: Dict[str, List[float]] = defaultdict(list)
-        
-    def record_usage(self, resource: str, amount: float):
-        """Record resource usage"""
-        self.usage_stats[resource].append(amount)
-        
-    def get_usage_summary(self) -> Dict[str, Dict[str, float]]:
-        """Get summary of resource usage"""
-        summary = {}
-        for resource, usage_list in self.usage_stats.items():
-            if usage_list:
-                summary[resource] = {
-                    "mean": np.mean(usage_list),
-                    "max": np.max(usage_list),
-                    "min": np.min(usage_list),
-                    "total": np.sum(usage_list)
-                }
-        return summary
-
-# =============================
-# Integration with Existing Codebase
-# =============================
-
-class AdvancedHybridSystem:
-    """Main system that integrates all components with existing codebase"""
-    
-    def __init__(self):
-        self.multi_agent_system = MultiAgentSystem()
-        self.emergent_behavior_engine = EmergentBehaviorEngine()
-        self.performance_optimizer = PerformanceOptimizer()
-        self.resource_monitor = ResourceMonitor()
-        
-    def create_agent(self, name: str, tools: List[BaseTool], capabilities: List[str]) -> HybridAgent:
-        """Create and register a new hybrid agent"""
-        agent = HybridAgent(name, tools)
-        self.multi_agent_system.add_agent(agent, capabilities)
-        return agent
-        
-    async def execute_complex_task(self, task: Dict[str, Any]) -> Any:
-        """Execute a complex task using the hybrid system"""
-        # Monitor resource usage
-        start_time = time.time()
-        
-        # Execute task
-        result = await self.multi_agent_system.collaborate_on_task(task)
-        
-        # Record resource usage
-        execution_time = time.time() - start_time
-        self.resource_monitor.record_usage("execution_time", execution_time)
-        
-        # Observe behavior for emergent patterns
-        if "agents" in result:
-            for agent_result in result["agents"]:
-                self.emergent_behavior_engine.observe_behavior(
-                    agent_result["agent"],
-                    task,
-                    agent_result["result"],
-                    agent_result.get("success", True)
-                )
-                
-        return result
-        
-    def get_system_health(self) -> Dict[str, Any]:
-        """Get comprehensive system health information"""
         return {
-            "resource_usage": self.resource_monitor.get_usage_summary(),
-            "agent_performance": {
-                agent.name: agent.mode_performance 
-                for agent in self.multi_agent_system.registry.agents.values()
-            },
-            "behavior_patterns": len(self.emergent_behavior_engine.behavior_patterns),
-            "cache_stats": {
-                "size": len(self.performance_optimizer.result_cache.cache),
-                "max_size": self.performance_optimizer.result_cache.max_size
+            'mode': 'hybrid',
+            'answer': primary_answer,
+            'secondary_answer': secondary_answer,
+            'confidence': combined_confidence,
+            'cot_insights': cot_result.get('insights', {}),
+            'fsm_steps': fsm_result.get('steps', []),
+            'reasoning_path': cot_result.get('reasoning_path')
+        }
+    
+    def get_performance_report(self) -> Dict[str, Any]:
+        """Get comprehensive performance report"""
+        base_metrics = self.performance_tracker.get_metrics()
+        cot_metrics = self.cot_system.get_performance_report()
+        
+        return {
+            'agent_name': self.name,
+            'total_queries': base_metrics.total_queries,
+            'mode_usage': base_metrics.mode_usage,
+            'average_confidence': base_metrics.average_confidence,
+            'average_execution_time': base_metrics.average_execution_time,
+            'cot_performance': cot_metrics,
+            'current_state': {
+                'mode': self.current_state.mode.name,
+                'confidence': self.current_state.confidence,
+                'last_query': self.current_state.current_query
             }
         }
+    
+    def get_reasoning_history(self) -> List[Dict[str, Any]]:
+        """Get reasoning history"""
+        history = []
+        for state in self.state_history[-10:]:  # Last 10 states
+            history.append({
+                'timestamp': state.timestamp,
+                'mode': state.mode.name,
+                'query': state.current_query,
+                'confidence': state.confidence,
+                'execution_time': state.execution_time
+            })
+        return history
 
 # =============================
-# Example Usage and Integration
+# Enhanced Supporting Classes
 # =============================
 
-async def main():
-    """Example usage of the advanced hybrid architecture"""
+class AdaptiveModeSelector:
+    """Enhanced mode selection with CoT integration"""
     
-    # Create the hybrid system
-    system = AdvancedHybridSystem()
-    
-    # Create tools (using existing BaseTool structure)
-    from src.tools.semantic_search_tool import SemanticSearchTool
-    from src.tools.python_interpreter import PythonInterpreter
-    
-    tools = [
-        SemanticSearchTool(),
-        PythonInterpreter()
-    ]
-    
-    # Create agents with different capabilities
-    general_agent = system.create_agent("general_agent", tools, ["general", "search", "calculation"])
-    reasoning_agent = system.create_agent("reasoning_agent", tools, ["reasoning", "analysis"])
-    
-    # Example tasks
-    tasks = [
-        {
-            "type": "complex",
-            "query": "What are the benefits of using hybrid AI architectures?",
-            "subtasks": [
-                {"type": "reasoning", "query": "Analyze the problem", "required_capability": "reasoning"},
-                {"type": "tool_use", "query": "Search for solutions", "required_capability": "search"}
-            ]
-        },
-        {
-            "type": "gaia",
-            "query": "How many birds are in the video?",
-            "required_capability": "general"
+    def __init__(self):
+        self.mode_weights = {
+            AgentMode.CHAIN_OF_THOUGHT: 0.3,
+            AgentMode.FSM_REACT: 0.3,
+            AgentMode.HYBRID_ADAPTIVE: 0.2,
+            AgentMode.MULTI_AGENT: 0.1,
+            AgentMode.PARALLEL_REASONING: 0.1
         }
+        
+        self.complexity_thresholds = {
+            'low': 0.3,
+            'medium': 0.6,
+            'high': 0.8
+        }
+    
+    def select_mode(self, query: str, complexity: float, features: Dict[str, float],
+                   current_state: AgentState) -> AgentMode:
+        """Select optimal mode based on query characteristics"""
+        
+        # Complexity-based selection
+        if complexity > self.complexity_thresholds['high']:
+            # High complexity: prefer CoT or hybrid
+            if 'analytical' in features and features['analytical'] > 0.5:
+                return AgentMode.CHAIN_OF_THOUGHT
+            else:
+                return AgentMode.HYBRID_ADAPTIVE
+        elif complexity > self.complexity_thresholds['medium']:
+            # Medium complexity: prefer hybrid or FSM
+            return AgentMode.HYBRID_ADAPTIVE
+        else:
+            # Low complexity: prefer FSM for efficiency
+            return AgentMode.FSM_REACT
+
+class PerformanceTracker:
+    """Enhanced performance tracking with CoT metrics"""
+    
+    def __init__(self):
+        self.metrics = PerformanceMetrics()
+        self.mode_performance = defaultdict(list)
+    
+    def update_metrics(self, mode: AgentMode, confidence: float, execution_time: float):
+        """Update performance metrics"""
+        self.metrics.total_queries += 1
+        self.metrics.mode_usage[mode] = self.metrics.mode_usage.get(mode, 0) + 1
+        
+        # Update running averages
+        n = self.metrics.total_queries
+        self.metrics.average_confidence = (
+            (self.metrics.average_confidence * (n - 1) + confidence) / n
+        )
+        self.metrics.average_execution_time = (
+            (self.metrics.average_execution_time * (n - 1) + execution_time) / n
+        )
+        
+        # Track mode-specific performance
+        self.mode_performance[mode].append({
+            'confidence': confidence,
+            'execution_time': execution_time,
+            'timestamp': time.time()
+        })
+    
+    def get_metrics(self) -> PerformanceMetrics:
+        """Get current metrics"""
+        return self.metrics
+
+class MultiAgentCoordinator:
+    """Coordinate multiple agents for complex tasks"""
+    
+    async def coordinate(self, query: str, context: Optional[Dict[str, Any]],
+                        fsm_agent, cot_system: OptimizedChainOfThought) -> Dict[str, Any]:
+        """Coordinate multiple agents"""
+        
+        # Create specialized agents
+        agents = {
+            'researcher': self._create_researcher_agent(cot_system),
+            'executor': self._create_executor_agent(fsm_agent),
+            'synthesizer': self._create_synthesizer_agent()
+        }
+        
+        # Execute in sequence
+        research_result = await agents['researcher'].process_query(query, context)
+        execution_result = await agents['executor'].process_query(query, context)
+        synthesis_result = await agents['synthesizer'].process_query(
+            query, context, research_result, execution_result
+        )
+        
+        return {
+            'mode': 'multi_agent',
+            'research': research_result,
+            'execution': execution_result,
+            'synthesis': synthesis_result,
+            'final_answer': synthesis_result.get('answer', ''),
+            'confidence': synthesis_result.get('confidence', 0)
+        }
+    
+    def _create_researcher_agent(self, cot_system: OptimizedChainOfThought):
+        """Create research-focused agent"""
+        return cot_system  # Use CoT for research
+    
+    def _create_executor_agent(self, fsm_agent):
+        """Create execution-focused agent"""
+        return fsm_agent  # Use FSM for execution
+    
+    def _create_synthesizer_agent(self):
+        """Create synthesis-focused agent"""
+        # Simple synthesis agent
+        class SynthesisAgent:
+            async def process_query(self, query: str, context: Optional[Dict[str, Any]],
+                                  research_result: Dict[str, Any], 
+                                  execution_result: Dict[str, Any]) -> Dict[str, Any]:
+                # Synthesize results
+                combined_answer = f"Research: {research_result.get('answer', '')} | Execution: {execution_result.get('answer', '')}"
+                combined_confidence = (research_result.get('confidence', 0) + execution_result.get('confidence', 0)) / 2
+                
+                return {
+                    'answer': combined_answer,
+                    'confidence': combined_confidence,
+                    'synthesis_method': 'simple_combination'
+                }
+        
+        return SynthesisAgent()
+
+class EmergentBehaviorDetector:
+    """Detect emergent behaviors and patterns"""
+    
+    def __init__(self):
+        self.pattern_window = 10
+        self.confidence_threshold = 0.8
+    
+    def analyze(self, state_history: List[AgentState], current_result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Analyze for emergent behaviors"""
+        if len(state_history) < self.pattern_window:
+            return None
+        
+        recent_states = state_history[-self.pattern_window:]
+        
+        # Detect patterns
+        patterns = self._detect_patterns(recent_states)
+        
+        # Detect performance improvements
+        improvements = self._detect_improvements(recent_states)
+        
+        # Detect mode preferences
+        preferences = self._detect_preferences(recent_states)
+        
+        if patterns or improvements or preferences:
+            return {
+                'patterns': patterns,
+                'improvements': improvements,
+                'preferences': preferences,
+                'timestamp': time.time()
+            }
+        
+        return None
+    
+    def _detect_patterns(self, states: List[AgentState]) -> List[Dict[str, Any]]:
+        """Detect recurring patterns"""
+        patterns = []
+        
+        # Mode switching patterns
+        mode_sequence = [state.mode for state in states]
+        if len(set(mode_sequence)) > 1:
+            patterns.append({
+                'type': 'mode_switching',
+                'sequence': [mode.name for mode in mode_sequence]
+            })
+        
+        # Confidence patterns
+        confidence_values = [state.confidence for state in states]
+        if max(confidence_values) - min(confidence_values) > 0.3:
+            patterns.append({
+                'type': 'confidence_variation',
+                'range': f"{min(confidence_values):.2f} - {max(confidence_values):.2f}"
+            })
+        
+        return patterns
+    
+    def _detect_improvements(self, states: List[AgentState]) -> List[Dict[str, Any]]:
+        """Detect performance improvements"""
+        improvements = []
+        
+        # Check for confidence improvements
+        early_confidence = np.mean([s.confidence for s in states[:5]])
+        late_confidence = np.mean([s.confidence for s in states[-5:]])
+        
+        if late_confidence > early_confidence + 0.1:
+            improvements.append({
+                'type': 'confidence_improvement',
+                'improvement': late_confidence - early_confidence
+            })
+        
+        return improvements
+    
+    def _detect_preferences(self, states: List[AgentState]) -> Dict[str, Any]:
+        """Detect mode preferences"""
+        mode_counts = defaultdict(int)
+        for state in states:
+            mode_counts[state.mode.name] += 1
+        
+        total = len(states)
+        preferences = {
+            mode: count / total 
+            for mode, count in mode_counts.items()
+        }
+        
+        return preferences
+
+# =============================
+# Example Usage
+# =============================
+
+async def demo_hybrid_architecture():
+    """Demonstrate the enhanced hybrid architecture with CoT integration"""
+    
+    print("=== Advanced Hybrid AI Agent Architecture Demo ===\n")
+    
+    # Create hybrid agent
+    agent = AdvancedHybridAgent(
+        "demo_agent",
+        config={
+            'fsm': {'max_steps': 10},
+            'cot': {
+                'max_paths': 3,
+                'cache_size': 100,
+                'cache_ttl': 12
+            }
+        }
+    )
+    
+    # Test queries of varying complexity
+    test_queries = [
+        "What is the weather like today?",
+        "Explain the concept of machine learning in simple terms.",
+        "Compare and contrast supervised and unsupervised learning approaches.",
+        "Analyze the potential impact of quantum computing on cryptography.",
+        "Solve the equation: 2x^2 + 3x - 5 = 0"
     ]
     
-    # Execute tasks
-    for task in tasks:
-        print(f"\nExecuting task: {task['type']}")
-        result = await system.execute_complex_task(task)
-        print(f"Result: {result}")
+    for i, query in enumerate(test_queries, 1):
+        print(f"Query {i}: {query}")
+        print("-" * 60)
         
-    # Show system health
-    health = system.get_system_health()
-    print(f"\nSystem Health: {health}")
+        # Process query
+        result = await agent.process_query(query)
+        
+        print(f"Mode: {result.get('mode', 'unknown')}")
+        print(f"Confidence: {result.get('confidence', 0):.2f}")
+        print(f"Answer: {result.get('answer', 'No answer')[:100]}...")
+        
+        if 'reasoning_path' in result:
+            path = result['reasoning_path']
+            print(f"CoT Steps: {len(path.steps)}")
+            print(f"Template: {path.template_used}")
+        
+        if 'emergent_insights' in result:
+            print(f"Emergent Insights: {result['emergent_insights']}")
+        
+        print("\n" + "="*80 + "\n")
+    
+    # Show performance report
+    print("=== Performance Report ===")
+    report = agent.get_performance_report()
+    for key, value in report.items():
+        if isinstance(value, dict):
+            print(f"{key}:")
+            for k, v in value.items():
+                print(f"  {k}: {v}")
+        else:
+            print(f"{key}: {value}")
+    
+    # Show reasoning history
+    print("\n=== Recent Reasoning History ===")
+    history = agent.get_reasoning_history()
+    for entry in history:
+        print(f"{entry['timestamp']:.2f}: {entry['mode']} - {entry['query'][:50]}... (conf: {entry['confidence']:.2f})")
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(demo_hybrid_architecture()) 

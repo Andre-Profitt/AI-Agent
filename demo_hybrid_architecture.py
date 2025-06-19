@@ -1,415 +1,215 @@
 #!/usr/bin/env python3
 """
-Demonstration of Advanced AI Agent Architecture
-Shows how to use the hybrid FSM, ReAct, and Chain of Thought system
+Demo script for the Enhanced Advanced Hybrid AI Agent Architecture
+Showcasing FSM, ReAct, Chain of Thought, and Multi-Agent capabilities
 """
 
 import asyncio
-import logging
 import sys
 import os
 
-# Add src to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+# Add the src directory to the path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from src.advanced_hybrid_architecture import (
-    AdvancedHybridSystem, HybridAgent, ProbabilisticFSM, 
-    AgentState, Transition, Tool, ReasoningStep
-)
-from src.tools.semantic_search_tool import SemanticSearchTool
-from src.tools.python_interpreter import PythonInterpreter
-from src.tools.weather import WeatherTool
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-class DemoTools:
-    """Demo tools for testing the architecture"""
-    
-    @staticmethod
-    def calculator_tool(expression: str) -> dict:
-        """Simple calculator tool"""
-        try:
-            result = eval(expression)  # Note: eval is unsafe in production
-            return {"result": result, "expression": expression}
-        except Exception as e:
-            return {"error": str(e), "expression": expression}
-    
-    @staticmethod
-    def text_analyzer_tool(text: str) -> dict:
-        """Simple text analysis tool"""
-        words = text.split()
-        return {
-            "word_count": len(words),
-            "char_count": len(text),
-            "avg_word_length": sum(len(word) for word in words) / len(words) if words else 0
-        }
-    
-    @staticmethod
-    def mock_search_tool(query: str) -> dict:
-        """Mock search tool"""
-        return {
-            "results": [
-                f"Result 1 for: {query}",
-                f"Result 2 for: {query}",
-                f"Result 3 for: {query}"
-            ],
-            "query": query
-        }
-
-class CustomTool:
-    """Custom tool wrapper for demo tools"""
-    
-    def __init__(self, name: str, function, description: str):
-        self.name = name
-        self.function = function
-        self.description = description
-    
-    def run(self, **kwargs):
-        return self.function(**kwargs)
-
-async def demo_basic_hybrid_agent():
-    """Demonstrate basic hybrid agent functionality"""
-    print("\n" + "="*60)
-    print("DEMO 1: Basic Hybrid Agent")
-    print("="*60)
-    
-    # Create demo tools
-    tools = [
-        CustomTool("calculator", DemoTools.calculator_tool, "Perform mathematical calculations"),
-        CustomTool("text_analyzer", DemoTools.text_analyzer_tool, "Analyze text statistics"),
-        CustomTool("search", DemoTools.mock_search_tool, "Search for information")
-    ]
-    
-    # Create hybrid agent
-    agent = HybridAgent("demo_agent", tools)
-    
-    # Test different task types
-    tasks = [
-        {
-            "type": "reasoning",
-            "query": "What is the complexity of analyzing hybrid AI architectures?"
-        },
-        {
-            "type": "tool_use",
-            "query": "Calculate 15 * 23 and analyze the text 'Hello World'",
-            "context": {"require_calculation": True, "require_analysis": True}
-        },
-        {
-            "type": "state_based",
-            "states": [
-                {"name": "start", "data": {"step": 1}},
-                {"name": "process", "data": {"step": 2}},
-                {"name": "complete", "data": {"step": 3}}
-            ]
-        }
-    ]
-    
-    for i, task in enumerate(tasks, 1):
-        print(f"\n--- Task {i}: {task['type']} ---")
-        print(f"Query: {task.get('query', 'State-based task')}")
-        
-        result = await agent.execute_task(task)
-        print(f"Mode used: {agent.current_mode}")
-        print(f"Result: {result}")
-        
-        # Show performance metrics
-        print(f"Performance by mode: {agent.mode_performance}")
-
-async def demo_multi_agent_system():
-    """Demonstrate multi-agent collaboration"""
-    print("\n" + "="*60)
-    print("DEMO 2: Multi-Agent System")
-    print("="*60)
-    
-    # Create the hybrid system
-    system = AdvancedHybridSystem()
-    
-    # Create different types of tools
-    general_tools = [
-        CustomTool("search", DemoTools.mock_search_tool, "Search for information"),
-        CustomTool("calculator", DemoTools.calculator_tool, "Perform calculations")
-    ]
-    
-    analysis_tools = [
-        CustomTool("text_analyzer", DemoTools.text_analyzer_tool, "Analyze text"),
-        CustomTool("calculator", DemoTools.calculator_tool, "Perform calculations")
-    ]
-    
-    # Create specialized agents
-    general_agent = system.create_agent("general_agent", general_tools, ["general", "search", "calculation"])
-    analysis_agent = system.create_agent("analysis_agent", analysis_tools, ["reasoning", "analysis"])
-    
-    # Complex collaborative task
-    complex_task = {
-        "type": "complex",
-        "query": "Analyze the benefits of hybrid AI architectures and calculate some statistics",
-        "subtasks": [
-            {
-                "type": "reasoning",
-                "query": "What are the key benefits of hybrid AI architectures?",
-                "required_capability": "reasoning"
-            },
-            {
-                "type": "tool_use",
-                "query": "Calculate the average word length in 'hybrid artificial intelligence'",
-                "required_capability": "calculation"
-            },
-            {
-                "type": "analysis",
-                "query": "Analyze the complexity of multi-agent systems",
-                "required_capability": "analysis"
-            }
-        ]
-    }
-    
-    print("Executing complex collaborative task...")
-    result = await system.execute_complex_task(complex_task)
-    print(f"Collaborative result: {result}")
-    
-    # Show system health
-    health = system.get_system_health()
-    print(f"\nSystem Health Summary:")
-    print(f"- Resource usage: {health['resource_usage']}")
-    print(f"- Behavior patterns observed: {health['behavior_patterns']}")
-    print(f"- Cache size: {health['cache_stats']['size']}/{health['cache_stats']['max_size']}")
-
-async def demo_fsm_learning():
-    """Demonstrate FSM learning capabilities"""
-    print("\n" + "="*60)
-    print("DEMO 3: FSM Learning")
-    print("="*60)
-    
-    # Create a probabilistic FSM
-    fsm = ProbabilisticFSM("learning_fsm")
-    
-    # Define states
-    states = [
-        AgentState("idle", {"energy": 100}),
-        AgentState("working", {"task": None}),
-        AgentState("resting", {"recovery": 0}),
-        AgentState("completed", {"result": None})
-    ]
-    
-    for state in states:
-        fsm.add_state(state)
-    
-    # Define transitions with conditions
-    def has_energy(state):
-        return state.data.get("energy", 0) > 30
-    
-    def is_tired(state):
-        return state.data.get("energy", 0) < 50
-    
-    def work_complete(state):
-        return state.data.get("task") == "done"
-    
-    def rested(state):
-        return state.data.get("recovery", 0) > 5
-    
-    transitions = [
-        Transition("idle", "working", has_energy, probability=0.8),
-        Transition("idle", "resting", is_tired, probability=0.2),
-        Transition("working", "completed", work_complete, probability=0.9),
-        Transition("working", "resting", is_tired, probability=0.1),
-        Transition("resting", "idle", rested, probability=0.7),
-        Transition("completed", "idle", lambda s: True, probability=1.0)
-    ]
-    
-    for transition in transitions:
-        fsm.add_transition(transition)
-    
-    # Set initial state
-    fsm.set_initial_state("idle")
-    
-    print("Running FSM with learning...")
-    print("Initial state:", fsm.current_state.name)
-    
-    # Run FSM for several steps
-    for step in range(10):
-        if fsm.step():
-            print(f"Step {step + 1}: {fsm.current_state.name} (energy: {fsm.current_state.data.get('energy', 0)})")
-            
-            # Simulate state changes
-            if fsm.current_state.name == "working":
-                fsm.current_state.data["energy"] = max(0, fsm.current_state.data.get("energy", 100) - 20)
-                fsm.current_state.data["task"] = "done" if step > 5 else "in_progress"
-            elif fsm.current_state.name == "resting":
-                fsm.current_state.data["energy"] = min(100, fsm.current_state.data.get("energy", 0) + 30)
-                fsm.current_state.data["recovery"] = fsm.current_state.data.get("recovery", 0) + 1
-            elif fsm.current_state.name == "idle":
-                fsm.current_state.data["energy"] = min(100, fsm.current_state.data.get("energy", 0) + 10)
-        else:
-            print(f"Step {step + 1}: No valid transitions")
-            break
-    
-    print(f"\nLearned transition probabilities: {fsm.learned_transitions}")
-
-async def demo_chain_of_thought():
-    """Demonstrate Chain of Thought reasoning"""
-    print("\n" + "="*60)
-    print("DEMO 4: Chain of Thought Reasoning")
-    print("="*60)
-    
-    from src.advanced_hybrid_architecture import ChainOfThought, ComplexityAnalyzer, TemplateLibrary
-    
-    # Create CoT components
-    cot = ChainOfThought("demo_cot")
-    complexity_analyzer = ComplexityAnalyzer()
-    template_library = TemplateLibrary()
-    
-    # Test queries of different complexity
-    queries = [
-        "What is 2+2?",
-        "Analyze the benefits of using hybrid AI architectures in modern applications",
-        "Compare and contrast different approaches to multi-agent systems",
-        "Calculate the complexity of implementing a hierarchical FSM with learning capabilities"
-    ]
-    
-    for query in queries:
-        print(f"\n--- Query: {query} ---")
-        
-        # Analyze complexity
-        complexity = complexity_analyzer.analyze(query)
-        print(f"Complexity score: {complexity:.3f}")
-        
-        # Select template
-        template = template_library.select_template(query)
-        print(f"Selected template: {template}")
-        
-        # Execute reasoning
-        steps = cot.reason(query)
-        print(f"Reasoning steps: {len(steps)}")
-        
-        for i, step in enumerate(steps[:3]):  # Show first 3 steps
-            print(f"  Step {i+1}: {step.thought[:80]}... (confidence: {step.confidence:.2f})")
-
-async def demo_performance_optimization():
-    """Demonstrate performance optimization features"""
-    print("\n" + "="*60)
-    print("DEMO 5: Performance Optimization")
-    print("="*60)
-    
-    from src.advanced_hybrid_architecture import PerformanceOptimizer, ResultCache, TaskPredictor, ResourceMonitor
-    
-    # Create optimization components
-    optimizer = PerformanceOptimizer()
-    cache = ResultCache(max_size=5)
-    predictor = TaskPredictor()
-    monitor = ResourceMonitor()
-    
-    # Create a demo agent
-    tools = [CustomTool("calculator", DemoTools.calculator_tool, "Calculate")]
-    agent = HybridAgent("optimized_agent", tools)
-    
-    # Record some task sequences
-    task_sequences = [
-        [
-            {"type": "calculation", "query": "2+2"},
-            {"type": "calculation", "query": "3+3"},
-            {"type": "calculation", "query": "4+4"}
-        ],
-        [
-            {"type": "analysis", "query": "Analyze text"},
-            {"type": "calculation", "query": "5+5"},
-            {"type": "analysis", "query": "Analyze data"}
-        ]
-    ]
-    
-    for sequence in task_sequences:
-        predictor.record_sequence(sequence)
-    
-    # Test caching
-    test_task = {"type": "calculation", "query": "10+10"}
-    test_result = {"result": 20}
-    
-    print("Testing caching...")
-    cache.store(test_task, test_result)
-    cached_result = cache.get(test_task)
-    print(f"Cached result: {cached_result}")
-    
-    # Test prediction
-    current_task = {"type": "calculation", "query": "1+1"}
-    predictions = predictor.predict_next_tasks(current_task)
-    print(f"Predicted next tasks: {len(predictions)}")
-    
-    # Test resource monitoring
-    monitor.record_usage("cpu", 75.5)
-    monitor.record_usage("memory", 512.0)
-    monitor.record_usage("execution_time", 2.3)
-    
-    usage_summary = monitor.get_usage_summary()
-    print(f"Resource usage summary: {usage_summary}")
-
-async def demo_emergent_behavior():
-    """Demonstrate emergent behavior detection"""
-    print("\n" + "="*60)
-    print("DEMO 6: Emergent Behavior")
-    print("="*60)
-    
-    from src.advanced_hybrid_architecture import EmergentBehaviorEngine, BehaviorPattern
-    
-    # Create emergent behavior engine
-    engine = EmergentBehaviorEngine()
-    
-    # Create demo agents
-    tools = [CustomTool("calculator", DemoTools.calculator_tool, "Calculate")]
-    agent1 = HybridAgent("agent_1", tools)
-    agent2 = HybridAgent("agent_2", tools)
-    
-    # Simulate behavior patterns
-    tasks = [
-        {"type": "calculation", "query": "Simple math"},
-        {"type": "analysis", "query": "Complex analysis"},
-        {"type": "reasoning", "query": "Logical reasoning"}
-    ]
-    
-    print("Simulating agent behaviors...")
-    
-    # Simulate successful patterns
-    for i in range(50):
-        task = tasks[i % len(tasks)]
-        success = i < 40  # 80% success rate for first agent
-        
-        engine.observe_behavior(agent1, task, {"result": "success"}, success)
-        
-        # Second agent with different pattern
-        success2 = i < 30  # 60% success rate for second agent
-        engine.observe_behavior(agent2, task, {"result": "success"}, success2)
-    
-    print(f"Total behavior patterns recorded: {len(engine.behavior_patterns)}")
-    
-    # Analyze patterns
-    engine.analyze_patterns()
-    
-    # Test behavior evolution
-    original_behavior = {"parameters": {"threshold": 0.5, "timeout": 10}}
-    evolved_behavior = engine.evolve_behavior(agent1, original_behavior)
-    print(f"Original behavior: {original_behavior}")
-    print(f"Evolved behavior: {evolved_behavior}")
+from advanced_hybrid_architecture import AdvancedHybridAgent, AgentMode
+from optimized_chain_of_thought import OptimizedChainOfThought, ReasoningType
 
 async def main():
-    """Run all demonstrations"""
-    print("Advanced AI Agent Architecture Demonstration")
-    print("=" * 60)
+    """Main demo function"""
+    print("🚀 Enhanced Advanced Hybrid AI Agent Architecture Demo")
+    print("=" * 70)
+    print("This demo showcases the integration of:")
+    print("• Finite State Machine (FSM) with ReAct")
+    print("• Optimized Chain of Thought (CoT) reasoning")
+    print("• Multi-agent collaboration")
+    print("• Adaptive mode selection")
+    print("• Performance optimization")
+    print("• Emergent behavior detection")
+    print("=" * 70)
     
-    try:
-        # Run all demos
-        await demo_basic_hybrid_agent()
-        await demo_multi_agent_system()
-        await demo_fsm_learning()
-        await demo_chain_of_thought()
-        await demo_performance_optimization()
-        await demo_emergent_behavior()
+    # Initialize the enhanced hybrid agent
+    print("\n📋 Initializing Enhanced Hybrid Agent...")
+    agent = AdvancedHybridAgent(
+        "demo_agent",
+        config={
+            'fsm': {
+                'max_steps': 15,
+                'reflection_enabled': True,
+                'parallel_processing': True
+            },
+            'cot': {
+                'max_paths': 5,
+                'cache_size': 200,
+                'cache_ttl': 24,
+                'metacognitive_reflection': True
+            },
+            'multi_agent': {
+                'researcher_enabled': True,
+                'executor_enabled': True,
+                'synthesizer_enabled': True
+            }
+        }
+    )
+    
+    print("✅ Agent initialized successfully!")
+    
+    # Test different types of queries
+    test_queries = [
+        {
+            'query': "What is the current weather in New York?",
+            'expected_mode': AgentMode.FSM_REACT,
+            'description': "Simple factual query - should use FSM for efficiency"
+        },
+        {
+            'query': "Explain the concept of machine learning and its applications in healthcare",
+            'expected_mode': AgentMode.CHAIN_OF_THOUGHT,
+            'description': "Complex analytical query - should use CoT for deep reasoning"
+        },
+        {
+            'query': "Compare and contrast the economic systems of capitalism and socialism, then analyze their impact on innovation",
+            'expected_mode': AgentMode.HYBRID_ADAPTIVE,
+            'description': "Multi-faceted complex query - should use hybrid approach"
+        },
+        {
+            'query': "Solve the equation: 3x^2 + 7x - 2 = 0 and explain each step",
+            'expected_mode': AgentMode.CHAIN_OF_THOUGHT,
+            'description': "Mathematical problem - should use CoT with mathematical template"
+        },
+        {
+            'query': "Analyze the potential long-term impacts of artificial intelligence on employment, education, and society",
+            'expected_mode': AgentMode.MULTI_AGENT,
+            'description': "Complex multi-domain analysis - should use multi-agent collaboration"
+        }
+    ]
+    
+    print(f"\n🧪 Testing {len(test_queries)} different query types...")
+    print("-" * 70)
+    
+    for i, test_case in enumerate(test_queries, 1):
+        print(f"\n📝 Test Case {i}: {test_case['description']}")
+        print(f"Query: {test_case['query']}")
+        print(f"Expected Mode: {test_case['expected_mode'].name}")
         
-        print("\n" + "="*60)
-        print("All demonstrations completed successfully!")
-        print("="*60)
+        # Process the query
+        start_time = asyncio.get_event_loop().time()
+        result = await agent.process_query(test_case['query'])
+        execution_time = asyncio.get_event_loop().time() - start_time
         
-    except Exception as e:
-        logger.error(f"Error in demonstration: {str(e)}")
-        print(f"Error: {str(e)}")
+        # Display results
+        print(f"✅ Actual Mode: {result.get('mode', 'unknown')}")
+        print(f"🎯 Confidence: {result.get('confidence', 0):.3f}")
+        print(f"⏱️  Execution Time: {execution_time:.3f}s")
+        
+        # Show mode-specific details
+        if result.get('mode') == 'chain_of_thought':
+            reasoning_path = result.get('reasoning_path')
+            if reasoning_path:
+                print(f"🧠 CoT Steps: {len(reasoning_path.steps)}")
+                print(f"📋 Template: {reasoning_path.template_used}")
+                print(f"🔍 Reasoning Types: {[step.reasoning_type.name for step in reasoning_path.steps[:3]]}")
+                
+                # Show key insights
+                insights = result.get('insights', {})
+                if insights:
+                    print(f"💡 Key Thoughts: {insights.get('key_thoughts', [])[:2]}")
+        
+        elif result.get('mode') == 'fsm_react':
+            steps = result.get('steps', [])
+            tools_used = result.get('tools_used', [])
+            print(f"⚙️  FSM Steps: {len(steps)}")
+            print(f"🔧 Tools Used: {tools_used}")
+        
+        elif result.get('mode') == 'hybrid':
+            print(f"🔄 Hybrid Synthesis: {result.get('answer', '')[:100]}...")
+            print(f"📊 Secondary Answer: {result.get('secondary_answer', '')[:50]}...")
+        
+        elif result.get('mode') == 'multi_agent':
+            research = result.get('research', {})
+            execution = result.get('execution', {})
+            synthesis = result.get('synthesis', {})
+            print(f"🔬 Research Confidence: {research.get('confidence', 0):.3f}")
+            print(f"⚡ Execution Confidence: {execution.get('confidence', 0):.3f}")
+            print(f"🎯 Synthesis Confidence: {synthesis.get('confidence', 0):.3f}")
+        
+        # Show emergent insights if any
+        if 'emergent_insights' in result:
+            insights = result['emergent_insights']
+            print(f"🌟 Emergent Insights: {insights}")
+        
+        print("-" * 50)
+    
+    # Performance Analysis
+    print(f"\n📊 Performance Analysis")
+    print("=" * 50)
+    
+    report = agent.get_performance_report()
+    
+    print(f"📈 Total Queries: {report['total_queries']}")
+    print(f"🎯 Average Confidence: {report['average_confidence']:.3f}")
+    print(f"⏱️  Average Execution Time: {report['average_execution_time']:.3f}s")
+    
+    print(f"\n📋 Mode Usage:")
+    for mode, count in report['mode_usage'].items():
+        percentage = (count / report['total_queries']) * 100
+        print(f"  {mode}: {count} queries ({percentage:.1f}%)")
+    
+    # CoT Performance Details
+    if 'cot_performance' in report:
+        cot_perf = report['cot_performance']
+        print(f"\n🧠 Chain of Thought Performance:")
+        print(f"  Cache Hit Rate: {cot_perf.get('cache_hit_rate', 0):.3f}")
+        print(f"  Average Confidence: {cot_perf.get('average_confidence', 0):.3f}")
+        print(f"  Templates Used: {cot_perf.get('templates_usage', {})}")
+    
+    # Reasoning History
+    print(f"\n📚 Recent Reasoning History:")
+    print("-" * 50)
+    history = agent.get_reasoning_history()
+    for entry in history[-5:]:  # Show last 5 entries
+        print(f"  {entry['mode']}: {entry['query'][:40]}... (conf: {entry['confidence']:.2f})")
+    
+    # Advanced Features Demo
+    print(f"\n🚀 Advanced Features Demo")
+    print("=" * 50)
+    
+    # Test parallel reasoning
+    print("\n🔄 Testing Parallel Reasoning...")
+    parallel_result = await agent.process_query(
+        "Analyze the benefits and risks of renewable energy sources"
+    )
+    print(f"Parallel Mode: {parallel_result.get('mode')}")
+    print(f"Best Confidence: {parallel_result.get('confidence', 0):.3f}")
+    
+    # Test caching
+    print("\n💾 Testing Cache Performance...")
+    cache_query = "What is machine learning?"
+    start_time = asyncio.get_event_loop().time()
+    result1 = await agent.process_query(cache_query)
+    time1 = asyncio.get_event_loop().time() - start_time
+    
+    start_time = asyncio.get_event_loop().time()
+    result2 = await agent.process_query(cache_query)
+    time2 = asyncio.get_event_loop().time() - start_time
+    
+    print(f"First run: {time1:.3f}s")
+    print(f"Cached run: {time2:.3f}s")
+    print(f"Speedup: {time1/time2:.1f}x")
+    
+    print(f"\n🎉 Demo completed successfully!")
+    print("The enhanced hybrid architecture demonstrates:")
+    print("• Intelligent mode selection based on query complexity")
+    print("• Optimized Chain of Thought with multiple reasoning paths")
+    print("• Multi-agent collaboration for complex tasks")
+    print("• Performance optimization through caching")
+    print("• Emergent behavior detection and analysis")
+    print("• Comprehensive performance tracking and reporting")
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n\n⏹️  Demo interrupted by user")
+    except Exception as e:
+        print(f"\n❌ Error during demo: {e}")
+        import traceback
+        traceback.print_exc() 
