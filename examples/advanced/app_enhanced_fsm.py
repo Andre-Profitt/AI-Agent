@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
 # Import modular components
-from config import config, Environment
+from src.config import config, Environment
 from session import SessionManager, ParallelAgentPool
 from ui import (
     create_main_chat_interface, 

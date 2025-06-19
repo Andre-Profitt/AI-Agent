@@ -12,7 +12,7 @@ import os
 import anthropic
 from pydantic import BaseModel, Field
 
-from config import config
+from src.config import config
 
 
 @dataclass

@@ -459,7 +459,7 @@ def image_analyzer_enhanced(filename: str, task: str = "describe") -> str:
         logger.error(f"Error in enhanced image analyzer: {e}")
         return f"Error analyzing image: {str(e)}"
 
-from config import config
+from src.config import config
 
 def get_enhanced_tools():
     """Get tools based on available API keys"""

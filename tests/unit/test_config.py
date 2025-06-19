@@ -4,7 +4,7 @@ Unit tests for configuration module
 
 import os
 import pytest
-from config import Config, Environment, ModelConfig, APIConfig, PerformanceConfig
+from src.config import Config, Environment, ModelConfig, APIConfig, PerformanceConfig
 
 
 class TestConfig:

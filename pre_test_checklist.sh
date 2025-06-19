@@ -7,7 +7,7 @@ echo "=================================="
 
 # Check Python version
 echo "1. Checking Python version..."
-python --version
+python3 --version
 if [ $? -eq 0 ]; then
     echo "✅ Python is available"
 else
