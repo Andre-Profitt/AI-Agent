@@ -19,7 +19,7 @@ This module contains utility functions including:
 """
 
 from .knowledge_utils import LocalKnowledgeTool, create_local_knowledge_tool
-from .data_quality import DataQuality
+from .data_quality import DataQualityValidator
 from .tools_production import ToolsProduction
 from .tools_interactive import ToolsInteractive
 from .tools_introspection import ToolsIntrospection
@@ -33,11 +33,13 @@ from .tavily_search import TavilySearchTool
 from .python_interpreter import PythonInterpreter
 from .file_reader import FileReader
 from .advanced_file_reader import AdvancedFileReader
+from .logging import get_logger, setup_logging
+from .metrics import track_metric, get_metrics
 
 __all__ = [
     "LocalKnowledgeTool",
     "create_local_knowledge_tool",
-    "DataQuality",
+    "DataQualityValidator",
     "ToolsProduction",
     "ToolsInteractive",
     "ToolsIntrospection",
@@ -50,5 +52,9 @@ __all__ = [
     "TavilySearchTool",
     "PythonInterpreter",
     "FileReader",
-    "AdvancedFileReader"
+    "AdvancedFileReader",
+    "get_logger",
+    "setup_logging",
+    "track_metric",
+    "get_metrics"
 ] 

@@ -1,387 +1,294 @@
 #!/usr/bin/env python3
 """
-AI Agent Application - Fixed Import Structure
-This file includes the proper import configuration to resolve the
-"attempted relative import with no known parent package" error.
+AI Agent Application - Production Ready for HuggingFace Spaces
+Fixed import structure and enhanced error handling
 """
 
-# Fix Python path to recognize the package structure
 import sys
+import os
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent))
+
+# Fix Python path BEFORE any imports
+ROOT_DIR = Path(__file__).parent
+sys.path.insert(0, str(ROOT_DIR))
 
 # Standard library imports
-import os
+import asyncio
 import uuid
 import logging
-import re
-import json
-import time
-import datetime
-from typing import List, Tuple, Dict, Any, Optional
-from pathlib import Path
-import pandas as pd
-import threading
+from typing import List, Dict, Any, Optional
+import signal
+from contextlib import asynccontextmanager
 
+# Third-party imports
 import gradio as gr
 from dotenv import load_dotenv
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
-# Import modular components
-from config import config, Environment
-from session import SessionManager, ParallelAgentPool
-from ui import (
-    create_main_chat_interface, 
-    create_gaia_evaluation_tab, 
-    create_analytics_tab,
-    create_documentation_tab,
-    create_custom_css,
-    format_message_with_steps,
-    export_conversation_to_file
-)
-from gaia_logic import GAIAEvaluator, GAIA_AVAILABLE
-from src.agents.gaia_enhanced_agent import EnhancedGAIAAgent
-from src.monitoring.gaia_dashboard import get_gaia_dashboard
-from src.optimization.gaia_optimizer import get_gaia_optimizer
-
-# Only load .env file if not in a Hugging Face Space
-if config.environment != Environment.HUGGINGFACE_SPACE:
+# Load environment variables
+if os.path.exists('.env'):
     load_dotenv()
 
-# Configure logging based on config - MUST BE BEFORE ANY LOGGER USAGE
-logging.basicConfig(
-    level=getattr(logging, config.logging.LOG_LEVEL),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-logger.propagate = False
+# Local imports - using absolute imports
+from src.config.settings import Settings
+from src.config.integrations import IntegrationConfig
+from src.core.monitoring import MetricsCollector
+from src.core.health_check import HealthChecker
+from src.services.integration_hub import IntegrationHub
+from src.database.supabase_manager import SupabaseManager
+from src.utils.logging import setup_logging, get_logger
+from src.tools.registry import ToolRegistry
 
-# Import the new FSM agent and integration hub
-try:
-    from src.tools.base_tool import BaseTool
-    from src.reasoning.reasoning_path import ReasoningPath, ReasoningType
-    from src.errors.error_category import ErrorCategory
-    from src.advanced_agent_fsm import FSMReActAgent, validate_user_prompt, ValidationResult
-    from src.database import get_supabase_client, SupabaseLogHandler
-    # Import integration hub for centralized component management
-    from src.integration_hub import initialize_integrations, cleanup_integrations, get_integration_hub, get_tools
-    # Import enhanced tools for GAIA
-    from src.tools_enhanced import get_enhanced_tools
-    from src.knowledge_ingestion import KnowledgeIngestionService
-    # Add GAIA optimizations imports
-    from src.gaia.caching import response_cache, question_cache, error_cache
-    from src.gaia.metrics import gaia_metrics
-    from src.gaia.tools import gaia_chess_analyzer, gaia_music_search, gaia_country_code_lookup, gaia_mathematical_calculator
-    from src.advanced_agent_fsm import analyze_question_type, create_gaia_optimized_plan, GAIAAgentState
-    from src.gaia.testing import GAIATestPatterns
-except ImportError as e:
-    import sys
-    import os
-    print(f"Import Error: {e}")
-    print(f"Current working directory: {os.getcwd()}")
-    print(f"Python path: {sys.path}")
-    print(f"Contents of src directory: {os.listdir('src') if os.path.exists('src') else 'src directory not found'}")
-    raise
-
-# Helper functions for chat processing
-def format_chat_history(history: List[List[str]]) -> List[Dict[str, str]]:
-    """Format chat history for agent processing."""
-    formatted = []
-    for user_msg, assistant_msg in history:
-        formatted.append({"role": "user", "content": user_msg})
-        formatted.append({"role": "assistant", "content": assistant_msg})
-    return formatted
-
-def extract_final_answer(response_output: str) -> str:
-    """Extract clean final answer from agent response."""
-    if not response_output:
-        return "I couldn't generate a response."
-    
-    # Remove common formatting artifacts
-    cleaned = response_output.strip()
-    
-    # Remove LaTeX boxing notation
-    cleaned = re.sub(r'\\boxed\{([^}]+)\}', r'\1', cleaned)
-    
-    # Remove "final answer" prefixes
-    cleaned = re.sub(r'^[Tt]he\s+final\s+answer\s+is\s*:?\s*', '', cleaned)
-    cleaned = re.sub(r'^[Ff]inal\s+answer\s*:?\s*', '', cleaned)
-    
-    # Remove tool call artifacts
-    cleaned = re.sub(r'<tool_call>.*?</tool_call>', '', cleaned, flags=re.DOTALL)
-    cleaned = re.sub(r'<invoke>.*?</invoke>', '', cleaned, flags=re.DOTALL)
-    
-    # Remove mathematical formatting
-    cleaned = re.sub(r'\$([^$]+)\$', r'\1', cleaned)
-    
-    # Clean up extra whitespace and punctuation
-    cleaned = re.sub(r'\s+', ' ', cleaned)
-    cleaned = cleaned.strip()
-    
-    # Remove trailing punctuation if it's just formatting
-    if cleaned.endswith('.') and len(cleaned) < 50:
-        cleaned = cleaned[:-1]
-    
-    return cleaned if cleaned else "I couldn't generate a response."
+# Initialize logging
+setup_logging()
+logger = get_logger(__name__)
 
 class AIAgentApp:
-    """Main application class for the AI Agent."""
+    """Main application class with all fixes implemented"""
     
     def __init__(self):
-        """Initialize with proper error handling and fallbacks."""
-        self.agent = None
-        self.tools = []
-        self.session_manager = None
-        self.log_handler = None
-        self.model_name = None
+        self.settings = Settings()
+        self.metrics = MetricsCollector()
+        self.health_checker = HealthChecker()
         self.integration_hub = None
-        self.gaia_agent = None
-        self.setup_environment()
-        self.initialize_components()
+        self.db_manager = None
+        self.tool_registry = None
+        self.initialized = False
         
-    def setup_environment(self):
-        # Enable tracing if configured
-        if config.is_tracing_enabled:
-            os.environ["LANGCHAIN_TRACING_V2"] = "true"
-            os.environ["LANGCHAIN_PROJECT"] = config.langsmith_project
-            os.environ["LANGCHAIN_ENDPOINT"] = config.langsmith_endpoint
-            os.environ["LANGCHAIN_API_KEY"] = config.langsmith_api_key
-            logger.info("LangSmith tracing enabled")
-        # Initialize Supabase logging if available
-        if config.has_database:
-            try:
-                from src.database import get_supabase_client, SupabaseLogHandler
-                supabase_client = get_supabase_client()
-                self.log_handler = SupabaseLogHandler(supabase_client)
-                logger.addHandler(self.log_handler)
-                logger.info("Supabase logging enabled")
-            except Exception as e:
-                logger.warning(f"Supabase logging disabled: {e}")
-        # Set model name
-        self.model_name = config.primary_model
-        logger.info(f"Using model: {self.model_name}")
-        
-    def initialize_components(self):
-        """Initialize with comprehensive error handling."""
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                # Initialize integration hub first
-                self._initialize_integration_hub()
-                
-                # Initialize tools from integration hub
-                self.tools = self._initialize_tools_with_fallback()
-                
-                # Initialize agent with validated configuration
-                self.agent = self._initialize_agent()
-                
-                # Initialize session manager
-                self.session_manager = SessionManager(max_sessions=10)
-                
-                # Initialize enhanced GAIA agent
-                try:
-                    self.gaia_agent = EnhancedGAIAAgent(log_handler=self.log_handler)
-                    logger.info("Enhanced GAIA agent initialized")
-                except Exception as e:
-                    logger.warning(f"Enhanced GAIA agent initialization failed: {e}")
-                    self.gaia_agent = None
-                
-                logger.info("All components initialized successfully")
-                break
-            except Exception as e:
-                logger.error(f"Initialization attempt {attempt + 1} failed: {e}")
-                if attempt == max_retries - 1:
-                    self._initialize_minimal_setup()
-                else:
-                    time.sleep(2 ** attempt)
-    
-    async def _initialize_integration_hub(self):
-        """Initialize the integration hub"""
+    async def initialize(self):
+        """Initialize all components with proper error handling"""
         try:
-            self.integration_hub = get_integration_hub()
-            await initialize_integrations()
-            logger.info("Integration hub initialized successfully")
+            logger.info("Starting application initialization...")
+            
+            # 1. Setup environment
+            await self._setup_environment()
+            
+            # 2. Initialize database
+            await self._initialize_database()
+            
+            # 3. Initialize tools
+            await self._initialize_tools()
+            
+            # 4. Initialize integration hub
+            await self._initialize_integration_hub()
+            
+            # 5. Start health monitoring
+            await self._start_monitoring()
+            
+            self.initialized = True
+            logger.info("Application initialized successfully")
+            
         except Exception as e:
-            logger.warning(f"Integration hub initialization failed: {e}")
-            self.integration_hub = None
-    
-    def _initialize_tools_with_fallback(self):
-        try:
-            # Use integration hub if available
-            if self.integration_hub and self.integration_hub.is_ready():
-                return self.integration_hub.get_tools()
-            else:
-                # Fallback to direct tool import
-                from src.tools_enhanced import get_enhanced_tools
-                return get_enhanced_tools()
-        except ImportError:
-            logger.warning("Enhanced tools unavailable, using basic tools")
-            return self._get_basic_tools()
-    
-    def _get_basic_tools(self):
-        # Minimal tool fallback
-        from src.tools import file_reader
-        return [file_reader]
-    
-    def _initialize_agent(self):
-        try:
-            from src.advanced_agent_fsm import FSMReActAgent
-            return FSMReActAgent(
-                tools=self.tools,
-                model_name=self.model_name,
-                log_handler=self.log_handler,
-                model_preference="balanced",
-                use_crew=True
-            )
-        except Exception as e:
-            logger.error(f"Failed to initialize FSM agent: {e}")
+            logger.error(f"Failed to initialize application: {e}", exc_info=True)
+            await self.shutdown()
             raise
     
-    def _initialize_minimal_setup(self):
-        """Initialize minimal setup when all else fails"""
-        logger.warning("Initializing minimal setup")
-        self.tools = self._get_basic_tools()
-        self.agent = None
-        self.session_manager = SessionManager(max_sessions=5)
+    async def _setup_environment(self):
+        """Setup environment with validation"""
+        logger.info("Setting up environment...")
         
-    def process_gaia_questions(self, questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Process GAIA benchmark questions."""
-        return GAIAEvaluator.process_questions(questions, self.agent)
+        # Validate required environment variables
+        required_vars = ['SUPABASE_URL', 'SUPABASE_KEY', 'GROQ_API_KEY']
+        missing_vars = [var for var in required_vars if not os.getenv(var)]
         
-    def process_chat_message(self, message: str, history: list, log_to_db: bool = True, session_id: str = None) -> tuple:
-        """Process chat message with timeout and error handling."""
-        if not session_id:
-            session_id = str(uuid.uuid4())
-            
-        def timeout_handler(signum, frame):
-            raise TimeoutError("Agent response timeout")
-            
+        if missing_vars:
+            logger.warning(f"Missing environment variables: {missing_vars}")
+            # Don't fail completely, allow graceful degradation
+        
+        # Set up signal handlers
+        signal.signal(signal.SIGTERM, self._signal_handler)
+        signal.signal(signal.SIGINT, self._signal_handler)
+    
+    def _signal_handler(self, signum, frame):
+        """Handle shutdown signals gracefully"""
+        logger.info(f"Received signal {signum}, initiating shutdown...")
+        asyncio.create_task(self.shutdown())
+    
+    async def _initialize_database(self):
+        """Initialize database with connection pooling"""
+        logger.info("Initializing database connection...")
+        
         try:
-            # Validate input
-            validation_result = validate_user_prompt(message)
-            if not validation_result.is_valid:
-                return history + [[message, f"Invalid input: {validation_result.error_message}"]], session_id
+            self.db_manager = SupabaseManager(
+                url=os.getenv('SUPABASE_URL', ''),
+                key=os.getenv('SUPABASE_KEY', ''),
+                pool_size=10,
+                max_retries=3
+            )
             
-            # Process with agent
-            response = self.agent.run(message)
-            final_answer = extract_final_answer(response)
+            await self.db_manager.initialize()
+            await self.db_manager.test_connection()
             
-            # Log to database if enabled
-            if log_to_db and self.log_handler:
-                self.log_handler.log_interaction(session_id, message, final_answer)
-                
-            return history + [[message, final_answer]], session_id
+            logger.info("Database initialized successfully")
+        except Exception as e:
+            logger.error(f"Database initialization failed: {e}")
+            # Continue without database
+            self.db_manager = None
+    
+    async def _initialize_tools(self):
+        """Initialize tool registry with all tools"""
+        logger.info("Initializing tools...")
+        
+        self.tool_registry = ToolRegistry()
+        
+        # Register all tools
+        from src.tools.implementations import (
+            file_reader, web_researcher, python_interpreter,
+            audio_transcriber, video_analyzer, image_analyzer
+        )
+        
+        tools = [
+            file_reader, web_researcher, python_interpreter,
+            audio_transcriber, video_analyzer, image_analyzer
+        ]
+        
+        for tool in tools:
+            self.tool_registry.register(tool)
+        
+        logger.info(f"Registered {len(tools)} tools")
+    
+    async def _initialize_integration_hub(self):
+        """Initialize integration hub with circuit breakers"""
+        logger.info("Initializing integration hub...")
+        
+        self.integration_hub = IntegrationHub(
+            db_manager=self.db_manager,
+            tool_registry=self.tool_registry,
+            metrics_collector=self.metrics
+        )
+        
+        await self.integration_hub.initialize()
+        
+        logger.info("Integration hub initialized")
+    
+    async def _start_monitoring(self):
+        """Start monitoring and health checks"""
+        logger.info("Starting monitoring services...")
+        
+        # Start metrics collection
+        await self.metrics.start()
+        
+        # Start health check endpoint
+        await self.health_checker.start(
+            db_manager=self.db_manager,
+            integration_hub=self.integration_hub
+        )
+        
+        logger.info("Monitoring services started")
+    
+    async def shutdown(self):
+        """Graceful shutdown with proper cleanup"""
+        logger.info("Starting graceful shutdown...")
+        
+        try:
+            # Stop monitoring
+            if self.health_checker:
+                await self.health_checker.stop()
+            
+            if self.metrics:
+                await self.metrics.stop()
+            
+            # Close integration hub
+            if self.integration_hub:
+                await self.integration_hub.shutdown()
+            
+            # Close database connections
+            if self.db_manager:
+                await self.db_manager.close()
+            
+            logger.info("Shutdown completed successfully")
             
         except Exception as e:
-            logger.error(f"Error processing message: {e}")
-            error_message = f"I encountered an error: {str(e)}"
-            return history + [[message, error_message]], session_id
+            logger.error(f"Error during shutdown: {e}", exc_info=True)
+    
+    def create_interface(self):
+        """Create Gradio interface with error handling"""
+        if not self.initialized:
+            raise RuntimeError("Application not initialized")
         
-    async def chat_interface_logic_sync(self, message: str, history: List[List[str]]) -> str:
-        """Enhanced chat interface with database tracking"""
-        try:
-            # Validate input
-            validation_result = validate_user_prompt(message)
-            if not validation_result.is_valid:
-                return f"❌ {validation_result.error_message}"
+        with gr.Blocks(title="AI Agent - Production Ready") as interface:
+            gr.Markdown("# 🤖 AI Agent System")
             
-            # Process with enhanced agent
-            if self.gaia_agent:
-                response = await self.gaia_agent.process_query(
-                    message, 
-                    difficulty='medium',
-                    session_id=str(uuid4())
-                )
-            else:
-                # Fallback to existing agent
-                response = self.agent.run({"input": message})
-                response = response.get("output", "No response generated")
-            
-            return response
-            
-        except Exception as e:
-            logger.error(f"Error in chat interface: {e}")
-            return f"❌ An error occurred: {str(e)}"
-    
-    async def get_gaia_metrics(self) -> Dict[str, Any]:
-        """Get GAIA performance metrics"""
-        if self.gaia_agent:
-            return await self.gaia_agent.get_performance_metrics()
-        return {"error": "GAIA agent not available"}
-
-    def build_interface(self):
-        """Build the Gradio interface."""
-        return create_interface()
-
-def create_interface():
-    """Create the main Gradio interface with GAIA dashboard"""
-    
-    with gr.Blocks(title="GAIA AI Agent") as interface:
-        gr.Markdown("# 🤖 GAIA AI Agent with Database Integration")
+            with gr.Tabs():
+                # Chat Interface
+                with gr.TabItem("💬 Chat"):
+                    chatbot = gr.Chatbot(height=600)
+                    msg = gr.Textbox(label="Message", placeholder="Ask me anything...")
+                    clear = gr.Button("Clear")
+                    
+                    async def process_message(message, history):
+                        try:
+                            # Track metrics
+                            self.metrics.track_request("chat")
+                            
+                            # Process through integration hub
+                            response = await self.integration_hub.process_message(
+                                message=message,
+                                history=history
+                            )
+                            
+                            # Update history
+                            history = history or []
+                            history.append([message, response])
+                            
+                            return "", history
+                            
+                        except Exception as e:
+                            logger.error(f"Error processing message: {e}")
+                            self.metrics.track_error("chat", str(e))
+                            error_msg = "I encountered an error. Please try again."
+                            history.append([message, error_msg])
+                            return "", history
+                    
+                    msg.submit(process_message, [msg, chatbot], [msg, chatbot])
+                    clear.click(lambda: None, None, chatbot)
+                
+                # Health Status
+                with gr.TabItem("🏥 Health"):
+                    health_status = gr.JSON(label="System Health")
+                    refresh_btn = gr.Button("Refresh")
+                    
+                    async def get_health():
+                        return await self.health_checker.get_status()
+                    
+                    refresh_btn.click(get_health, outputs=health_status)
+                
+                # Metrics Dashboard
+                with gr.TabItem("📊 Metrics"):
+                    metrics_display = gr.JSON(label="System Metrics")
+                    metrics_refresh = gr.Button("Refresh")
+                    
+                    async def get_metrics():
+                        return self.metrics.get_all_metrics()
+                    
+                    metrics_refresh.click(get_metrics, outputs=metrics_display)
         
-        with gr.Tabs():
-            # Chat Tab
-            with gr.TabItem("💬 Advanced Chat"):
-                chatbot = gr.Chatbot(height=600)
-                msg = gr.Textbox(label="Ask me anything...", placeholder="Type your question here")
-                clear = gr.Button("Clear")
-                
-                # Chat functionality
-                msg.submit(chat_interface_logic_sync, [msg, chatbot], [msg, chatbot])
-                clear.click(lambda: None, None, chatbot, queue=False)
-            
-            # GAIA Evaluation Tab
-            with gr.TabItem("🏆 GAIA Evaluation"):
-                gr.Markdown("## GAIA Benchmark Evaluation")
-                # Add GAIA evaluation components here
-            
-            # Performance Dashboard Tab
-            with gr.TabItem("📊 Performance Dashboard"):
-                dashboard = get_gaia_dashboard()
-                dashboard_interface = dashboard.create_dashboard_interface()
-            
-            # Optimization Tab
-            with gr.TabItem("⚡ Performance Optimization"):
-                gr.Markdown("## Automated Performance Analysis")
-                optimize_btn = gr.Button("🔍 Analyze Performance", variant="primary")
-                report_output = gr.Markdown()
-                
-                def generate_optimization_report():
-                    optimizer = get_gaia_optimizer()
-                    return asyncio.run(optimizer.get_optimization_report())
-                
-                optimize_btn.click(generate_optimization_report, outputs=[report_output])
-    
-    return interface
+        return interface
 
-def main():
-    """Main entry point."""
+# Application entry point
+async def main():
+    """Main entry point with proper lifecycle management"""
+    app = AIAgentApp()
+    
     try:
-        # Initialize the application
-        app = AIAgentApp()
+        # Initialize application
+        await app.initialize()
         
-        # Build the interface
-        interface = app.build_interface()
+        # Create and launch interface
+        interface = app.create_interface()
         
-        # Launch the interface
+        # Launch Gradio (blocking)
         interface.launch(
             server_name="0.0.0.0",
             server_port=7860,
-            share=False,
-            debug=True
+            share=False
         )
         
     except Exception as e:
-        logger.error(f"Application startup failed: {e}")
-        print(f"Failed to start application: {e}")
-        sys.exit(1)
+        logger.error(f"Application failed: {e}", exc_info=True)
+        raise
     finally:
-        # Cleanup integration hub
-        try:
-            if app.integration_hub:
-                asyncio.run(cleanup_integrations())
-        except Exception as e:
-            logger.error(f"Cleanup failed: {e}")
+        await app.shutdown()
 
 if __name__ == "__main__":
-    main() 
+    # Run the application
+    asyncio.run(main()) 

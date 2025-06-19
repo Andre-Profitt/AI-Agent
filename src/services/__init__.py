@@ -15,6 +15,7 @@ from .next_gen_integration import NextGenIntegration
 from .health_check import HealthCheck
 from .knowledge_ingestion import KnowledgeIngestion
 from .embedding_manager import EmbeddingManager
+from .circuit_breaker import CircuitBreaker
 
 __all__ = [
     "IntegrationHub",
@@ -23,5 +24,6 @@ __all__ = [
     "NextGenIntegration",
     "HealthCheck",
     "KnowledgeIngestion",
-    "EmbeddingManager"
+    "EmbeddingManager",
+    "CircuitBreaker"
 ] 

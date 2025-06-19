@@ -51,7 +51,7 @@ except ImportError:
         logging.warning("Could not import integration_config - using defaults")
 
 # Import centralized embedding manager
-from .embedding_manager import get_embedding_manager
+from ..services.embedding_manager import get_embedding_manager
 
 logger = logging.getLogger(__name__)
 

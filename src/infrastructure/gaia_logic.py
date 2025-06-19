@@ -14,10 +14,10 @@ from typing import List, Dict, Any, Optional
 import gradio as gr
 import re
 
-from config import config
-from src.advanced_agent_fsm import FSMReActAgent
-from src.tools_enhanced import get_enhanced_tools
-from src.database import get_supabase_client, SupabaseLogHandler
+from .config import config
+from src.agents.advanced_agent_fsm import FSMReActAgent
+from src.utils.tools_enhanced import get_enhanced_tools
+from .database import get_supabase_client, SupabaseLogHandler
 
 logger = logging.getLogger(__name__)
 

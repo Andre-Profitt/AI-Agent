@@ -12,7 +12,7 @@ This module contains infrastructure components including:
 # from .database_enhanced import DatabaseEnhanced  # Removed, does not exist
 from .config import Config
 # from .config_cli import ConfigCLI  # Removed, does not exist
-from .session import Session
+from .session import SessionManager, SessionMetrics, AsyncResponseCache
 from .gaia_logic import GaiaLogic
 from .integrations import Integrations
 
@@ -20,7 +20,9 @@ __all__ = [
     # "DatabaseEnhanced",  # Removed
     "Config",
     # "ConfigCLI",  # Removed
-    "Session",
+    "SessionManager",
+    "SessionMetrics", 
+    "AsyncResponseCache",
     "GaiaLogic",
     "Integrations"
 ] 

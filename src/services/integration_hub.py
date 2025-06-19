@@ -23,7 +23,7 @@ import os
 import sys
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from contextlib import asynccontextmanager
 import numpy as np
@@ -32,58 +32,84 @@ from collections import defaultdict
 # Add src to path for proper imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.config.integrations import integration_config
+from src.infrastructure.integrations import integration_config
 from src.tools.base_tool import BaseTool
+from src.utils.logging import get_logger
+from src.services.circuit_breaker import CircuitBreaker
+from src.core.exceptions import (
+    ToolExecutionError, 
+    CircuitBreakerOpenError,
+    MaxRetriesExceededError
+)
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # ============================================
 # TOOL CALL TRACKER - PREVENT LOOPS
 # ============================================
 
+@dataclass
+class ToolCall:
+    """Track individual tool calls"""
+    tool_name: str
+    params: Dict[str, Any]
+    timestamp: datetime
+    call_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    
 class ToolCallTracker:
-    """Track tool calls to prevent infinite loops"""
+    """Enhanced tool call tracking with loop prevention"""
     
     def __init__(self, max_depth: int = 10, max_repeats: int = 3):
         self.max_depth = max_depth
         self.max_repeats = max_repeats
-        self.call_stack = []
-        self.call_counts = defaultdict(int)
-    
-    def start_call(self, tool_name: str, params: Dict[str, Any]) -> bool:
-        """Check if tool call is allowed and track it"""
-        # Create call signature
-        call_sig = f"{tool_name}:{json.dumps(params, sort_keys=True)}"
+        self.call_stack: List[ToolCall] = []
+        self.call_history: Dict[str, List[ToolCall]] = defaultdict(list)
         
+    def can_call(self, tool_name: str, params: Dict[str, Any]) -> bool:
+        """Check if tool call is allowed"""
         # Check depth
         if len(self.call_stack) >= self.max_depth:
-            logger.warning(f"Max call depth reached: {self.max_depth}")
+            logger.warning(f"Max call depth {self.max_depth} reached")
             return False
         
-        # Check repeats
-        if self.call_counts[call_sig] >= self.max_repeats:
-            logger.warning(f"Tool {tool_name} called too many times with same params")
+        # Check for repeated calls
+        call_signature = f"{tool_name}:{str(sorted(params.items()))}"
+        recent_calls = [
+            call for call in self.call_history[call_signature]
+            if call.timestamp > datetime.now() - timedelta(seconds=60)
+        ]
+        
+        if len(recent_calls) >= self.max_repeats:
+            logger.warning(f"Tool {tool_name} called {len(recent_calls)} times recently")
             return False
         
         # Check for direct recursion
-        if self.call_stack and self.call_stack[-1] == call_sig:
-            logger.warning(f"Direct recursion detected for {tool_name}")
-            return False
+        if self.call_stack and self.call_stack[-1].tool_name == tool_name:
+            # Allow recursion only with different parameters
+            if self.call_stack[-1].params == params:
+                logger.warning(f"Direct recursion detected for {tool_name}")
+                return False
         
-        # Track the call
-        self.call_stack.append(call_sig)
-        self.call_counts[call_sig] += 1
         return True
     
-    def end_call(self):
-        """Mark end of tool call"""
-        if self.call_stack:
-            self.call_stack.pop()
+    def start_call(self, tool_name: str, params: Dict[str, Any]) -> str:
+        """Start tracking a tool call"""
+        call = ToolCall(tool_name=tool_name, params=params, timestamp=datetime.now())
+        self.call_stack.append(call)
+        
+        call_signature = f"{tool_name}:{str(sorted(params.items()))}"
+        self.call_history[call_signature].append(call)
+        
+        return call.call_id
+    
+    def end_call(self, call_id: str):
+        """End tracking a tool call"""
+        self.call_stack = [call for call in self.call_stack if call.call_id != call_id]
     
     def reset(self):
         """Reset tracker for new execution"""
         self.call_stack.clear()
-        self.call_counts.clear()
+        self.call_history.clear()
 
 # ============================================
 # CIRCUIT BREAKER PATTERN
@@ -92,9 +118,10 @@ class ToolCallTracker:
 class CircuitBreaker:
     """Circuit breaker for tool reliability"""
     
-    def __init__(self, failure_threshold: int = 5, recovery_timeout: float = 60.0):
+    def __init__(self, failure_threshold: int = 5, recovery_timeout: float = 60.0, half_open_attempts: int = 3):
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
+        self.half_open_attempts = half_open_attempts
         self.failures = defaultdict(int)
         self.last_failure_time = {}
         self.circuit_open = set()
@@ -467,7 +494,7 @@ class ToolOrchestrator:
         start_time = time.time()
         
         # Check if call is allowed
-        if not self.call_tracker.start_call(tool_name, params):
+        if not self.call_tracker.can_call(tool_name, params):
             return {
                 "success": False, 
                 "error": "Tool call limit exceeded (possible infinite loop)"
@@ -535,7 +562,7 @@ class ToolOrchestrator:
             return {"success": False, "error": str(e)}
         finally:
             # Always end the call tracking
-            self.call_tracker.end_call()
+            self.call_tracker.end_call(self.call_tracker.start_call(tool_name, params))
     
     async def execute_with_compatibility_check(self, tool_name: str, params: Dict[str, Any],
                                              session_id: str = None) -> Dict[str, Any]:

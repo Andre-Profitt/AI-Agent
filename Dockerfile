@@ -1,42 +1,66 @@
-# Multi-Agent Platform API Server Dockerfile
-FROM python:3.11-slim
+# Multi-stage build for optimized image
+FROM python:3.11-slim as builder
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONPATH=/app
-
-# Install system dependencies
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    curl \
+    gcc \
+    g++ \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Set work directory
-WORKDIR /app
+# Set working directory
+WORKDIR /build
 
-# Copy requirements first for better caching
+# Copy requirements
 COPY requirements.txt .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Runtime stage
+FROM python:3.11-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libsm6 \
+    libxext6 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -u 1000 agent
+
+# Set working directory
+WORKDIR /app
+
+# Copy Python packages from builder
+COPY --from=builder /root/.local /home/agent/.local
 
 # Copy application code
-COPY . .
+COPY --chown=agent:agent . .
 
-# Create non-root user for security
-RUN useradd --create-home --shell /bin/bash app && \
-    chown -R app:app /app
-USER app
+# Set Python path
+ENV PATH=/home/agent/.local/bin:$PATH
+ENV PYTHONPATH=/app:$PYTHONPATH
 
-# Expose port
-EXPOSE 8000
+# Create necessary directories
+RUN mkdir -p /app/logs /app/data /app/cache && \
+    chown -R agent:agent /app
+
+# Switch to non-root user
+USER agent
+
+# Expose ports
+EXPOSE 7860 8000 8001
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/api/v1/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8001/health || exit 1
+
+# Set environment variables
+ENV GRADIO_SERVER_NAME="0.0.0.0"
+ENV GRADIO_SERVER_PORT="7860"
 
 # Run the application
-CMD ["uvicorn", "src.api_server:app", "--host", "0.0.0.0", "--port", "8000"] 
+CMD ["python", "app.py"] 
