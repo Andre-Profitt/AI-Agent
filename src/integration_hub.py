@@ -9,16 +9,18 @@ Fixes all critical integration issues identified in the audit:
 6. UNIFIED TOOL MANAGEMENT - NEW
 7. SESSION-TOOL INTEGRATION - NEW
 8. ERROR-METRIC PIPELINE - NEW
-9. CROSS-TOOL DATA SHARING - NEW
+9. CRITICAL FIXES - NEW
 """
 
 import asyncio
 import logging
+import re
+import math
+import time
 from typing import Dict, Any, Optional, List, Tuple, Callable
 from pathlib import Path
 import os
 import sys
-import time
 import json
 import uuid
 from datetime import datetime
@@ -34,6 +36,98 @@ from src.config.integrations import integration_config
 from src.tools.base_tool import BaseTool
 
 logger = logging.getLogger(__name__)
+
+# ============================================
+# TOOL CALL TRACKER - PREVENT LOOPS
+# ============================================
+
+class ToolCallTracker:
+    """Track tool calls to prevent infinite loops"""
+    
+    def __init__(self, max_depth: int = 10, max_repeats: int = 3):
+        self.max_depth = max_depth
+        self.max_repeats = max_repeats
+        self.call_stack = []
+        self.call_counts = defaultdict(int)
+    
+    def start_call(self, tool_name: str, params: Dict[str, Any]) -> bool:
+        """Check if tool call is allowed and track it"""
+        # Create call signature
+        call_sig = f"{tool_name}:{json.dumps(params, sort_keys=True)}"
+        
+        # Check depth
+        if len(self.call_stack) >= self.max_depth:
+            logger.warning(f"Max call depth reached: {self.max_depth}")
+            return False
+        
+        # Check repeats
+        if self.call_counts[call_sig] >= self.max_repeats:
+            logger.warning(f"Tool {tool_name} called too many times with same params")
+            return False
+        
+        # Check for direct recursion
+        if self.call_stack and self.call_stack[-1] == call_sig:
+            logger.warning(f"Direct recursion detected for {tool_name}")
+            return False
+        
+        # Track the call
+        self.call_stack.append(call_sig)
+        self.call_counts[call_sig] += 1
+        return True
+    
+    def end_call(self):
+        """Mark end of tool call"""
+        if self.call_stack:
+            self.call_stack.pop()
+    
+    def reset(self):
+        """Reset tracker for new execution"""
+        self.call_stack.clear()
+        self.call_counts.clear()
+
+# ============================================
+# CIRCUIT BREAKER PATTERN
+# ============================================
+
+class CircuitBreaker:
+    """Circuit breaker for tool reliability"""
+    
+    def __init__(self, failure_threshold: int = 5, recovery_timeout: float = 60.0):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.failures = defaultdict(int)
+        self.last_failure_time = {}
+        self.circuit_open = set()
+    
+    def is_open(self, tool_name: str) -> bool:
+        """Check if circuit is open for tool"""
+        if tool_name not in self.circuit_open:
+            return False
+        
+        # Check if recovery timeout has passed
+        if time.time() - self.last_failure_time[tool_name] > self.recovery_timeout:
+            # Try to close circuit
+            self.circuit_open.remove(tool_name)
+            self.failures[tool_name] = 0
+            logger.info(f"Circuit breaker closed for {tool_name}")
+            return False
+        
+        return True
+    
+    def record_success(self, tool_name: str):
+        """Record successful execution"""
+        self.failures[tool_name] = 0
+        if tool_name in self.circuit_open:
+            self.circuit_open.remove(tool_name)
+    
+    def record_failure(self, tool_name: str):
+        """Record failed execution"""
+        self.failures[tool_name] += 1
+        self.last_failure_time[tool_name] = time.time()
+        
+        if self.failures[tool_name] >= self.failure_threshold:
+            self.circuit_open.add(tool_name)
+            logger.warning(f"Circuit breaker opened for {tool_name}")
 
 # ============================================
 # UNIFIED TOOL MANAGEMENT SYSTEM
@@ -62,6 +156,196 @@ class ToolContext:
     def set_tool_output(self, tool_name: str, output: Any):
         """Set output from a tool"""
         self.tool_outputs[tool_name] = output
+
+class RateLimitManager:
+    """Manage rate limits for individual tools"""
+    
+    def __init__(self):
+        self.tool_limits = {}
+        self.call_history = defaultdict(list)
+    
+    def set_limit(self, tool_name: str, calls_per_minute: int, burst_size: int = None):
+        """Set rate limit for a tool"""
+        self.tool_limits[tool_name] = {
+            'calls_per_minute': calls_per_minute,
+            'burst_size': burst_size or calls_per_minute * 2,
+            'window_start': time.time()
+        }
+        logger.info(f"Set rate limit for {tool_name}: {calls_per_minute} calls/minute")
+    
+    async def check_and_wait(self, tool_name: str) -> bool:
+        """Check rate limit and wait if necessary"""
+        if tool_name not in self.tool_limits:
+            return True
+        
+        limit = self.tool_limits[tool_name]
+        now = time.time()
+        
+        # Clean old calls
+        window_start = now - 60
+        self.call_history[tool_name] = [
+            t for t in self.call_history[tool_name] if t > window_start
+        ]
+        
+        # Check if under limit
+        if len(self.call_history[tool_name]) >= limit['calls_per_minute']:
+            # Calculate wait time
+            oldest_call = self.call_history[tool_name][0]
+            wait_time = 60 - (now - oldest_call)
+            
+            if wait_time > 0:
+                logger.info(f"Rate limit reached for {tool_name}, waiting {wait_time:.2f}s")
+                await asyncio.sleep(wait_time)
+        
+        # Record this call
+        self.call_history[tool_name].append(now)
+        return True
+    
+    def get_tool_stats(self, tool_name: str) -> Dict[str, Any]:
+        """Get rate limit statistics for a tool"""
+        if tool_name not in self.tool_limits:
+            return {}
+        
+        limit = self.tool_limits[tool_name]
+        now = time.time()
+        window_start = now - 60
+        
+        recent_calls = [
+            t for t in self.call_history[tool_name] if t > window_start
+        ]
+        
+        return {
+            'calls_in_window': len(recent_calls),
+            'limit': limit['calls_per_minute'],
+            'remaining': max(0, limit['calls_per_minute'] - len(recent_calls)),
+            'utilization': len(recent_calls) / limit['calls_per_minute']
+        }
+
+class ToolCompatibilityChecker:
+    """Check tool compatibility and requirements"""
+    
+    def __init__(self):
+        self.compatibility_matrix = {}
+        self.tool_requirements = {}
+    
+    def register_tool_requirements(self, tool_name: str, requirements: Dict[str, Any]):
+        """Register tool requirements"""
+        self.tool_requirements[tool_name] = requirements
+        logger.info(f"Registered requirements for tool: {tool_name}")
+    
+    def check_compatibility(self, tool1: str, tool2: str) -> bool:
+        """Check if two tools are compatible"""
+        # Check for conflicting requirements
+        req1 = self.tool_requirements.get(tool1, {})
+        req2 = self.tool_requirements.get(tool2, {})
+        
+        # Check API version compatibility
+        if req1.get('api_version') and req2.get('api_version'):
+            if req1['api_version'] != req2['api_version']:
+                return False
+        
+        # Check for conflicting dependencies
+        deps1 = req1.get('dependencies', [])
+        deps2 = req2.get('dependencies', [])
+        
+        # Check for version conflicts
+        for dep1 in deps1:
+            for dep2 in deps2:
+                if dep1['name'] == dep2['name'] and dep1.get('version') != dep2.get('version'):
+                    return False
+        
+        return True
+    
+    def get_compatible_tools(self, tool_name: str) -> List[str]:
+        """Get list of tools compatible with given tool"""
+        compatible = []
+        for other_tool in self.tool_requirements:
+            if other_tool != tool_name and self.check_compatibility(tool_name, other_tool):
+                compatible.append(other_tool)
+        return compatible
+    
+    def get_incompatible_tools(self, tool_name: str) -> List[str]:
+        """Get list of tools incompatible with given tool"""
+        incompatible = []
+        for other_tool in self.tool_requirements:
+            if other_tool != tool_name and not self.check_compatibility(tool_name, other_tool):
+                incompatible.append(other_tool)
+        return incompatible
+
+class ResourcePoolManager:
+    """Manage pooled resources for expensive connections"""
+    
+    def __init__(self):
+        self.pools = {}
+        self.pool_configs = {}
+    
+    async def create_pool(self, resource_type: str, factory_func: Callable, 
+                         min_size: int = 2, max_size: int = 10):
+        """Create a resource pool"""
+        self.pools[resource_type] = {
+            'available': asyncio.Queue(maxsize=max_size),
+            'in_use': set(),
+            'factory': factory_func,
+            'min_size': min_size,
+            'max_size': max_size
+        }
+        
+        # Pre-create minimum resources
+        for _ in range(min_size):
+            try:
+                resource = await factory_func()
+                await self.pools[resource_type]['available'].put(resource)
+            except Exception as e:
+                logger.warning(f"Failed to create resource for {resource_type}: {e}")
+        
+        logger.info(f"Created resource pool for {resource_type}: {min_size}-{max_size} resources")
+    
+    async def acquire(self, resource_type: str, timeout: float = 30.0):
+        """Acquire a resource from pool"""
+        pool = self.pools.get(resource_type)
+        if not pool:
+            raise ValueError(f"No pool for resource type: {resource_type}")
+        
+        try:
+            resource = await asyncio.wait_for(
+                pool['available'].get(), 
+                timeout=timeout
+            )
+            pool['in_use'].add(id(resource))
+            return resource
+        except asyncio.TimeoutError:
+            # Create new resource if under max
+            if len(pool['in_use']) < pool['max_size']:
+                try:
+                    resource = await pool['factory']()
+                    pool['in_use'].add(id(resource))
+                    return resource
+                except Exception as e:
+                    logger.error(f"Failed to create new resource for {resource_type}: {e}")
+            raise TimeoutError(f"Could not acquire {resource_type} resource")
+    
+    async def release(self, resource_type: str, resource):
+        """Release resource back to pool"""
+        pool = self.pools.get(resource_type)
+        if pool and id(resource) in pool['in_use']:
+            pool['in_use'].remove(id(resource))
+            try:
+                await pool['available'].put(resource)
+            except asyncio.QueueFull:
+                logger.warning(f"Resource pool full for {resource_type}, discarding resource")
+    
+    def get_pool_stats(self, resource_type: str) -> Dict[str, Any]:
+        """Get statistics for a resource pool"""
+        pool = self.pools.get(resource_type)
+        if not pool:
+            return {}
+        
+        return {
+            'available': pool['available'].qsize(),
+            'in_use': len(pool['in_use']),
+            'total_capacity': pool['max_size'],
+            'utilization': len(pool['in_use']) / pool['max_size']
+        }
 
 class UnifiedToolRegistry:
     """Unified registry that combines ToolRegistry and MCPToolRegistry"""
@@ -174,25 +458,41 @@ class ToolOrchestrator:
         self.rate_limit_manager = rate_limit_manager
         self.compatibility_checker = compatibility_checker
         self.resource_manager = resource_manager
+        self.call_tracker = ToolCallTracker()  # Add tracker
+        self.circuit_breaker = CircuitBreaker()  # Add circuit breaker
     
     async def execute_with_fallback(self, tool_name: str, params: Dict[str, Any], 
                                   session_id: str = None) -> Dict[str, Any]:
         """Execute tool with caching, metrics, and fallback"""
         start_time = time.time()
         
-        # Check rate limits first
-        if self.rate_limit_manager:
-            await self.rate_limit_manager.check_and_wait(tool_name)
-        
-        # Check cache first
-        cache_key = f"{tool_name}:{json.dumps(params, sort_keys=True)}"
-        cached_result = self.cache.get(cache_key) if self.cache else None
-        
-        if cached_result:
-            logger.debug(f"Cache hit for {tool_name}")
-            return {"success": True, "output": cached_result, "cached": True}
+        # Check if call is allowed
+        if not self.call_tracker.start_call(tool_name, params):
+            return {
+                "success": False, 
+                "error": "Tool call limit exceeded (possible infinite loop)"
+            }
         
         try:
+            # Check circuit breaker
+            if self.circuit_breaker.is_open(tool_name):
+                return {
+                    "success": False,
+                    "error": f"Circuit breaker open for {tool_name}"
+                }
+            
+            # Check rate limits first
+            if self.rate_limit_manager:
+                await self.rate_limit_manager.check_and_wait(tool_name)
+            
+            # Check cache first
+            cache_key = f"{tool_name}:{json.dumps(params, sort_keys=True)}"
+            cached_result = self.cache.get(cache_key) if self.cache else None
+            
+            if cached_result:
+                logger.debug(f"Cache hit for {tool_name}")
+                return {"success": True, "output": cached_result, "cached": True}
+            
             # Get tool
             tool = self.registry.get_tool(tool_name)
             if not tool:
@@ -201,37 +501,41 @@ class ToolOrchestrator:
             # Execute tool
             result = await self._execute_tool(tool, params)
             
-            # Calculate latency
-            latency = time.time() - start_time
-            
             # Update metrics
-            self.registry.update_tool_metrics(
-                tool_name, 
-                result["success"], 
-                latency, 
-                result.get("error")
-            )
+            latency = time.time() - start_time
+            self.registry.update_tool_metrics(tool_name, result["success"], latency, 
+                                           result.get("error"))
+            
+            # Update circuit breaker
+            if result["success"]:
+                self.circuit_breaker.record_success(tool_name)
+            else:
+                self.circuit_breaker.record_failure(tool_name)
             
             # Cache successful results
             if result["success"] and self.cache:
                 self.cache.set(cache_key, result["output"], ttl=3600)  # 1 hour TTL
             
             # Update database metrics
-            await self._update_database_metrics(
-                tool_name, result["success"], latency, result.get("error")
-            )
+            await self._update_database_metrics(tool_name, result["success"], latency, 
+                                              result.get("error"))
+            
+            # Try fallback if primary tool failed
+            if not result["success"]:
+                fallback_result = await self._try_fallback_tools(tool_name, params)
+                if fallback_result:
+                    logger.info(f"Fallback tool succeeded for {tool_name}")
+                    return fallback_result
             
             return result
             
         except Exception as e:
-            logger.error(f"Tool execution failed for {tool_name}: {e}")
-            
-            # Try fallback tools
-            fallback_result = await self._try_fallback_tools(tool_name, params)
-            if fallback_result:
-                return fallback_result
-            
+            logger.error(f"Error executing {tool_name}: {e}")
+            self.circuit_breaker.record_failure(tool_name)
             return {"success": False, "error": str(e)}
+        finally:
+            # Always end the call tracking
+            self.call_tracker.end_call()
     
     async def execute_with_compatibility_check(self, tool_name: str, params: Dict[str, Any],
                                              session_id: str = None) -> Dict[str, Any]:
@@ -285,9 +589,71 @@ class ToolOrchestrator:
     
     async def _try_fallback_tools(self, failed_tool: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Try fallback tools when primary tool fails"""
-        # This would implement fallback logic based on tool categories
-        logger.warning(f"Tool {failed_tool} failed, no fallback available")
+        # Get tool category
+        tool_categories = {
+            'web_search': ['tavily_search', 'web_researcher', 'wikipedia_search'],
+            'code_execution': ['python_interpreter', 'code_executor', 'repl_tool'],
+            'file_reading': ['file_reader', 'document_reader', 'pdf_reader'],
+            'calculation': ['calculator', 'math_tool', 'python_interpreter']
+        }
+        
+        # Find category of failed tool
+        failed_category = None
+        for category, tools in tool_categories.items():
+            if failed_tool in tools:
+                failed_category = category
+                break
+        
+        if not failed_category:
+            logger.warning(f"No fallback category found for {failed_tool}")
+            return None
+        
+        # Try other tools in same category
+        for fallback_tool in tool_categories[failed_category]:
+            if fallback_tool != failed_tool and fallback_tool in self.registry.tools:
+                logger.info(f"Trying fallback tool: {fallback_tool}")
+                
+                try:
+                    # Adapt parameters if needed
+                    adapted_params = self._adapt_params(failed_tool, fallback_tool, params)
+                    result = await self._execute_tool(
+                        self.registry.get_tool(fallback_tool), 
+                        adapted_params
+                    )
+                    
+                    if result["success"]:
+                        logger.info(f"Fallback tool {fallback_tool} succeeded")
+                        return result
+                        
+                except Exception as e:
+                    logger.warning(f"Fallback tool {fallback_tool} failed: {e}")
+                    continue
+        
         return None
+
+    def _adapt_params(self, source_tool: str, target_tool: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Adapt parameters from one tool format to another"""
+        # Define parameter mappings
+        param_mappings = {
+            ('web_search', 'tavily_search'): {'query': 'query'},
+            ('web_search', 'wikipedia_search'): {'query': 'search_query'},
+            ('file_reader', 'document_reader'): {'filename': 'file_path', 'lines': 'max_lines'},
+            ('calculator', 'python_interpreter'): lambda p: {'code': f"result = {p.get('expression', '')}; print(result)"}
+        }
+        
+        # Check for direct mapping
+        mapping_key = (source_tool, target_tool)
+        if mapping_key in param_mappings:
+            mapping = param_mappings[mapping_key]
+            
+            if callable(mapping):
+                return mapping(params)
+            else:
+                return {target_key: params.get(source_key, '') 
+                       for source_key, target_key in mapping.items()}
+        
+        # Default: return params as-is
+        return params
     
     async def _update_database_metrics(self, tool_name: str, success: bool, latency: float, error: str = None):
         """Update metrics in database"""
@@ -441,19 +807,55 @@ class MetricAwareErrorHandler:
         return result
     
     def _categorize_error(self, error_str: str) -> str:
-        """Categorize error type"""
+        """Enhanced error categorization with detailed patterns"""
         error_lower = error_str.lower()
         
-        if "429" in error_lower or "rate limit" in error_lower:
-            return "rate_limit"
-        elif "timeout" in error_lower or "connection" in error_lower:
-            return "network"
-        elif "validation" in error_lower or "invalid" in error_lower:
-            return "validation"
-        elif "not found" in error_lower or "404" in error_lower:
-            return "not_found"
-        else:
-            return "general"
+        # Detailed error patterns
+        error_patterns = [
+            # API errors
+            (r"429|rate.?limit", "rate_limit"),
+            (r"401|unauthorized", "auth_error"),
+            (r"403|forbidden", "permission_error"),
+            (r"404|not.?found", "not_found"),
+            (r"500|internal.?server", "server_error"),
+            (r"502|bad.?gateway", "gateway_error"),
+            (r"503|service.?unavailable", "service_unavailable"),
+            
+            # Network errors
+            (r"timeout|timed.?out", "timeout"),
+            (r"connection.?refused|connection.?error", "connection_error"),
+            (r"dns|resolution", "dns_error"),
+            (r"ssl|certificate", "ssl_error"),
+            
+            # Data errors
+            (r"validation|invalid.?input|invalid.?parameter", "validation_error"),
+            (r"json|parsing|decode", "parsing_error"),
+            (r"schema|type.?error", "schema_error"),
+            
+            # Resource errors
+            (r"out.?of.?memory|memory", "memory_error"),
+            (r"disk.?space|storage", "storage_error"),
+            (r"quota|limit.?exceeded", "quota_exceeded"),
+            
+            # Tool-specific errors
+            (r"import.?error|module.?not.?found", "dependency_error"),
+            (r"api.?key|credentials", "credential_error"),
+            (r"file.?not.?found|path.?not.?found", "file_not_found"),
+        ]
+        
+        # Check patterns
+        for pattern, error_type in error_patterns:
+            if re.search(pattern, error_lower):
+                return error_type
+        
+        # Check for specific error types
+        if "exception" in error_lower:
+            # Try to extract exception type
+            match = re.search(r"(\w+)(exception|error)", error_lower)
+            if match:
+                return f"{match.group(1)}_error"
+        
+        return "general_error"
     
     def _handle_error_logic(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Core error handling logic"""
@@ -515,70 +917,8 @@ class MetricAwareErrorHandler:
 # KNOWLEDGE BASE FALLBACK MECHANISM
 # ============================================
 
-class LocalKnowledgeTool:
-    """Local fallback knowledge tool when vector store is unavailable"""
-    
-    def __init__(self, cache_dir: str = "./knowledge_cache"):
-        self.cache_dir = Path(cache_dir)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.local_docs = {}
-        self._load_local_docs()
-    
-    def _load_local_docs(self):
-        """Load documents from local cache"""
-        try:
-            for file_path in self.cache_dir.glob("*.json"):
-                with open(file_path, 'r') as f:
-                    doc_data = json.load(f)
-                    self.local_docs[doc_data["id"]] = doc_data
-            logger.info(f"Loaded {len(self.local_docs)} local documents")
-        except Exception as e:
-            logger.warning(f"Failed to load local docs: {e}")
-    
-    def search(self, query: str, top_k: int = 3) -> List[Dict[str, Any]]:
-        """Simple keyword-based search"""
-        results = []
-        query_lower = query.lower()
-        
-        for doc_id, doc_data in self.local_docs.items():
-            text = doc_data.get("text", "").lower()
-            if query_lower in text:
-                results.append({
-                    "id": doc_id,
-                    "text": doc_data.get("text", ""),
-                    "source": doc_data.get("source", "local"),
-                    "similarity": 0.8  # Placeholder similarity
-                })
-        
-        # Sort by relevance (simple keyword frequency)
-        results.sort(key=lambda x: x["text"].count(query_lower), reverse=True)
-        return results[:top_k]
-    
-    def add_document(self, text: str, source: str = "local") -> str:
-        """Add document to local cache"""
-        doc_id = f"local_{len(self.local_docs) + 1}"
-        doc_data = {
-            "id": doc_id,
-            "text": text,
-            "source": source,
-            "created_at": datetime.now().isoformat()
-        }
-        
-        self.local_docs[doc_id] = doc_data
-        
-        # Save to file
-        file_path = self.cache_dir / f"{doc_id}.json"
-        with open(file_path, 'w') as f:
-            json.dump(doc_data, f, indent=2)
-        
-        return doc_id
-
-def create_local_knowledge_tool() -> LocalKnowledgeTool:
-    """Create local knowledge tool as fallback"""
-    return LocalKnowledgeTool()
-
 # ============================================
-# ENHANCED INTEGRATION HUB
+# EMBEDDING MANAGEMENT
 # ============================================
 
 class EmbeddingManager:
@@ -762,7 +1102,7 @@ class IntegrationHub:
         except Exception as e:
             logger.error(f"Failed to initialize monitoring: {e}")
     
-    async def _monitoring_loop(self, monitoring: MonitoringDashboard):
+    async def _monitoring_loop(self, monitoring: 'MonitoringDashboard'):
         """Periodic monitoring loop"""
         while self.initialized:
             try:
@@ -809,7 +1149,6 @@ class IntegrationHub:
         try:
             from src.database_enhanced import initialize_supabase_enhanced
             
-            # Fix import path issue
             supabase_components = await initialize_supabase_enhanced(
                 url=self.config.supabase.url,
                 key=self.config.supabase.key
@@ -817,10 +1156,12 @@ class IntegrationHub:
             
             self.components['supabase'] = supabase_components
             
-            # Add cleanup handler
-            self._cleanup_handlers.append(
-                lambda: asyncio.create_task(supabase_components['connection_pool'].close())
-            )
+            # Fix: Properly handle async cleanup
+            async def cleanup_db():
+                if 'connection_pool' in supabase_components:
+                    await supabase_components['connection_pool'].close()
+            
+            self._cleanup_handlers.append(cleanup_db)
             
             logger.info("Supabase database initialized")
             
@@ -845,11 +1186,13 @@ class IntegrationHub:
         except ImportError:
             logger.warning("LlamaIndex not available - using local knowledge fallback")
             # Create local knowledge tool as fallback
+            from src.knowledge_utils import create_local_knowledge_tool
             local_kb = create_local_knowledge_tool()
             self.components['knowledge_base'] = local_kb
         except Exception as e:
             logger.error(f"Failed to initialize knowledge base: {e}")
             # Don't fail initialization for knowledge base
+            from src.knowledge_utils import create_local_knowledge_tool
             local_kb = create_local_knowledge_tool()
             self.components['knowledge_base'] = local_kb
     
@@ -952,7 +1295,7 @@ class IntegrationHub:
         """Get tool compatibility checker"""
         return self.tool_compatibility_checker
     
-    def get_semantic_discovery(self) -> Optional[SemanticToolDiscovery]:
+    def get_semantic_discovery(self) -> Optional['SemanticToolDiscovery']:
         """Get semantic tool discovery"""
         return self.components.get('semantic_discovery')
     
@@ -982,7 +1325,13 @@ class IntegrationHub:
         
         for handler in self._cleanup_handlers:
             try:
-                await handler()
+                # Fix: Check if handler is coroutine
+                if asyncio.iscoroutinefunction(handler):
+                    await handler()
+                else:
+                    result = handler()
+                    if asyncio.iscoroutine(result):
+                        await result
             except Exception as e:
                 logger.error(f"Error in cleanup handler: {e}")
         
@@ -1033,57 +1382,6 @@ def get_unified_registry() -> UnifiedToolRegistry:
 # NEW INTEGRATION HUB IMPROVEMENTS
 # ============================================
 
-class ToolCompatibilityChecker:
-    """Check tool compatibility and requirements"""
-    
-    def __init__(self):
-        self.compatibility_matrix = {}
-        self.tool_requirements = {}
-    
-    def register_tool_requirements(self, tool_name: str, requirements: Dict[str, Any]):
-        """Register tool requirements"""
-        self.tool_requirements[tool_name] = requirements
-        logger.info(f"Registered requirements for tool: {tool_name}")
-    
-    def check_compatibility(self, tool1: str, tool2: str) -> bool:
-        """Check if two tools are compatible"""
-        # Check for conflicting requirements
-        req1 = self.tool_requirements.get(tool1, {})
-        req2 = self.tool_requirements.get(tool2, {})
-        
-        # Check API version compatibility
-        if req1.get('api_version') and req2.get('api_version'):
-            if req1['api_version'] != req2['api_version']:
-                return False
-        
-        # Check for conflicting dependencies
-        deps1 = req1.get('dependencies', [])
-        deps2 = req2.get('dependencies', [])
-        
-        # Check for version conflicts
-        for dep1 in deps1:
-            for dep2 in deps2:
-                if dep1['name'] == dep2['name'] and dep1.get('version') != dep2.get('version'):
-                    return False
-        
-        return True
-    
-    def get_compatible_tools(self, tool_name: str) -> List[str]:
-        """Get list of tools compatible with given tool"""
-        compatible = []
-        for other_tool in self.tool_requirements:
-            if other_tool != tool_name and self.check_compatibility(tool_name, other_tool):
-                compatible.append(other_tool)
-        return compatible
-    
-    def get_incompatible_tools(self, tool_name: str) -> List[str]:
-        """Get list of tools incompatible with given tool"""
-        incompatible = []
-        for other_tool in self.tool_requirements:
-            if other_tool != tool_name and not self.check_compatibility(tool_name, other_tool):
-                incompatible.append(other_tool)
-        return incompatible
-
 class SemanticToolDiscovery:
     """Semantic tool discovery based on task descriptions"""
     
@@ -1122,81 +1420,6 @@ class SemanticToolDiscovery:
             return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
         except (ValueError, np.linalg.LinAlgError):
             return 0.0
-
-class ResourcePoolManager:
-    """Manage pooled resources for expensive connections"""
-    
-    def __init__(self):
-        self.pools = {}
-        self.pool_configs = {}
-    
-    async def create_pool(self, resource_type: str, factory_func: Callable, 
-                         min_size: int = 2, max_size: int = 10):
-        """Create a resource pool"""
-        self.pools[resource_type] = {
-            'available': asyncio.Queue(maxsize=max_size),
-            'in_use': set(),
-            'factory': factory_func,
-            'min_size': min_size,
-            'max_size': max_size
-        }
-        
-        # Pre-create minimum resources
-        for _ in range(min_size):
-            try:
-                resource = await factory_func()
-                await self.pools[resource_type]['available'].put(resource)
-            except Exception as e:
-                logger.warning(f"Failed to create resource for {resource_type}: {e}")
-        
-        logger.info(f"Created resource pool for {resource_type}: {min_size}-{max_size} resources")
-    
-    async def acquire(self, resource_type: str, timeout: float = 30.0):
-        """Acquire a resource from pool"""
-        pool = self.pools.get(resource_type)
-        if not pool:
-            raise ValueError(f"No pool for resource type: {resource_type}")
-        
-        try:
-            resource = await asyncio.wait_for(
-                pool['available'].get(), 
-                timeout=timeout
-            )
-            pool['in_use'].add(id(resource))
-            return resource
-        except asyncio.TimeoutError:
-            # Create new resource if under max
-            if len(pool['in_use']) < pool['max_size']:
-                try:
-                    resource = await pool['factory']()
-                    pool['in_use'].add(id(resource))
-                    return resource
-                except Exception as e:
-                    logger.error(f"Failed to create new resource for {resource_type}: {e}")
-            raise TimeoutError(f"Could not acquire {resource_type} resource")
-    
-    async def release(self, resource_type: str, resource):
-        """Release resource back to pool"""
-        pool = self.pools.get(resource_type)
-        if pool and id(resource) in pool['in_use']:
-            pool['in_use'].remove(id(resource))
-            try:
-                await pool['available'].put(resource)
-            except asyncio.QueueFull:
-                logger.warning(f"Resource pool full for {resource_type}, discarding resource")
-    
-    def get_pool_stats(self, resource_type: str) -> Dict[str, Any]:
-        """Get statistics for a resource pool"""
-        pool = self.pools.get(resource_type)
-        if not pool:
-            return {}
-        
-        return {
-            'available': pool['available'].qsize(),
-            'in_use': len(pool['in_use']),
-            'total_capacity': pool['max_size'],
-            'utilization': len(pool['in_use']) / pool['max_size']
-        }
 
 class ToolVersionManager:
     """Manage tool versions and compatibility"""
@@ -1590,76 +1813,12 @@ class MigrationHelper:
         # Add any additional conversion logic here
         return tool_doc
 
-class RateLimitManager:
-    """Manage rate limits for individual tools"""
-    
-    def __init__(self):
-        self.tool_limits = {}
-        self.call_history = defaultdict(list)
-    
-    def set_limit(self, tool_name: str, calls_per_minute: int, burst_size: int = None):
-        """Set rate limit for a tool"""
-        self.tool_limits[tool_name] = {
-            'calls_per_minute': calls_per_minute,
-            'burst_size': burst_size or calls_per_minute * 2,
-            'window_start': time.time()
-        }
-        logger.info(f"Set rate limit for {tool_name}: {calls_per_minute} calls/minute")
-    
-    async def check_and_wait(self, tool_name: str) -> bool:
-        """Check rate limit and wait if necessary"""
-        if tool_name not in self.tool_limits:
-            return True
-        
-        limit = self.tool_limits[tool_name]
-        now = time.time()
-        
-        # Clean old calls
-        window_start = now - 60
-        self.call_history[tool_name] = [
-            t for t in self.call_history[tool_name] if t > window_start
-        ]
-        
-        # Check if under limit
-        if len(self.call_history[tool_name]) >= limit['calls_per_minute']:
-            # Calculate wait time
-            oldest_call = self.call_history[tool_name][0]
-            wait_time = 60 - (now - oldest_call)
-            
-            if wait_time > 0:
-                logger.info(f"Rate limit reached for {tool_name}, waiting {wait_time:.2f}s")
-                await asyncio.sleep(wait_time)
-        
-        # Record this call
-        self.call_history[tool_name].append(now)
-        return True
-    
-    def get_tool_stats(self, tool_name: str) -> Dict[str, Any]:
-        """Get rate limit statistics for a tool"""
-        if tool_name not in self.tool_limits:
-            return {}
-        
-        limit = self.tool_limits[tool_name]
-        now = time.time()
-        window_start = now - 60
-        
-        recent_calls = [
-            t for t in self.call_history[tool_name] if t > window_start
-        ]
-        
-        return {
-            'calls_in_window': len(recent_calls),
-            'limit': limit['calls_per_minute'],
-            'remaining': max(0, limit['calls_per_minute'] - len(recent_calls)),
-            'utilization': len(recent_calls) / limit['calls_per_minute']
-        }
-
 # New helper functions for new components
 def get_tool_compatibility_checker() -> Optional[ToolCompatibilityChecker]:
     """Get tool compatibility checker"""
     return integration_hub.get_tool_compatibility_checker() if integration_hub else None
 
-def get_semantic_discovery() -> Optional[SemanticToolDiscovery]:
+def get_semantic_discovery() -> Optional['SemanticToolDiscovery']:
     """Get semantic tool discovery"""
     return integration_hub.get_semantic_discovery() if integration_hub else None
 

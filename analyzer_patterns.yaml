@@ -1,0 +1,52 @@
+monitoring_patterns:
+  missing_metrics:
+    - pattern: "def\\s+(\\w+)\\s*\\([^)]*\\):"
+      description: "Functions without performance metrics"
+    - pattern: "except\\s+\\w+.*:"
+      description: "Exception handling without logging"
+    - pattern: "async\\s+def\\s+(\\w+)"
+      description: "Async functions without timing metrics"
+  basic_logging:
+    - pattern: "print\\s*\\("
+      description: "Using print instead of structured logging"
+    - pattern: "logger\\.(info|debug)\\s*\\([^{]"
+      description: "Logging without structured data"
+  missing_telemetry:
+    - pattern: "class\\s+\\w+Tool"
+      description: "Tools without telemetry"
+    - pattern: "@tool"
+      description: "Tool decorators without metrics wrapper"
+
+orchestration_patterns:
+  sequential_execution:
+    - pattern: "for\\s+tool\\s+in\\s+tools:"
+      description: "Sequential tool execution"
+    - pattern: "result\\s*=\\s*tool\\("
+      description: "Direct tool calls without orchestration"
+  missing_retry:
+    - pattern: "except.*:\\s*\\n\\s*(return|raise)"
+      description: "No retry logic for failures"
+    - pattern: "requests\\.(get|post)"
+      description: "HTTP calls without retry"
+  no_circuit_breaker:
+    - pattern: "external_api"
+      description: "External API calls without circuit breaker"
+    - pattern: "supabase\."
+      description: "Database calls without circuit breaker"
+
+testing_patterns:
+  missing_tests:
+    - pattern: "class\\s+(\\w+)(?!Test)"
+      description: "Classes without corresponding tests"
+    - pattern: "def\\s+(\\w+)(?!test_)"
+      description: "Functions without test coverage"
+  weak_assertions:
+    - pattern: "assert\\s+\\w+\\s*$"
+      description: "Weak assertions without comparison"
+    - pattern: "assert.*is not None"
+      description: "Only checking for None"
+  no_mocking:
+    - pattern: "test_.*real.*api"
+      description: "Tests using real APIs"
+    - pattern: "test_.*without.*mock"
+      description: "Tests without proper mocking" 

@@ -597,7 +597,7 @@ try:
         logger.info("Knowledge base tool initialized with vector store")
     else:
         # Fallback to local knowledge tool
-        from src.integration_hub import create_local_knowledge_tool
+        from src.knowledge_utils import create_local_knowledge_tool
         local_kb = create_local_knowledge_tool()
         knowledge_base_tool = local_kb.search
         logger.info("Knowledge base tool initialized with local fallback")
@@ -605,7 +605,7 @@ except Exception as e:
     logger.error(f"Failed to initialize Knowledge Base tool: {e}")
     # Create local knowledge tool as fallback
     try:
-        from src.integration_hub import create_local_knowledge_tool
+        from src.knowledge_utils import create_local_knowledge_tool
         local_kb = create_local_knowledge_tool()
         knowledge_base_tool = local_kb.search
         logger.info("Knowledge base tool initialized with local fallback after error")
