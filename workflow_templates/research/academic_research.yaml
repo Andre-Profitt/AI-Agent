@@ -1,0 +1,109 @@
+id: academic_research
+name: Academic Research Workflow
+description: Comprehensive academic research with peer review
+category: research
+version: 1.0.0
+
+input_schema:
+  type: object
+  properties:
+    topic:
+      type: string
+      description: Research topic
+    keywords:
+      type: array
+      items:
+        type: string
+    academic_level:
+      type: string
+      enum: [undergraduate, graduate, doctoral]
+  required: [topic, keywords]
+
+output_schema:
+  type: object
+  properties:
+    paper:
+      type: string
+    citations:
+      type: array
+    peer_review_score:
+      type: number
+
+steps:
+  - id: literature_review
+    name: Literature Review
+    type: agent_task
+    agent_id: research_agent
+    parameters:
+      action: literature_search
+      databases: [google_scholar, pubmed, arxiv]
+      min_sources: 20
+    timeout: 600
+    
+  - id: source_validation
+    name: Validate Sources
+    type: agent_task
+    agent_id: validator_agent
+    parameters:
+      action: validate_academic_sources
+      check_peer_review: true
+    dependencies: [literature_review]
+    timeout: 300
+    
+  - id: thesis_development
+    name: Develop Thesis
+    type: agent_task
+    agent_id: academic_writer_agent
+    parameters:
+      action: develop_thesis
+      style: academic
+    dependencies: [source_validation]
+    timeout: 900
+    
+  - id: parallel_analysis
+    name: Multi-perspective Analysis
+    type: parallel_agents
+    parameters:
+      agents: [methodology_agent, theory_agent, empirical_agent]
+      tasks:
+        methodology_agent:
+          action: analyze_methodology
+        theory_agent:
+          action: theoretical_framework
+        empirical_agent:
+          action: empirical_analysis
+      aggregation: merge
+    dependencies: [thesis_development]
+    timeout: 1200
+    
+  - id: draft_paper
+    name: Draft Research Paper
+    type: agent_task
+    agent_id: academic_writer_agent
+    parameters:
+      action: write_paper
+      sections: [abstract, introduction, methodology, results, discussion, conclusion]
+      citation_style: APA
+    dependencies: [parallel_analysis]
+    timeout: 1800
+    
+  - id: peer_review
+    name: Peer Review Process
+    type: loop
+    parameters:
+      iterations: 3
+      step:
+        agent_id: peer_review_agent
+        action: review_and_feedback
+    dependencies: [draft_paper]
+    timeout: 2400
+    
+  - id: final_submission
+    name: Prepare Final Submission
+    type: agent_task
+    agent_id: submission_agent
+    parameters:
+      action: prepare_submission
+      format: [pdf, latex]
+    dependencies: [peer_review]
+    timeout: 600 
