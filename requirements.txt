@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # Core dependencies
-numpy==1.24.3
+numpy==2.3.0
 langchain==0.3.25
 langchain-core==0.3.64
 langchain-openai==0.3.20
