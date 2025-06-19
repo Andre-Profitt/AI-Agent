@@ -10,6 +10,13 @@ import logging
 import os
 from functools import lru_cache
 
+# Import circuit breaker protection
+from src.infrastructure.resilience.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    circuit_breaker
+)
+
 try:
     from .config.integrations import integration_config
 except ImportError:
@@ -109,12 +116,13 @@ class OptimizedVectorStore:
         # Use the LRU cached method
         return self._embedding_cache(text)
         
+    @circuit_breaker("batch_insert", CircuitBreakerConfig(failure_threshold=3, recovery_timeout=60))
     async def batch_insert_embeddings(
         self, 
         documents: List[Document],
         batch_size: int = None
     ):
-        """Batch insert for better performance"""
+        """Batch insert for better performance with circuit breaker protection"""
         if batch_size is None:
             batch_size = self._batch_size
             
@@ -136,7 +144,7 @@ class OptimizedVectorStore:
                 # Use upsert for conflict resolution
                 try:
                     result = await client.table("knowledge_base").upsert(batch_data).execute()
-                    logger.info(f"Inserted {len(batch_data)} documents")
+                    logger.info(f"Inserted {len(batch_data)} documents with circuit breaker protection")
                 except Exception as e:
                     logger.error(f"Batch insert failed: {e}")
                     raise
@@ -155,6 +163,7 @@ class HybridVectorSearch:
         embedding = self.embedding_manager.embed(text)
         return np.array(embedding)
         
+    @circuit_breaker("vector_search", CircuitBreakerConfig(failure_threshold=5, recovery_timeout=60))
     async def hybrid_search(
         self,
         query: str,
@@ -162,7 +171,7 @@ class HybridVectorSearch:
         metadata_filter: Optional[Dict] = None,
         rerank: bool = True
     ) -> List[SearchResult]:
-        """Enhanced search with multiple ranking strategies"""
+        """Enhanced search with multiple ranking strategies and circuit breaker protection"""
         
         # 1. Vector similarity search
         query_embedding = await self.get_embedding(query)
@@ -274,44 +283,46 @@ class SupabaseRealtimeManager:
                 logger.error(f"Failed to unsubscribe from {name}: {e}")
         self.subscriptions.clear()
 
+@circuit_breaker("supabase_initialization", CircuitBreakerConfig(failure_threshold=3, recovery_timeout=60))
 async def initialize_supabase_enhanced(url: Optional[str] = None, key: Optional[str] = None):
-    """Initialize enhanced Supabase components"""
-    
-    # Use provided values or get from config
-    if url is None or key is None:
-        if integration_config and integration_config.supabase.is_configured():
-            url = integration_config.supabase.url
-            key = integration_config.supabase.key
-        else:
-            raise ValueError("Supabase URL and key must be provided or configured")
-    
+    """Initialize Supabase with circuit breaker protection"""
     try:
-        # Initialize connection pool
+        # Use provided URL/key or fall back to config
+        if url is None or key is None:
+            if integration_config:
+                url = url or integration_config.supabase_url
+                key = key or integration_config.supabase_key
+            else:
+                url = url or os.getenv('SUPABASE_URL')
+                key = key or os.getenv('SUPABASE_KEY')
+        
+        if not url or not key:
+            raise ValueError("Supabase URL and key are required")
+        
+        # Create connection pool with circuit breaker protection
         pool = SupabaseConnectionPool(url, key)
         await pool.initialize()
         
-        # Initialize vector store
+        # Create optimized vector store
         vector_store = OptimizedVectorStore(pool)
         
-        # Initialize search
+        # Create hybrid search
         hybrid_search = HybridVectorSearch(pool)
         
-        # Initialize realtime manager
+        # Create realtime manager
         client = create_client(url, key)
         realtime_manager = SupabaseRealtimeManager(client)
         
-        logger.info("Enhanced Supabase components initialized successfully")
-        
         return {
+            'client': client,
             'connection_pool': pool,
             'vector_store': vector_store,
             'hybrid_search': hybrid_search,
-            'realtime_manager': realtime_manager,
-            'client': client
+            'realtime_manager': realtime_manager
         }
         
     except Exception as e:
-        logger.error(f"Failed to initialize Supabase: {e}")
+        logger.error(f"Supabase initialization failed: {e}")
         raise
 
 # Global instances for backward compatibility

@@ -376,3 +376,25 @@ def check_gaia_availability() -> bool:
 
 # Global GAIA availability flag
 GAIA_AVAILABLE = check_gaia_availability() 
+
+async def run_gaia_evaluation(self, username: str, password: str):
+    logger.info("Starting GAIA evaluation", extra={
+        "operation": "gaia_evaluation",
+        "username": username
+    })
+    
+    # ... existing code ...
+    
+    logger.info("Successfully fetched questions", extra={
+        "operation": "fetch_questions",
+        "questions_count": len(questions_data),
+        "url": self.questions_url
+    })
+    
+    # ... existing code ...
+    
+    logger.info("Question processing completed", extra={
+        "operation": "process_questions",
+        "total_questions": len(questions_data),
+        "total_time": total_time
+    }) 

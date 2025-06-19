@@ -1,6 +1,7 @@
 """
 Workflow Orchestration Engine
 Provides workflow management using LangGraph for complex agent workflows
+Enhanced with circuit breaker protection and FSM integration
 """
 
 import asyncio
@@ -17,6 +18,16 @@ from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolExecutor
 from langchain_core.tools import BaseTool
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+
+# Import circuit breaker protection
+from src.infrastructure.resilience.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    circuit_breaker
+)
+
+# Import FSM agent for integration
+from src.agents.advanced_agent_fsm import FSMReActAgent, FSMState
 
 logger = logging.getLogger(__name__)
 
@@ -143,9 +154,10 @@ class WorkflowEngine:
         """Register a tool for workflow execution"""
         self.tools[tool_name] = tool
         
+    @circuit_breaker("workflow_execution", CircuitBreakerConfig(failure_threshold=3, recovery_timeout=120))
     async def execute_workflow(self, workflow_id: str, input_data: Dict[str, Any],
                              execution_id: Optional[str] = None) -> WorkflowExecution:
-        """Execute a workflow"""
+        """Execute a workflow with circuit breaker protection"""
         if workflow_id not in self.workflows:
             raise ValueError(f"Workflow {workflow_id} not found")
             
@@ -186,7 +198,7 @@ class WorkflowEngine:
             execution.status = WorkflowStatus.COMPLETED
             execution.end_time = datetime.now()
             
-            logger.info(f"Workflow execution completed: {execution_id}")
+            logger.info(f"Workflow execution completed with circuit breaker protection: {execution_id}")
             
         except Exception as e:
             execution.status = WorkflowStatus.FAILED
@@ -294,40 +306,41 @@ class WorkflowEngine:
                 
         return step_input
         
+    @circuit_breaker("agent_execution", CircuitBreakerConfig(failure_threshold=3, recovery_timeout=60))
     async def _execute_agent_step(self, step: WorkflowStep, step_input: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute a step using an agent"""
-        if step.agent_id not in self.agents:
-            raise ValueError(f"Agent {step.agent_id} not found")
+        """Execute agent step with circuit breaker protection"""
+        agent_id = step.agent_id
+        if agent_id not in self.agents:
+            raise ValueError(f"Agent {agent_id} not found")
             
-        agent = self.agents[step.agent_id]
+        agent = self.agents[agent_id]
         
-        # Create message for the agent
-        message = HumanMessage(content=json.dumps(step_input))
+        # Handle FSM agent specifically
+        if isinstance(agent, FSMReActAgent):
+            # Use FSM agent's run method
+            result = await agent.run(step_input.get('query', ''))
+            return {'output': result, 'agent_type': 'fsm'}
+        else:
+            # Handle other agent types
+            result = await agent.arun(step_input)
+            return {'output': result, 'agent_type': 'standard'}
         
-        # Execute agent
-        response = await agent.ainvoke([message])
-        
-        return {
-            "agent_id": step.agent_id,
-            "response": response.content,
-            "metadata": response.additional_kwargs
-        }
-        
+    @circuit_breaker("tool_execution", CircuitBreakerConfig(failure_threshold=5, recovery_timeout=60))
     async def _execute_tool_step(self, step: WorkflowStep, step_input: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute a step using a tool"""
-        if step.tool_name not in self.tools:
-            raise ValueError(f"Tool {step.tool_name} not found")
+        """Execute tool step with circuit breaker protection"""
+        tool_name = step.tool_name
+        if tool_name not in self.tools:
+            raise ValueError(f"Tool {tool_name} not found")
             
-        tool = self.tools[step.tool_name]
+        tool = self.tools[tool_name]
         
-        # Execute tool
-        result = await tool.ainvoke(step_input)
-        
-        return {
-            "tool_name": step.tool_name,
-            "result": result,
-            "metadata": {}
-        }
+        try:
+            # Execute tool with proper error handling
+            result = await tool.ainvoke(step_input)
+            return {'output': result, 'tool_name': tool_name, 'success': True}
+        except Exception as e:
+            logger.error(f"Tool execution failed: {tool_name}, error: {e}")
+            return {'output': None, 'tool_name': tool_name, 'success': False, 'error': str(e)}
         
     async def _execute_custom_step(self, step: WorkflowStep, step_input: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a custom step (placeholder for custom logic)"""
@@ -558,4 +571,154 @@ async def get_execution_status(execution_id: str) -> Optional[WorkflowExecution]
 
 def create_workflow_builder(name: str, description: str = "") -> WorkflowBuilder:
     """Create a new workflow builder"""
-    return WorkflowBuilder(name, description) 
+    return WorkflowBuilder(name, description)
+
+# =============================
+# Agent Orchestrator for FSM Integration
+# =============================
+
+class AgentOrchestrator:
+    """Orchestrator that integrates with existing FSM agent for workflow management"""
+    
+    def __init__(self, workflow_engine: WorkflowEngine = None):
+        self.workflow_engine = workflow_engine or WorkflowEngine()
+        self.fsm_agents: Dict[str, FSMReActAgent] = {}
+        self.workflow_definitions: Dict[str, Dict[str, Any]] = {}
+        
+    async def register_fsm_agent(self, agent_id: str, agent: FSMReActAgent) -> None:
+        """Register an FSM agent for orchestration"""
+        self.fsm_agents[agent_id] = agent
+        await self.workflow_engine.register_agent(agent_id, agent)
+        logger.info(f"Registered FSM agent: {agent_id}")
+    
+    async def create_workflow_from_fsm(self, workflow_id: str, fsm_agent: FSMReActAgent,
+                                     workflow_steps: List[Dict[str, Any]]) -> str:
+        """Create a workflow definition from FSM agent and steps"""
+        
+        # Convert steps to WorkflowStep objects
+        steps = []
+        for i, step_data in enumerate(workflow_steps):
+            step = WorkflowStep(
+                step_id=f"step_{i}",
+                name=step_data.get('name', f'Step {i}'),
+                description=step_data.get('description', ''),
+                agent_id=step_data.get('agent_id', 'fsm_agent'),
+                tool_name=step_data.get('tool_name'),
+                input_mapping=step_data.get('input_mapping', {}),
+                output_mapping=step_data.get('output_mapping', {}),
+                timeout=step_data.get('timeout'),
+                retry_count=step_data.get('retry_count', 3),
+                dependencies=step_data.get('dependencies', [])
+            )
+            steps.append(step)
+        
+        # Create workflow definition
+        workflow = WorkflowDefinition(
+            workflow_id=workflow_id,
+            name=f"FSM Workflow {workflow_id}",
+            description="Workflow created from FSM agent",
+            workflow_type=WorkflowType.SEQUENTIAL,
+            steps=steps,
+            timeout=300,  # 5 minutes default
+            max_retries=3
+        )
+        
+        # Register workflow
+        await self.workflow_engine.register_workflow(workflow)
+        
+        # Store workflow definition
+        self.workflow_definitions[workflow_id] = {
+            'workflow': workflow,
+            'fsm_agent': fsm_agent,
+            'steps': workflow_steps
+        }
+        
+        logger.info(f"Created FSM workflow: {workflow_id}")
+        return workflow_id
+    
+    @circuit_breaker("orchestrator_execution", CircuitBreakerConfig(failure_threshold=3, recovery_timeout=120))
+    async def execute_workflow(self, workflow_id: str, input_data: Dict[str, Any],
+                             execution_id: Optional[str] = None) -> WorkflowExecution:
+        """Execute a workflow with circuit breaker protection"""
+        return await self.workflow_engine.execute_workflow(workflow_id, input_data, execution_id)
+    
+    async def execute_fsm_workflow(self, query: str, workflow_steps: List[Dict[str, Any]],
+                                 fsm_agent: FSMReActAgent = None) -> Dict[str, Any]:
+        """Execute a workflow using FSM agent directly"""
+        
+        if fsm_agent is None:
+            # Use default FSM agent if available
+            if 'default' in self.fsm_agents:
+                fsm_agent = self.fsm_agents['default']
+            else:
+                raise ValueError("No FSM agent provided and no default agent available")
+        
+        try:
+            # Execute FSM agent with workflow steps
+            result = await fsm_agent.run(query)
+            
+            # Process workflow steps if needed
+            workflow_results = []
+            for step in workflow_steps:
+                step_result = await self._execute_workflow_step(step, result, fsm_agent)
+                workflow_results.append(step_result)
+            
+            return {
+                'fsm_result': result,
+                'workflow_results': workflow_results,
+                'success': True
+            }
+            
+        except Exception as e:
+            logger.error(f"FSM workflow execution failed: {e}")
+            return {
+                'fsm_result': None,
+                'workflow_results': [],
+                'success': False,
+                'error': str(e)
+            }
+    
+    async def _execute_workflow_step(self, step: Dict[str, Any], fsm_result: Any,
+                                   fsm_agent: FSMReActAgent) -> Dict[str, Any]:
+        """Execute a single workflow step"""
+        step_type = step.get('type', 'tool')
+        
+        if step_type == 'tool':
+            # Execute tool using FSM agent's tools
+            tool_name = step.get('tool_name')
+            if tool_name and hasattr(fsm_agent, 'tools'):
+                for tool in fsm_agent.tools:
+                    if tool.name == tool_name:
+                        try:
+                            result = await tool.ainvoke(step.get('params', {}))
+                            return {'step_type': 'tool', 'tool_name': tool_name, 'result': result}
+                        except Exception as e:
+                            return {'step_type': 'tool', 'tool_name': tool_name, 'error': str(e)}
+        
+        elif step_type == 'agent':
+            # Execute sub-agent
+            agent_id = step.get('agent_id')
+            if agent_id in self.fsm_agents:
+                try:
+                    result = await self.fsm_agents[agent_id].run(step.get('query', ''))
+                    return {'step_type': 'agent', 'agent_id': agent_id, 'result': result}
+                except Exception as e:
+                    return {'step_type': 'agent', 'agent_id': agent_id, 'error': str(e)}
+        
+        return {'step_type': step_type, 'error': 'Unknown step type'}
+    
+    async def get_workflow_status(self, execution_id: str) -> Optional[WorkflowExecution]:
+        """Get workflow execution status"""
+        return await self.workflow_engine.get_execution_status(execution_id)
+    
+    async def cancel_workflow(self, execution_id: str) -> bool:
+        """Cancel a running workflow"""
+        return await self.workflow_engine.cancel_execution(execution_id)
+    
+    def get_available_workflows(self) -> List[str]:
+        """Get list of available workflow IDs"""
+        return list(self.workflow_definitions.keys())
+    
+    def get_fsm_agents(self) -> List[str]:
+        """Get list of registered FSM agent IDs"""
+        return list(self.fsm_agents.keys()) 

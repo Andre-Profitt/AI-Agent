@@ -227,4 +227,31 @@ def get_pending_clarifications() -> Dict[str, Dict]:
 def clear_pending_clarifications():
     """Clear all pending clarifications."""
     interactive_state.pending_clarifications.clear()
-    interactive_state.user_responses.clear() 
+    interactive_state.user_responses.clear()
+
+
+class ToolsInteractive:
+    """Interactive tools class for importing"""
+    
+    def __init__(self):
+        self.tools = get_interactive_tools()
+        self.state = interactive_state
+    
+    def get_tools(self) -> List[StructuredTool]:
+        """Get all interactive tools"""
+        return self.tools
+    
+    def get_tool_by_name(self, name: str) -> Optional[StructuredTool]:
+        """Get a specific tool by name"""
+        for tool in self.tools:
+            if tool.name == name:
+                return tool
+        return None
+    
+    def set_clarification_callback(self, callback: Callable):
+        """Set the clarification callback"""
+        self.state.set_clarification_callback(callback)
+    
+    def get_pending_clarifications(self) -> Dict[str, Dict]:
+        """Get pending clarifications"""
+        return self.state.pending_clarifications 

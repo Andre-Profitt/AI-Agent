@@ -313,20 +313,52 @@ def validate_tool_call(tool: BaseTool, parameters: Dict[str, Any]) -> Dict[str, 
 
 def suggest_tool_alternatives(tool_name: str, available_tools: List[BaseTool]) -> List[str]:
     """
-    Suggest alternative tools based on name similarity
+    Suggest alternative tools when the requested tool is not available
     
     Args:
         tool_name: Name of the requested tool
         available_tools: List of available tools
         
     Returns:
-        List of similar tool names
+        List of alternative tool names
     """
-    suggestions = []
+    # Simple similarity-based suggestions
+    alternatives = []
     tool_name_lower = tool_name.lower()
     
     for tool in available_tools:
-        if tool_name_lower in tool.name.lower() or tool.name.lower() in tool_name_lower:
-            suggestions.append(tool.name)
+        if hasattr(tool, 'name'):
+            tool_name_alt = tool.name.lower()
+            if (tool_name_lower in tool_name_alt or 
+                tool_name_alt in tool_name_lower or
+                any(word in tool_name_alt for word in tool_name_lower.split('_'))):
+                alternatives.append(tool.name)
     
-    return suggestions[:5]  # Limit to 5 suggestions 
+    return alternatives[:3]  # Return top 3 alternatives
+
+
+class ToolsIntrospection:
+    """Introspection tools class for importing"""
+    
+    def __init__(self):
+        self.introspector = tool_introspector
+    
+    def get_tool_schema(self, tool_name: str) -> Dict[str, Any]:
+        """Get tool schema"""
+        return self.introspector.get_tool_schema(tool_name)
+    
+    def analyze_tool_error(self, tool_name: str, error_message: str, attempted_params: Dict[str, Any]) -> ToolCallError:
+        """Analyze tool error"""
+        return self.introspector.analyze_tool_error(tool_name, error_message, attempted_params)
+    
+    def get_error_history(self) -> List[ToolCallError]:
+        """Get error history"""
+        return self.introspector.get_error_history()
+    
+    def clear_error_history(self):
+        """Clear error history"""
+        self.introspector.clear_error_history()
+    
+    def register_tools(self, tools: List[BaseTool]):
+        """Register tools"""
+        register_tools(tools) 

@@ -8,6 +8,7 @@ import uuid
 import requests
 import os
 import hashlib
+import asyncio
 from typing import Annotated, List, TypedDict, Dict, Any, Optional
 from uuid import UUID
 from datetime import datetime
@@ -40,6 +41,9 @@ from src.langgraph_resilience_patterns import (
     ErrorRecoveryState,
     create_adaptive_error_handler
 )
+
+# Import workflow orchestration
+from src.infrastructure.workflow.workflow_engine import AgentOrchestrator, WorkflowStatus
 
 # Import resilience libraries with fallbacks
 try:
@@ -808,6 +812,14 @@ class FSMReActAgent:
             from src.errors.error_category import ErrorHandler
             self.error_handler = ErrorHandler()
         
+        # Initialize workflow orchestrator
+        try:
+            self.workflow_orchestrator = AgentOrchestrator()
+            logger.info("Workflow orchestrator initialized")
+        except Exception as e:
+            logger.warning(f"Workflow orchestrator initialization failed: {e}")
+            self.workflow_orchestrator = None
+        
         # Setup logging
         if log_handler:
             logger.addHandler(log_handler)
@@ -815,7 +827,19 @@ class FSMReActAgent:
         # Initialize FSM graph
         self.graph = self._create_fsm_graph()
         
-        logger.info(f"FSMReActAgent initialized with {len(tools)} tools")
+        # Register this agent with the orchestrator
+        if self.workflow_orchestrator:
+            asyncio.create_task(self._register_with_orchestrator())
+        
+        logger.info(f"FSMReActAgent initialized with {len(tools)} tools and workflow orchestration")
+    
+    async def _register_with_orchestrator(self):
+        """Register this agent with the workflow orchestrator"""
+        try:
+            await self.workflow_orchestrator.register_fsm_agent('default', self)
+            logger.info("FSM agent registered with workflow orchestrator")
+        except Exception as e:
+            logger.error(f"Failed to register with orchestrator: {e}")
     
     def select_best_tool(self, task: str, available_tools: List[BaseTool]) -> Optional[BaseTool]:
         """Select the best tool for a task using introspection and reliability metrics."""
@@ -858,6 +882,45 @@ class FSMReActAgent:
             return self.unified_registry.get_tools_for_role("general")
         else:
             return self.tools
+    
+    async def execute_workflow(self, workflow_steps: List[Dict[str, Any]], query: str = None) -> Dict[str, Any]:
+        """Execute a workflow using the workflow orchestrator"""
+        if not self.workflow_orchestrator:
+            raise ValueError("Workflow orchestrator not available")
+        
+        try:
+            # Create a workflow ID
+            workflow_id = f"workflow_{uuid.uuid4().hex[:8]}"
+            
+            # Create workflow from steps
+            await self.workflow_orchestrator.create_workflow_from_fsm(
+                workflow_id, self, workflow_steps
+            )
+            
+            # Execute the workflow
+            input_data = {'query': query} if query else {}
+            execution = await self.workflow_orchestrator.execute_workflow(
+                workflow_id, input_data
+            )
+            
+            return {
+                'workflow_id': workflow_id,
+                'execution_id': execution.execution_id,
+                'status': execution.status.value,
+                'result': execution.output_data,
+                'success': execution.status == WorkflowStatus.COMPLETED
+            }
+            
+        except Exception as e:
+            logger.error(f"Workflow execution failed: {e}")
+            return {
+                'workflow_id': None,
+                'execution_id': None,
+                'status': 'failed',
+                'result': None,
+                'success': False,
+                'error': str(e)
+            }
 
 # --- RETRIEVAL-AUGMENTED TOOL USE (RA-TU) IMPLEMENTATION ---
 class ToolDocumentation(BaseModel):

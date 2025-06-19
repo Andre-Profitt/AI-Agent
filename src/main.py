@@ -205,10 +205,18 @@ async def main():
             await app.run_web()
         elif args.mode == "cli":
             await app.run_cli()
-    except KeyboardInterrupt:
-        print("\nShutting down...")
+    except Exception as e:
+        logger.error("Failed to initialize application", extra={
+            "error": str(e),
+            "operation": "application_startup"
+        })
+        return 1
     finally:
         await app.shutdown()
+
+    logger.info("Shutting down application", extra={
+        "operation": "application_shutdown"
+    })
 
 
 if __name__ == "__main__":

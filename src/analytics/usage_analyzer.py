@@ -455,7 +455,10 @@ class UsagePatternAnalyzer:
 # Example usage
 def run_usage_analysis():
     """Example of running usage analysis"""
-    print("📊 Running Usage Pattern Analysis...")
+    logger.info("Running usage pattern analysis", extra={
+        "operation": "usage_analysis",
+        "phase": "start"
+    })
     
     # Create analyzer
     analyzer = UsagePatternAnalyzer()
@@ -495,6 +498,15 @@ def run_usage_analysis():
     # Get insights
     insights = analyzer.get_optimization_insights()
     
+    logger.info("Usage analysis completed", extra={
+        "operation": "usage_analysis",
+        "total_queries": len(analyzer.usage_history),
+        "unique_patterns": len(analyzer.query_patterns),
+        "popular_patterns_count": len(insights['popular_patterns']),
+        "problem_patterns_count": len(insights['problem_patterns']),
+        "recommendations_count": len(insights['recommendations'])
+    })
+    
     print("\n📈 Usage Analysis Results:")
     print(f"Total queries analyzed: {len(analyzer.usage_history)}")
     print(f"Unique patterns found: {len(analyzer.query_patterns)}")
@@ -513,7 +525,10 @@ def run_usage_analysis():
     
     # Save report
     report_file = analyzer.save_analytics_report()
-    print(f"\n📄 Report saved to: {report_file}")
+    logger.info("Analytics report saved", extra={
+        "operation": "save_report",
+        "filename": report_file
+    })
     
     return insights
 

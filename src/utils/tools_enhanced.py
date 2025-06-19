@@ -47,16 +47,17 @@ except ImportError:
             return type('obj', (object,), {'content': 'ChatGroq unavailable - install langchain-groq'})
 
 # Import existing tools that don't need modification
-from src.tools import (
-    file_reader, 
-    advanced_file_reader, 
-    audio_transcriber, 
-    semantic_search_tool,
-    python_interpreter,
-    tavily_search_backoff,
-    tavily_search,
-    get_weather
-)
+# Commented out to avoid circular import
+# from src.tools import (
+#     file_reader, 
+#     advanced_file_reader, 
+#     audio_transcriber, 
+#     semantic_search_tool,
+#     python_interpreter,
+#     tavily_search_backoff,
+#     tavily_search,
+#     get_weather
+# )
 
 # Configure logging BEFORE using it
 logger = logging.getLogger(__name__)
@@ -355,102 +356,51 @@ image_analyzer_enhanced_structured = StructuredTool.from_function(
 
 def get_enhanced_tools() -> List[Tool]:
     """
-    Returns the complete set of enhanced tools optimized for GAIA benchmark.
-    Includes both original tools and new specialized tools.
-    Prefers production tools when available.
-    
-    This function is resilient to missing imports and will always return a valid tool list.
+    Returns the complete set of enhanced tools.
     """
-    tools = []
+    tools = [
+        gaia_video_analyzer,
+        chess_logic_tool,
+        web_researcher,
+        abstract_reasoning_tool,
+        image_analyzer_enhanced
+    ]
     
-    # Add tools that should always be available
-    try:
-        tools.extend([
-            # Original tools that don't need modification
-            file_reader,
-            advanced_file_reader,
-            audio_transcriber,
-            semantic_search_tool,
-            python_interpreter,
-        ])
-    except Exception as e:
-        logger.warning(f"Error adding base tools: {e}")
-    
-    # Add video analyzer
-    try:
-        if PRODUCTION_TOOLS_AVAILABLE:
-            tools.append(video_analyzer_production)
-        else:
-            tools.append(gaia_video_analyzer)
-    except Exception as e:
-        logger.error(f"Error adding structured video analyzer: {e}")
-        raise
-    
-    # Add chess analyzer
-    try:
-        if PRODUCTION_TOOLS_AVAILABLE:
-            tools.append(chess_analyzer_production)
-        else:
-            tools.append(chess_logic_tool)
-    except Exception as e:
-        logger.error(f"Error adding chess analyzer: {e}")
-        raise
-    
-    # Add other tools
-    try:
-        tools.extend([
-            # Web researcher
-            web_researcher,  # Enhanced version
-            
-            # Abstract reasoning
-            abstract_reasoning_tool,
-        ])
-    except Exception as e:
-        logger.error(f"Error adding enhanced tools: {e}")
-        raise
-    
-    # Add image analyzer
-    try:
-        tools.append(image_analyzer_enhanced_structured)  # StructuredTool version
-    except Exception as e:
-        logger.error(f"Error adding structured image analyzer: {e}")
-        raise
-    
-    # Add Tavily search if available
-    try:
-        tools.append(tavily_search)  # Use the StructuredTool from src.tools
-    except Exception as e:
-        logger.error(f"Error adding Tavily search: {e}")
-        raise
-    
-    # Add weather tool
-    try:
-        tools.append(get_weather)
-    except Exception as e:
-        logger.error(f"Error adding weather tool: {e}")
-        raise
-    
-    # Add Stockfish installer if production tools are available
+    # Add production tools if available
     if PRODUCTION_TOOLS_AVAILABLE:
-        try:
-            tools.append(install_stockfish)
-        except Exception as e:
-            logger.error(f"Error adding Stockfish installer: {e}")
-            raise
+        tools.extend([
+            video_analyzer_production,
+            chess_analyzer_production,
+            install_stockfish,
+            image_analyzer_chess_production
+        ])
     
-    # Ensure we always return at least some tools
-    if not tools:
-        logger.error("No tools could be loaded! Adding minimal fallback tools.")
-        # Add absolute minimal tools
-        @tool
-        def echo_tool(message: str) -> str:
-            """A simple echo tool for testing when no other tools are available."""
-            return f"Echo: {message}"
-        
-        tools = [echo_tool]
-    
-    logger.info(f"Enhanced tools loaded successfully: {len(tools)} tools available")
     return tools
+
+class ToolsEnhanced:
+    """Enhanced tools class for importing"""
+    
+    def __init__(self):
+        self.tools = get_enhanced_tools()
+    
+    def get_tools(self) -> List[Tool]:
+        """Get all enhanced tools"""
+        return self.tools
+    
+    def get_tool_by_name(self, name: str) -> Optional[Tool]:
+        """Get a specific tool by name"""
+        for tool in self.tools:
+            if hasattr(tool, 'name') and tool.name == name:
+                return tool
+        return None
+    
+    def get_gaia_tools(self) -> List[Tool]:
+        """Get GAIA-specific tools"""
+        return [tool for tool in self.tools if hasattr(tool, 'name') and 'gaia' in tool.name.lower()]
+    
+    def get_chess_tools(self) -> List[Tool]:
+        """Get chess-related tools"""
+        return [tool for tool in self.tools if hasattr(tool, 'name') and 'chess' in tool.name.lower()]
 
 # --- Specialized Tool Helpers ---
 

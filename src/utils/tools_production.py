@@ -370,9 +370,7 @@ def mathematical_calculator(expression: str) -> str:
         return f"Error calculating expression: {str(e)}"
 
 def get_production_tools() -> List[tool]:
-    """
-    Returns the complete set of production tools.
-    """
+    """Get all production tools"""
     return [
         video_analyzer_production,
         chess_analyzer_production,
@@ -381,5 +379,22 @@ def get_production_tools() -> List[tool]:
         music_discography_tool,
         sports_data_tool,
         text_reversal_tool,
-        mathematical_calculator,
-    ] 
+        mathematical_calculator
+    ]
+
+class ToolsProduction:
+    """Production tools class for importing"""
+    
+    def __init__(self):
+        self.tools = get_production_tools()
+    
+    def get_tools(self) -> List[tool]:
+        """Get all production tools"""
+        return self.tools
+    
+    def get_tool_by_name(self, name: str) -> Optional[tool]:
+        """Get a specific tool by name"""
+        for tool in self.tools:
+            if tool.name == name:
+                return tool
+        return None 

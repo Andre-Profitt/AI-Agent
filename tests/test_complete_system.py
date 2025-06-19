@@ -19,6 +19,22 @@ from src.application.agents.agent_factory import AgentFactory
 from src.unified_architecture.core import UnifiedTask, AgentCapability, IUnifiedAgent
 from src.application.executors.parallel_executor import ParallelExecutor
 from src.infrastructure.monitoring.decorators import async_metrics
+from src.infrastructure.resilience.circuit_breaker import (
+    CircuitBreaker, 
+    CircuitBreakerConfig, 
+    circuit_breaker,
+    CircuitBreakerOpenError
+)
+from src.infrastructure.workflow.workflow_engine import (
+    AgentOrchestrator, 
+    WorkflowEngine, 
+    WorkflowStatus,
+    WorkflowDefinition,
+    WorkflowStep,
+    WorkflowType
+)
+from src.agents.advanced_agent_fsm import FSMReActAgent
+from src.tools.base_tool import BaseTool
 
 
 # Missing classes that need to be created
@@ -732,6 +748,295 @@ class TestPerformance:
         assert execution_time < 10.0  # 10 seconds for 50 tasks
         
         executor.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_circuit_breaker_integration():
+    """Test complete circuit breaker integration"""
+    config = CircuitBreakerConfig(failure_threshold=3, recovery_timeout=60)
+    breaker = CircuitBreaker("test_breaker", config)
+    
+    # Mock a failing database operation
+    async def mock_db_op():
+        raise Exception("Database connection failed")
+    
+    # Test that circuit opens after threshold
+    for _ in range(3):
+        with pytest.raises(Exception):
+            await breaker.call(mock_db_op)
+    
+    # Verify circuit is now open
+    with pytest.raises(CircuitBreakerOpenError):
+        await breaker.call(mock_db_op)
+
+
+@pytest.mark.asyncio
+async def test_circuit_breaker_decorator():
+    """Test circuit breaker decorator"""
+    
+    @circuit_breaker("test_decorator", CircuitBreakerConfig(failure_threshold=2, recovery_timeout=30))
+    async def failing_function():
+        raise Exception("Test failure")
+    
+    # Test that circuit opens after threshold
+    for _ in range(2):
+        with pytest.raises(Exception):
+            await failing_function()
+    
+    # Verify circuit is now open
+    with pytest.raises(CircuitBreakerOpenError):
+        await failing_function()
+
+
+@pytest.mark.asyncio
+async def test_workflow_orchestration():
+    """Test workflow engine state transitions"""
+    engine = WorkflowEngine()
+    
+    # Create a simple workflow
+    step1 = WorkflowStep(
+        step_id="step_1",
+        name="Test Step 1",
+        description="First test step",
+        tool_name="mock_tool"
+    )
+    
+    workflow = WorkflowDefinition(
+        workflow_id="test_workflow",
+        name="Test Workflow",
+        description="A test workflow",
+        workflow_type=WorkflowType.SEQUENTIAL,
+        steps=[step1],
+        timeout=60
+    )
+    
+    # Register workflow
+    await engine.register_workflow(workflow)
+    
+    # Register mock tool
+    mock_tool = MockTool()
+    await engine.register_tool("mock_tool", mock_tool)
+    
+    # Execute workflow
+    execution = await engine.execute_workflow("test_workflow", {"query": "test"})
+    
+    assert execution.status == WorkflowStatus.COMPLETED
+    assert execution.workflow_id == "test_workflow"
+
+
+@pytest.mark.asyncio
+async def test_agent_orchestrator_integration():
+    """Test agent orchestrator with FSM agent integration"""
+    orchestrator = AgentOrchestrator()
+    
+    # Create mock FSM agent
+    mock_tools = [MockTool()]
+    fsm_agent = FSMReActAgent(tools=mock_tools)
+    
+    # Register FSM agent
+    await orchestrator.register_fsm_agent("test_agent", fsm_agent)
+    
+    # Create workflow steps
+    workflow_steps = [
+        {
+            "name": "Test Step",
+            "description": "A test step",
+            "agent_id": "test_agent",
+            "type": "agent"
+        }
+    ]
+    
+    # Create workflow
+    workflow_id = await orchestrator.create_workflow_from_fsm(
+        "test_workflow", fsm_agent, workflow_steps
+    )
+    
+    assert workflow_id == "test_workflow"
+    assert "test_workflow" in orchestrator.get_available_workflows()
+    assert "test_agent" in orchestrator.get_fsm_agents()
+
+
+@pytest.mark.asyncio
+async def test_fsm_agent_workflow_execution():
+    """Test FSM agent's workflow execution capability"""
+    mock_tools = [MockTool()]
+    fsm_agent = FSMReActAgent(tools=mock_tools)
+    
+    # Wait for orchestrator initialization
+    await asyncio.sleep(0.1)
+    
+    # Create workflow steps
+    workflow_steps = [
+        {
+            "name": "Tool Step",
+            "description": "Execute a tool",
+            "tool_name": "mock_tool",
+            "type": "tool",
+            "params": {"query": "test query"}
+        }
+    ]
+    
+    # Execute workflow
+    result = await fsm_agent.execute_workflow(workflow_steps, "test query")
+    
+    assert result['success'] is True
+    assert result['workflow_id'] is not None
+    assert result['execution_id'] is not None
+
+
+@pytest.mark.asyncio
+async def test_circuit_breaker_recovery():
+    """Test circuit breaker recovery after timeout"""
+    config = CircuitBreakerConfig(failure_threshold=2, recovery_timeout=0.1)  # Short timeout for testing
+    breaker = CircuitBreaker("recovery_test", config)
+    
+    # Mock a function that fails then succeeds
+    call_count = 0
+    async def mock_function():
+        nonlocal call_count
+        call_count += 1
+        if call_count <= 2:
+            raise Exception("Temporary failure")
+        return "success"
+    
+    # Fail twice to open circuit
+    for _ in range(2):
+        with pytest.raises(Exception):
+            await breaker.call(mock_function)
+    
+    # Circuit should be open
+    with pytest.raises(CircuitBreakerOpenError):
+        await breaker.call(mock_function)
+    
+    # Wait for recovery timeout
+    await asyncio.sleep(0.2)
+    
+    # Circuit should be half-open and allow the call
+    result = await breaker.call(mock_function)
+    assert result == "success"
+
+
+@pytest.mark.asyncio
+async def test_workflow_engine_error_handling():
+    """Test workflow engine error handling"""
+    engine = WorkflowEngine()
+    
+    # Create a workflow with a non-existent tool
+    step1 = WorkflowStep(
+        step_id="step_1",
+        name="Failing Step",
+        description="A step that will fail",
+        tool_name="non_existent_tool"
+    )
+    
+    workflow = WorkflowDefinition(
+        workflow_id="failing_workflow",
+        name="Failing Workflow",
+        description="A workflow that will fail",
+        workflow_type=WorkflowType.SEQUENTIAL,
+        steps=[step1],
+        timeout=60
+    )
+    
+    # Register workflow
+    await engine.register_workflow(workflow)
+    
+    # Execute workflow - should fail but not crash
+    execution = await engine.execute_workflow("failing_workflow", {"query": "test"})
+    
+    assert execution.status == WorkflowStatus.FAILED
+    assert execution.error_message is not None
+
+
+@pytest.mark.asyncio
+async def test_parallel_workflow_execution():
+    """Test parallel workflow execution"""
+    engine = WorkflowEngine()
+    
+    # Create parallel steps
+    step1 = WorkflowStep(
+        step_id="step_1",
+        name="Parallel Step 1",
+        description="First parallel step",
+        tool_name="mock_tool",
+        parallel=True
+    )
+    
+    step2 = WorkflowStep(
+        step_id="step_2", 
+        name="Parallel Step 2",
+        description="Second parallel step",
+        tool_name="mock_tool",
+        parallel=True
+    )
+    
+    workflow = WorkflowDefinition(
+        workflow_id="parallel_workflow",
+        name="Parallel Workflow",
+        description="A workflow with parallel steps",
+        workflow_type=WorkflowType.PARALLEL,
+        steps=[step1, step2],
+        timeout=60
+    )
+    
+    # Register workflow and tool
+    await engine.register_workflow(workflow)
+    mock_tool = MockTool()
+    await engine.register_tool("mock_tool", mock_tool)
+    
+    # Execute workflow
+    execution = await engine.execute_workflow("parallel_workflow", {"query": "test"})
+    
+    assert execution.status == WorkflowStatus.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_workflow_cancellation():
+    """Test workflow cancellation"""
+    engine = WorkflowEngine()
+    
+    # Create a long-running workflow
+    step1 = WorkflowStep(
+        step_id="step_1",
+        name="Long Step",
+        description="A step that takes time",
+        tool_name="mock_tool"
+    )
+    
+    workflow = WorkflowDefinition(
+        workflow_id="long_workflow",
+        name="Long Workflow",
+        description="A workflow that takes time",
+        workflow_type=WorkflowType.SEQUENTIAL,
+        steps=[step1],
+        timeout=60
+    )
+    
+    # Register workflow
+    await engine.register_workflow(workflow)
+    
+    # Start execution
+    execution_task = asyncio.create_task(
+        engine.execute_workflow("long_workflow", {"query": "test"})
+    )
+    
+    # Cancel execution
+    await asyncio.sleep(0.1)  # Let it start
+    cancelled = await engine.cancel_execution(execution_task.get_name())
+    
+    assert cancelled is True
+
+
+class MockTool(BaseTool):
+    """Mock tool for testing"""
+    name = "mock_tool"
+    description = "A mock tool for testing"
+    
+    def _run(self, query: str) -> str:
+        return f"Mock result for: {query}"
+    
+    async def _arun(self, query: str) -> str:
+        return f"Async mock result for: {query}"
 
 
 if __name__ == "__main__":

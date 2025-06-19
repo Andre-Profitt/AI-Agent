@@ -36,6 +36,12 @@ from src.infrastructure.integrations import integration_config
 from src.tools.base_tool import BaseTool
 from src.utils.logging import get_logger
 from src.services.circuit_breaker import CircuitBreaker
+from src.infrastructure.resilience.circuit_breaker import (
+    CircuitBreaker as ResilienceCircuitBreaker,
+    CircuitBreakerConfig,
+    circuit_breaker,
+    get_db_circuit_breaker
+)
 from src.core.exceptions import (
     ToolExecutionError, 
     CircuitBreakerOpenError,
@@ -682,24 +688,27 @@ class ToolOrchestrator:
         # Default: return params as-is
         return params
     
+    @circuit_breaker("db_metrics_update", CircuitBreakerConfig(failure_threshold=5, recovery_timeout=60))
     async def _update_database_metrics(self, tool_name: str, success: bool, latency: float, error: str = None):
-        """Update metrics in database"""
+        """Update tool metrics in database with circuit breaker protection"""
         if not self.db_client:
             return
-        
+            
         try:
-            # This would update the tool_reliability_metrics table
-            await self.db_client.table("tool_reliability_metrics").upsert({
-                "tool_name": tool_name,
-                "success_count": 1 if success else 0,
-                "failure_count": 0 if success else 1,
-                "total_calls": 1,
-                "average_latency_ms": latency * 1000,
-                "last_error": error,
-                "last_used_at": datetime.now().isoformat()
-            }).execute()
+            # Update tool performance metrics
+            metrics_data = {
+                'tool_name': tool_name,
+                'success': success,
+                'latency': latency,
+                'error_message': error,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            await self.db_client.table('tool_metrics').insert(metrics_data).execute()
+            
         except Exception as e:
-            logger.error(f"Failed to update database metrics: {e}")
+            logger.warning(f"Failed to update database metrics for {tool_name}: {e}")
+            # Don't raise - metrics failure shouldn't break tool execution
 
 # ============================================
 # SESSION-TOOL INTEGRATION
@@ -1048,8 +1057,7 @@ class IntegrationHub:
             await self._initialize_tools()
             
             # 2. Database (others depend on it)
-            if self.config.supabase.is_configured():
-                await self._initialize_database()
+            await self._initialize_database()
             
             # 3. Knowledge base with fallback
             await self._initialize_knowledge_base()
@@ -1171,10 +1179,11 @@ class IntegrationHub:
             from src.tools import file_reader
             unified_tool_registry.register(file_reader)
     
+    @circuit_breaker("database_initialization", CircuitBreakerConfig(failure_threshold=3, recovery_timeout=30))
     async def _initialize_database(self):
-        """Initialize Supabase database connection"""
+        """Initialize Supabase database connection with circuit breaker protection"""
         try:
-            from src.database_enhanced import initialize_supabase_enhanced
+            from src.infrastructure.database_enhanced import initialize_supabase_enhanced
             
             supabase_components = await initialize_supabase_enhanced(
                 url=self.config.supabase.url,
@@ -1183,17 +1192,17 @@ class IntegrationHub:
             
             self.components['supabase'] = supabase_components
             
-            # Fix: Properly handle async cleanup
+            # Register cleanup
             async def cleanup_db():
                 if 'connection_pool' in supabase_components:
                     await supabase_components['connection_pool'].close()
             
             self._cleanup_handlers.append(cleanup_db)
             
-            logger.info("Supabase database initialized")
+            logger.info("Supabase database initialized with circuit breaker protection")
             
         except Exception as e:
-            logger.error(f"Failed to initialize database: {e}")
+            logger.error(f"Database initialization failed: {e}")
             raise
     
     async def _initialize_knowledge_base(self):
@@ -1223,39 +1232,41 @@ class IntegrationHub:
             local_kb = create_local_knowledge_tool()
             self.components['knowledge_base'] = local_kb
     
+    @circuit_breaker("tool_orchestrator_db", CircuitBreakerConfig(failure_threshold=5, recovery_timeout=60))
     async def _initialize_tool_orchestrator(self):
-        """Initialize tool orchestrator"""
+        """Initialize tool orchestrator with circuit breaker protection for database operations"""
         try:
-            cache = self.components.get('cache')
             db_client = self.components.get('supabase', {}).get('client')
             
+            # Initialize orchestrator with circuit breaker protection
             self.tool_orchestrator = ToolOrchestrator(
-                registry=unified_tool_registry,
-                cache=cache,
+                registry=self.unified_registry,
+                cache=self.cache,
                 db_client=db_client,
                 rate_limit_manager=self.rate_limit_manager,
                 compatibility_checker=self.tool_compatibility_checker,
-                resource_manager=self.components.get('resource_manager')
+                resource_manager=self.resource_manager
             )
             
-            # Connect to session manager
-            integrated_session_manager.tool_orchestrator = self.tool_orchestrator
-            
-            logger.info("Tool orchestrator initialized")
+            logger.info("Tool orchestrator initialized with circuit breaker protection")
             
         except Exception as e:
-            logger.error(f"Failed to initialize tool orchestrator: {e}")
+            logger.error(f"Tool orchestrator initialization failed: {e}")
             raise
     
+    @circuit_breaker("session_manager_db", CircuitBreakerConfig(failure_threshold=3, recovery_timeout=30))
     async def _initialize_session_manager(self):
-        """Initialize enhanced session manager"""
+        """Initialize session manager with circuit breaker protection for database operations"""
         try:
-            # Session manager is already initialized globally
-            # Just ensure it's connected to other components
-            logger.info("Enhanced session manager ready")
+            db_client = self.components.get('supabase', {}).get('client')
+            
+            self.session_manager = IntegratedSessionManager()
+            self.session_manager.tool_orchestrator = self.tool_orchestrator
+            
+            logger.info("Session manager initialized with circuit breaker protection")
             
         except Exception as e:
-            logger.error(f"Failed to initialize session manager: {e}")
+            logger.error(f"Session manager initialization failed: {e}")
             raise
     
     async def _initialize_error_handler(self):
