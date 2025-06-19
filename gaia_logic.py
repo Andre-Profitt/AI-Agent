@@ -211,6 +211,13 @@ class GAIAEvaluator:
             if not questions_data:
                 logger.warning("No questions received from GAIA API")
                 return "⚠️ No questions received from GAIA API."
+            
+            # Debug log the first question to see its structure
+            if questions_data:
+                first_question = questions_data[0]
+                logger.info(f"First question structure: {first_question}")
+                logger.info(f"Question type: {type(first_question.get('question'))}")
+                logger.info(f"Question value: {first_question.get('question')}")
                 
             logger.info(f"Successfully fetched {len(questions_data)} questions")
             return questions_data
@@ -239,6 +246,19 @@ class GAIAEvaluator:
             
             if not task_id or question_text is None:
                 logger.warning(f"Skipping invalid question item: {item}")
+                continue
+                
+            # Validate question_text is a string
+            if not isinstance(question_text, str):
+                error_msg = f"Question text must be a string, got {type(question_text)}"
+                logger.error(f"Error on question {i} (ID: {task_id}): {error_msg}")
+                
+                results_log.append({
+                    "Task ID": task_id,
+                    "Question": str(question_text)[:200] + "..." if len(str(question_text)) > 200 else str(question_text),
+                    "Submitted Answer": error_msg,
+                    "Processing Time": "Error"
+                })
                 continue
             
             try:

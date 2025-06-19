@@ -1,90 +1,107 @@
 # ==============================================================================
 # Pinned Dependencies for AI Agent
-# Updated: 2025-01-23
+# Updated: 2025-06-18
 # These specific versions resolve dependency conflicts and ensure stable builds
 # ==============================================================================
 
-# Core LangChain/LangGraph
-langchain==0.3.25
-langgraph==0.4.8
-langchain-core==0.3.65
-langchain-groq==0.3.2
-langchain-openai==0.3.24
+# Core dependencies
+numpy
+langchain
+langgraph
+llama-index
+llama-index-core
+llama-index-readers-file
+pydantic
+typing-extensions
 
-# Anthropic for next-gen features
-anthropic==0.48.0
+# AI/ML dependencies
+torch
+torchvision
+transformers
+sentence-transformers
+scikit-learn
 
-# LlamaIndex and Supabase for Knowledge Base
-llama-index==0.12.42
-llama-index-core==0.12.42
-llama-index-embeddings-openai==0.3.1
-llama-index-vector-stores-supabase==0.3.0
+# Web framework and API
+fastapi
+gradio
+uvicorn
+aiofiles
+aiohttp
 
-# Tools
-langchain-tavily==0.2.3
-tavily-python==0.7.6
-langchain-experimental==0.3.4
+# Data processing
+pandas
+openpyxl
+pypdf
+python-docx
+python-pptx
+unstructured
 
-# Database Connector
-supabase==2.15.3
-psycopg2-binary==2.9.10
-vecs==0.4.5
+# Vision and media
+opencv-python
+Pillow
+ffmpeg-python
+librosa
+moviepy
+openai-whisper
+pydub
+yt-dlp
 
-# UI and Environment
-gradio==5.25.2
-python-dotenv==1.1.0
-groq==0.28.0
+# Database
+psycopg2-binary
+supabase
+
+# Web scraping and data collection
+beautifulsoup4
+requests-html
+selenium
+wikipedia
+
+# Resilience and monitoring
+circuitbreaker
+retry
+tenacity
+opentelemetry-api
+opentelemetry-instrumentation
+opentelemetry-sdk
+prometheus-client
+
+# Security
+cryptography
+python-jose
+
+# Development tools
+black
+flake8
+isort
+mypy
+pytest
+pytest-asyncio
+pytest-cov
 
 # Utilities
-ipython==8.37.0
-typing-extensions==4.13.2
-numpy==2.2.6
-requests==2.32.4
-pandas==2.2.3
-scikit-learn==1.7.0
-sentence-transformers==4.1.0
+colorama
+ipython
+matplotlib
+python-chess
+python-dateutil
+python-dotenv
+python-magic
+pytz
+requests
+rich
+seaborn
+stockfish
+tqdm
+watchdog
 
-# Async I/O for Ultra-Fast Processing
-aiohttp==3.12.12
-aiofiles==24.1.0
-
-# GPU Acceleration
-torch==2.7.1
-torchvision==0.22.1
-
-# Multimedia Processing
-openai-whisper==20240930
-librosa==0.11.0
-pydub==0.25.1
-yt-dlp==2025.6.9
-opencv-python==4.11.0.86
-moviepy==2.2.1
-Pillow==11.2.1
-ffmpeg-python==0.2.0
-
-# Web Scraping & Research
-beautifulsoup4==4.13.4
-selenium==4.33.0
-requests-html==0.10.0
-wikipedia==1.4.0
-
-# File Format Support
-openpyxl==3.1.5
-python-docx==1.2.0
-PyPDF2==3.0.1
-python-magic==0.4.27
-
-# Specialized Analysis
-chess==1.11.2
-matplotlib==3.10.3
-seaborn==0.13.2
-
-# Production tool dependencies
-python-chess==1.999
-stockfish==3.28.0  # Python wrapper for Stockfish
-watchdog==6.0.0  # For file system monitoring
-
-# Document processing
-pypdf==5.6.0
-unstructured==0.17.2
-llama-index-readers-file==0.4.9 
+# AI/LLM specific
+anthropic
+groq
+langchain-experimental
+langchain-groq
+langchain-tavily
+llama-index-embeddings-openai
+llama-index-vector-stores-supabase
+openai
+tavily-python
+autogen

@@ -20,6 +20,10 @@ from langchain_groq import ChatGroq
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field, ValidationError, field_validator
+from src.tools.base_tool import BaseTool
+from src.reasoning.reasoning_path import ReasoningPath, ReasoningType, AdvancedReasoning
+from src.errors.error_category import ErrorCategory, ErrorHandler
+from src.data_quality import DataQualityLevel, DataQualityValidator, ValidationResult
 
 # Import resilience patterns
 from src.langgraph_resilience_patterns import (
@@ -313,26 +317,72 @@ class EnhancedAgentState(TypedDict):
 class ModelConfig:
     """Configuration for different Groq models optimized for specific tasks."""
     
-    # Reasoning models - for complex logical thinking
+    # Reasoning models - for complex logical thinking and planning
     REASONING_MODELS = {
-        "primary": "llama-3.3-70b-versatile",
-        "fast": "llama-3.1-8b-instant",
-        "deep": "deepseek-r1-distill-llama-70b"
+        "primary": "llama-3.3-70b-versatile",  # High-reasoning model for planning
+        "fast": "llama-3.1-8b-instant",       # Quick reasoning for simple tasks
+        "deep": "deepseek-r1-distill-llama-70b"  # Deep reasoning for complex analysis
     }
     
-    # Function calling models - for tool use
+    # Function calling models - for tool use and execution
     FUNCTION_CALLING_MODELS = {
-        "primary": "llama-3.3-70b-versatile",
-        "fast": "llama-3.1-8b-instant",
-        "versatile": "llama3-groq-70b-8192-tool-use-preview"
+        "primary": "llama-3.3-70b-versatile",  # Reliable function calling
+        "fast": "llama-3.1-8b-instant",       # Quick tool execution
+        "versatile": "llama3-groq-70b-8192-tool-use-preview"  # Specialized for tool use
     }
     
-    # Text generation models - for final answers
+    # Text generation models - for final answers and synthesis
     TEXT_GENERATION_MODELS = {
-        "primary": "llama-3.3-70b-versatile",
-        "fast": "llama-3.1-8b-instant",
-        "creative": "gemma2-9b-it"
+        "primary": "llama-3.3-70b-versatile",  # High-quality text generation
+        "fast": "llama-3.1-8b-instant",       # Quick responses
+        "creative": "llama3-groq-70b-8192-creative"  # Creative writing
     }
+    
+    # Verification models - for fact checking and validation
+    VERIFICATION_MODELS = {
+        "primary": "llama-3.3-70b-versatile",  # Thorough verification
+        "fast": "llama-3.1-8b-instant",       # Quick checks
+        "strict": "llama3-groq-70b-8192-verification"  # Strict validation
+    }
+    
+    # Model configurations for different tasks
+    MODEL_CONFIGS = {
+        "planning": {
+            "model": REASONING_MODELS["primary"],
+            "temperature": 0.2,
+            "max_tokens": 1024,
+            "top_p": 0.95
+        },
+        "tool_execution": {
+            "model": FUNCTION_CALLING_MODELS["primary"],
+            "temperature": 0.1,
+            "max_tokens": 512,
+            "top_p": 0.99
+        },
+        "synthesis": {
+            "model": TEXT_GENERATION_MODELS["primary"],
+            "temperature": 0.7,
+            "max_tokens": 2048,
+            "top_p": 0.9
+        },
+        "verification": {
+            "model": VERIFICATION_MODELS["primary"],
+            "temperature": 0.1,
+            "max_tokens": 512,
+            "top_p": 0.99
+        }
+    }
+    
+    @classmethod
+    def get_model_config(cls, task_type: str) -> Dict[str, Any]:
+        """Get the optimal model configuration for a specific task type"""
+        return cls.MODEL_CONFIGS.get(task_type, cls.MODEL_CONFIGS["planning"])
+    
+    @classmethod
+    def get_model_for_task(cls, task_type: str) -> str:
+        """Get the optimal model for a specific task type"""
+        config = cls.get_model_config(task_type)
+        return config["model"]
 
 # --- Structured Output Schemas (Directive 3) ---
 
@@ -563,1476 +613,302 @@ Use EXACT parameter names. Respond ONLY with the JSON object, no markdown or exp
 
 # --- Main FSM-based Agent ---
 
-class FSMReActAgent:
-    """
-    Finite State Machine based ReAct agent with deterministic control flow,
-    proactive state-passing, and production-ready reliability.
-    """
+@dataclass
+class AgentState:
+    """State for the FSM-based agent."""
+    input: str
+    tools: List[BaseTool]
+    tool_names: List[str]
+    tool_results: List[Dict[str, Any]]
+    reasoning_path: Optional[ReasoningPath] = None
+    error_state: Optional[ErrorCategory] = None
+    validation_result: Optional[ValidationResult] = None
+    current_step: int = 0
+    max_steps: int = 15
     
-    def __init__(self, tools: list, log_handler: logging.Handler = None, model_preference: str = "balanced", use_crew: bool = False):
+    def __post_init__(self):
+        """Validate state after initialization"""
+        if not self.tools:
+            raise ValueError("Tools list cannot be empty")
+        if not self.tool_names:
+            raise ValueError("Tool names list cannot be empty")
+        if not isinstance(self.input, str):
+            raise ValueError("Input must be a string")
+        if not isinstance(self.tool_results, list):
+            raise ValueError("Tool results must be a list")
+
+class FSMReActAgent:
+    """Enhanced FSM-based ReAct agent with improved error handling, reasoning, and data quality."""
+    
+    def __init__(
+        self,
+        tools: List[BaseTool],
+        model_name: str = "llama-3.3-70b-versatile",
+        quality_level: DataQualityLevel = DataQualityLevel.THOROUGH,
+        reasoning_type: ReasoningType = ReasoningType.LAYERED,
+        log_handler: Optional[logging.Handler] = None,
+        model_preference: str = "balanced",
+        use_crew: bool = False
+    ):
+        if not tools:
+            raise ValueError("Tools list cannot be empty")
+            
         self.tools = tools
-        self.log_handler = log_handler
-        self.tool_registry = {tool.name: tool for tool in tools}
-        # Patch in the structured tools for video and image analysis
-        from src.tools import video_analyzer_structured
-        from src.tools_enhanced import image_analyzer_enhanced_structured
-        self.tool_registry["video_analyzer"] = video_analyzer_structured
-        self.tool_registry["image_analyzer_enhanced"] = image_analyzer_enhanced_structured
+        self.tool_names = [tool.name for tool in tools]
+        self.model_name = model_name
         self.model_preference = model_preference
         self.use_crew = use_crew
         
-        # Initialize resilient communication components
-        groq_api_key = os.getenv("GROQ_API_KEY")
-        if not groq_api_key:
-            logger.warning("GROQ_API_KEY not found, some features may be limited")
-            # Create a mock client for testing
-            self.api_client = None
-            self.planner = None
-        else:
-            self.api_client = ResilientAPIClient(groq_api_key)
-            self.planner = EnhancedPlanner(self.api_client)
+        # Set up logging if handler provided
+        if log_handler:
+            logger.addHandler(log_handler)
+            logger.info("Custom log handler added to FSMReActAgent")
         
-        # Add stub tools for missing ones
-        self._add_stub_tools()
-        
-        # FSM Configuration
-        self.max_stagnation = 3
-        self.max_steps = 20
-        
+        # Initialize components with error handling
         try:
-            logger.info(f"Initializing FSMReActAgent with {len(tools)} tools")
-            with correlation_context(str(uuid.uuid4())):
-                logger.info("Building resilient FSM graph", extra={'tools_count': len(tools), 'use_crew': use_crew})
-                self.graph = self._build_fsm_graph()
-                logger.info("FSMReActAgent graph built successfully")
+            self.error_handler = ErrorHandler()
+            self.reasoning = AdvancedReasoning()
+            self.quality_validator = DataQualityValidator(quality_level)
         except Exception as e:
-            logger.error(f"Failed to build FSM graph: {e}", exc_info=True)
-            raise RuntimeError(f"FSMReActAgent initialization failed: {e}")
-    
-    def _add_stub_tools(self):
-        """FIX 3: Add stub implementations for missing tools referenced in logs."""
-        stub_tools = {
-            "video_analyzer": {
-                "description": "Analyze video content and extract information",
-                "params": {"url": str, "action": str},
-                "response": "Video analyzer not yet implemented. Please use gaia_video_analyzer or video_analyzer_production instead."
-            },
-            "programming_language_identifier": {
-                "description": "Identify the programming language of code",
-                "params": {"code": str},
-                "response": "Language identifier not yet implemented. Please use python_interpreter to analyze code."
-            }
-        }
+            logger.error(f"Failed to initialize components: {str(e)}")
+            raise
         
-        for tool_name, config in stub_tools.items():
-            if tool_name not in self.tool_registry:
-                # Create a stub tool
-                from langchain_core.tools import Tool
-                
-                def make_stub_func(name, resp):
-                    def stub_func(**kwargs):
-                        logger.warning(f"Stub tool '{name}' called with args: {kwargs}")
-                        return resp
-                    return stub_func
-                
-                stub_tool = Tool(
-                    name=tool_name,
-                    description=config["description"],
-                    func=make_stub_func(tool_name, config["response"])
-                )
-                
-                self.tools.append(stub_tool)
-                self.tool_registry[tool_name] = stub_tool
-                logger.info(f"Added stub tool: {tool_name}")
-    
-    def _get_llm(self, task_type: str = "reasoning", temperature: float = None):
-        """Get appropriate LLM based on task type and preference."""
-        model_configs = {
-            "reasoning": ModelConfig.REASONING_MODELS,
-            "function_calling": ModelConfig.FUNCTION_CALLING_MODELS,
-            "text_generation": ModelConfig.TEXT_GENERATION_MODELS,
-        }
+        # Set reasoning type
+        self.reasoning_type = reasoning_type
         
-        models = model_configs.get(task_type, ModelConfig.REASONING_MODELS)
+        # Initialize tool registries
+        self.tool_registry = ToolRegistry()
+        self.mcp_registry = MCPToolRegistry()
         
-        # Select model based on preference
-        if self.model_preference == "fast":
-            model_name = models.get("fast", models["primary"])
-        elif self.model_preference == "quality":
-            model_name = models.get("primary")
-        else:  # balanced
-            model_name = models.get("fast", models["primary"])
-        
-        # Set temperature if not provided
-        if temperature is None:
-            temperature = 0.1 if task_type == "reasoning" else 0.0
-        
-        max_tokens = 4096 if "70b" in model_name else 2048
-            
-        try:
-            return ChatGroq(
-                temperature=temperature,
-                model_name=model_name,
-                max_tokens=max_tokens,
-                max_retries=1,
-                request_timeout=90
-            )
-        except Exception as e:
-            logger.error(f"Failed to initialize ChatGroq with model {model_name}: {e}")
-            # Fallback to a simpler model
-            fallback_model = "llama-3.1-8b-instant"
-            logger.warning(f"Falling back to {fallback_model}")
-            return ChatGroq(
-                temperature=0.1,
-                model_name=fallback_model,
-                max_tokens=2048,
-                max_retries=1,
-                request_timeout=60
-            )
-    
-    def _build_fsm_graph(self):
-        """Build the FSM graph with strict state transitions."""
-        
-        # --- Node Functions ---
-        
-        def planning_node(state: EnhancedAgentState) -> dict:
-            """Strategic planning node that creates or updates the execution plan."""
-            logger.info(f"--- FSM STATE: PLANNING (Step {state.get('step_count', 0)}) ---")
-            
-            # Layer C: Increment turn count and track action history
-            current_turn = state.get("turn_count", 0)
-            new_turn_count = current_turn + 1
-            
-            # Track action history with hash
-            action_history = state.get("action_history", [])
-            plan_hash = hashlib.sha256("planning_node".encode()).hexdigest()[:8]
-            action_history.append(plan_hash)
-            
-            # Keep only last 10 actions
-            if len(action_history) > 10:
-                action_history = action_history[-10:]
-            
-            logger.debug(f"Turn count: {new_turn_count}, Action history length: {len(action_history)}")
-            
+        # Register tools with documentation
+        for tool in tools:
             try:
-                # Check if this is a complex query that should be delegated to crew
-                if self.use_crew and state.get("step_count", 0) == 0:
-                    # Analyze complexity - delegate if query involves multiple steps or research
-                    complexity_indicators = [
-                        "analyze", "compare", "research", "find and explain",
-                        "multiple", "various", "comprehensive", "detailed"
-                    ]
-                    query_lower = state["query"].lower()
-                    
-                    is_complex = any(indicator in query_lower for indicator in complexity_indicators)
-                    
-                    if is_complex:
-                        logger.info("Complex query detected - delegating to CrewAI workflow")
-                        try:
-                            from src.crew_workflow import run_crew_workflow
-                            crew_result = run_crew_workflow(state["query"], self.tool_registry)
-                            
-                            # Convert crew results to FSM format
-                            crew_steps = crew_result.get("intermediate_steps", {})
-                            tool_calls = []
-                            
-                            for step_id, step_data in crew_steps.items():
-                                if isinstance(step_data, dict):
-                                    tool_calls.append({
-                                        "tool_name": "crew_agent",
-                                        "tool_input": {"task": step_id},
-                                        "output": step_data,
-                                        "step": len(tool_calls) + 1,
-                                        "timestamp": datetime.now().isoformat()
-                                    })
-                            
-                            return {
-                                "final_answer": crew_result.get("output", ""),
-                                "tool_calls": tool_calls,
-                                "current_fsm_state": FSMState.VERIFYING,  # Still verify crew results
-                                "stagnation_counter": 0,
-                                "confidence": 0.85,  # Crew results have good baseline confidence
-                                "turn_count": new_turn_count,
-                                "action_history": action_history
-                            }
-                        except ImportError:
-                            logger.warning("CrewAI not available, falling back to standard planning")
-                        except Exception as e:
-                            logger.error(f"Crew workflow failed: {e}, falling back to standard planning")
+                tool_doc = ToolDocumentation(
+                    tool_name=tool.name,
+                    description=tool.description,
+                    parameters=tool.args_schema.schema() if hasattr(tool, 'args_schema') else {},
+                    examples=[],
+                    error_handling={}
+                )
+                self.tool_registry.register_tool(tool_doc)
                 
-                # Standard planning flow
-                llm = self._get_llm(task_type="reasoning")
-                
-                # Hydrate prompt with previous results (Directive 2)
-                prompt = self._hydrate_planning_prompt(state)
-                
-                # Make LLM call with rate limiting
-                def make_planning_call():
-                    response = llm.invoke(prompt)
-                    return response
-                
-                rate_limiter.wait_if_needed()
-                response = make_planning_call()
-                
-                # Parse the plan into structured steps
-                plan_text = response.content
-                structured_plan = self._parse_plan_into_steps(plan_text, state)
-                
-                # FIX 1: Validate and correct tool parameters before returning
-                validated_plan = self._validate_and_correct_plan(structured_plan)
-                
-                # Determine next tool to execute
-                next_tool = self._get_next_tool_from_plan(validated_plan, state)
-                
-                return {
-                    "plan": plan_text,
-                    "master_plan": validated_plan,
-                    "current_fsm_state": FSMState.TOOL_EXECUTION if next_tool else FSMState.SYNTHESIZING,
-                    "messages": [response],
-                    "stagnation_counter": 0,  # Reset on successful planning
-                    "turn_count": new_turn_count,
-                    "action_history": action_history
-                }
-                
-            except Exception as e:
-                logger.error(f"Error in planning node: {e}")
-                return {
-                    "current_fsm_state": FSMState.FINAL_FAILURE,
-                    "errors": [str(e)],
-                    "turn_count": new_turn_count,
-                    "action_history": action_history
-                }
-        
-        def tool_execution_node(state: EnhancedAgentState) -> dict:
-            """Execute tools from the plan with enhanced error handling and self-correction."""
-            
-            with correlation_context(state['correlation_id']):
-                logger.info("Entering TOOL_EXECUTION state", 
-                           extra={'completed_steps': len(state.get('step_outputs', {}))})
-                
-                # Parse and validate the plan
-                if not state.get('master_plan'):
-                    parsed_plan = self._parse_plan_into_steps(state['plan'], state)
-                    validated_plan = self._validate_and_correct_plan(parsed_plan)
-                    state['master_plan'] = validated_plan
-                
-                # Get next tool to execute
-                next_step = self._get_next_tool_from_plan(state['master_plan'], state)
-                
-                if not next_step:
-                    logger.info("No more tools to execute")
-                    return {"current_fsm_state": FSMState.SYNTHESIZING}
-                
-                logger.info(f"Executing Step {next_step['step']}: {next_step['tool']}")
-                
-                tool_name = next_step['tool']
-                tool_input = next_step.get('input', {})
-                
-                # --- ENHANCED ERROR HANDLING FROM RESILIENCE PATTERNS ---
-                
-                # Check for self-correction prompt from previous failure
-                if state.get('correction_prompt'):
-                    logger.info("Applying self-correction from previous failure")
-                    # Modify tool input based on correction prompt
-                    tool_input = self._apply_correction_to_input(
-                        tool_name, 
-                        tool_input, 
-                        state.get('correction_prompt', '')
-                    )
-                    state['correction_prompt'] = None  # Clear after use
-                
-                # Translate parameters for compatibility
-                tool_input = self._translate_tool_parameters(tool_name, tool_input)
-                
-                # Check if tool exists
-                if tool_name not in self.tool_registry:
-                    logger.warning(f"Tool '{tool_name}' not found - using stub")
-                    tool_output = f"Tool '{tool_name}' is not available. Simulated output."
-                    execution_result = ToolExecutionResult(
-                        success=True,
-                        output=tool_output,
-                        error=None,
-                        error_category=None
-                    )
-                else:
-                    # Execute the tool with comprehensive error handling
-                    execution_result = self._execute_tool_with_resilience(
-                        tool_name, 
-                        tool_input, 
-                        state
-                    )
-                
-                # Record the execution result
-                state['tool_errors'].append(execution_result)
-                
-                # Handle execution results
-                if execution_result.success:
-                    # Success - record output and mark step as completed
-                    logger.info(f"Tool {tool_name} executed successfully")
-                    
-                    # Update state
-                    state['step_outputs'][next_step['step']] = execution_result.output
-                    state['tool_calls'].append({
-                        'tool_name': tool_name,
-                        'tool_input': tool_input,
-                        'output': execution_result.output,
-                        'step': next_step['step']
-                    })
-                    
-                    # Mark step as completed
-                    next_step['completed'] = True
-                    
-                    # Update tool reliability stats
-                    tool_stats = state['tool_reliability'].get(tool_name, {'successes': 0, 'failures': 0})
-                    tool_stats['successes'] += 1
-                    state['tool_reliability'][tool_name] = tool_stats
-                    
-                    # Clear recovery attempts on success
-                    state['recovery_attempts'] = 0
-                    
-                else:
-                    # Failure - decide on recovery strategy
-                    logger.error(f"Tool {tool_name} failed: {execution_result.error}")
-                    
-                    # Update tool reliability stats
-                    tool_stats = state['tool_reliability'].get(tool_name, {'successes': 0, 'failures': 0})
-                    tool_stats['failures'] += 1
-                    state['tool_reliability'][tool_name] = tool_stats
-                    
-                    # Categorize error and determine strategy
-                    error_category, strategy = categorize_tool_error(execution_result.error)
-                    
-                    if strategy == ToolErrorStrategy.SELF_CORRECTION and state['recovery_attempts'] < 3:
-                        # Attempt self-correction
-                        logger.info("Attempting self-correction for tool error")
-                        correction_prompt = create_self_correction_prompt(
-                            tool_name,
-                            tool_input,
-                            execution_result.error
+                announcement = ToolAnnouncement(
+                    tool_id=f"tool_{tool.name}",
+                    version="1.0.0",
+                    capabilities=[
+                        ToolCapability(
+                            name=tool.name,
+                            description=tool.description,
+                            input_schema=tool.args_schema.schema() if hasattr(tool, 'args_schema') else {},
+                            output_schema={},
+                            examples=[]
                         )
-                        state['correction_prompt'] = correction_prompt
-                        state['recovery_attempts'] += 1
-                        
-                    elif strategy == ToolErrorStrategy.SIMPLE_RETRY and state['recovery_attempts'] < 2:
-                        # Simple retry with backoff
-                        logger.info("Will retry tool execution with backoff")
-                        state['recovery_attempts'] += 1
-                        time.sleep(2 ** state['recovery_attempts'])
-                        
-                    elif strategy == ToolErrorStrategy.MODEL_FALLBACK:
-                        # Try alternative tool
-                        alternative_tool = self._find_alternative_tool(tool_name, state)
-                        if alternative_tool:
-                            logger.info(f"Switching to alternative tool: {alternative_tool}")
-                            next_step['tool'] = alternative_tool
-                            # Reset recovery attempts for new tool
-                            state['recovery_attempts'] = 0
-                        else:
-                            # No alternative - mark as failed
-                            logger.error(f"No alternative for failed tool {tool_name}")
-                            next_step['completed'] = True
-                            next_step['failed'] = True
-                            state['step_outputs'][next_step['step']] = f"Failed: {execution_result.error}"
-                    else:
-                        # Max retries exceeded or unknown strategy
-                        logger.error(f"Tool {tool_name} failed after max retries")
-                        next_step['completed'] = True
-                        next_step['failed'] = True
-                        state['step_outputs'][next_step['step']] = f"Failed after retries: {execution_result.error}"
+                    ],
+                    authentication={},
+                    rate_limits={"requests_per_minute": 60}
+                )
+                self.mcp_registry.register_tool(announcement)
+            except Exception as e:
+                logger.warning(f"Failed to register tool {tool.name}: {str(e)}")
+                continue
+
+    def run(self, input_text: str) -> Dict[str, Any]:
+        """Run the agent with enhanced error handling, reasoning, and data quality."""
+        # Initialize state
+        state = AgentState(
+            input=input_text,
+            tools=self.tools,
+            tool_names=self.tool_names,
+            tool_results=[],
+            current_step=0
+        )
+        
+        # Validate input
+        state.validation_result = self.quality_validator.validate_input(input_text)
+        if not state.validation_result.is_valid:
+            return {
+                "status": "error",
+                "error": "Invalid input",
+                "issues": state.validation_result.issues,
+                "suggestions": state.validation_result.suggestions
+            }
+        
+        # Generate reasoning plan
+        state.reasoning_path = self.reasoning.generate_plan(
+            input_text,
+            self.reasoning_type
+        )
+        
+        # Execute reasoning steps
+        while state.current_step < state.max_steps:
+            try:
+                # Get current step
+                current_step = state.reasoning_path.steps[state.current_step]
                 
-                # Check if we should continue or need error recovery
-                failed_steps = sum(1 for step in state['master_plan'] if step.get('failed', False))
-                
-                if failed_steps > len(state['master_plan']) // 2:
-                    # Too many failures - transition to error state
-                    logger.error("Too many tool failures - transitioning to error state")
-                    return {
-                        "current_fsm_state": FSMState.ERROR,
-                        "errors": ["Multiple tool execution failures"]
-                    }
-                
-                # Update state for next iteration
-                state['step_count'] += 1
-                state['messages'].append(
-                    AIMessage(content=f"Executed {tool_name}: {str(execution_result.output)[:200]}...")
+                # Execute tool
+                tool_result = self._execute_tool_with_retry(
+                    current_step.tool_name,
+                    current_step.tool_input,
+                    state
                 )
                 
-                return {"current_fsm_state": FSMState.TOOL_EXECUTION}
-        
-        def synthesizing_node(state: EnhancedAgentState) -> dict:
-            """Synthesize final answer with structured output (Directive 3)."""
-            logger.info(f"--- FSM STATE: SYNTHESIZING ---")
-            
-            # FIX 4: Guard-rail - check if we have any successful tool outputs
-            step_outputs = state.get("step_outputs", {})
-            tool_calls = state.get("tool_calls", [])
-            
-            if not step_outputs and not tool_calls:
-                logger.warning("No tool outputs available for synthesis - returning to planning")
-                return {
-                    "current_fsm_state": FSMState.PLANNING,
-                    "stagnation_counter": state.get("stagnation_counter", 0) + 1,
-                    "errors": ["No tool outputs available for synthesis"],
-                    "step_count": state.get("step_count", 0) + 1
-                }
-            
-            try:
-                # Determine answer type from query
-                answer_schema = self._determine_answer_schema(state["query"])
+                # Update state
+                state.tool_results.append(tool_result)
+                state.current_step += 1
                 
-                # Get synthesis LLM with structured output
-                llm = self._get_llm(task_type="text_generation", temperature=0.0)
+                # Verify step
+                if not self.reasoning.verify_step(current_step, tool_result):
+                    state.error_state = ErrorCategory.LOGIC_ERROR
+                    break
                 
-                # Bind structured output schema
-                if answer_schema:
-                    structured_llm = llm.with_structured_output(answer_schema)
-                else:
-                    structured_llm = llm
-                
-                # Create synthesis prompt with all evidence
-                synthesis_prompt = self._create_synthesis_prompt(state)
-                
-                # Generate structured answer
-                rate_limiter.wait_if_needed()
-                
-                if answer_schema:
-                    pydantic_output = structured_llm.invoke(synthesis_prompt)
-                    # Extract the answer field from the Pydantic model
-                    if hasattr(pydantic_output, 'answer'):
-                        final_answer = str(pydantic_output.answer)
-                    elif hasattr(pydantic_output, 'nominator_name'):
-                        final_answer = pydantic_output.nominator_name
-                    else:
-                        final_answer = str(pydantic_output)
-                else:
-                    # Fallback for complex answers
-                    response = structured_llm.invoke(synthesis_prompt)
-                    final_answer = response.content.strip()
-                
-                return {
-                    "final_answer": final_answer,
-                    "current_fsm_state": FSMState.VERIFYING,
-                    "confidence": 0.8  # Initial confidence before verification
-                }
+                # Check for completion
+                if self._is_complete(tool_result):
+                    break
                 
             except Exception as e:
-                logger.error(f"Error in synthesizing node: {e}")
-                return {
-                    "current_fsm_state": FSMState.FINAL_FAILURE,
-                    "errors": [str(e)]
-                }
-        
-        def verifying_node(state: EnhancedAgentState) -> dict:
-            """Verify the final answer for accuracy and formatting."""
-            logger.info(f"--- FSM STATE: VERIFYING ---")
-            
-            # FIX 4: Guard-rail - check if we have a final answer to verify
-            if not state.get("final_answer"):
-                logger.warning("No final answer to verify - returning to planning")
-                return {
-                    "current_fsm_state": FSMState.PLANNING,
-                    "stagnation_counter": state.get("stagnation_counter", 0) + 1,
-                    "errors": ["No final answer to verify"],
-                    "step_count": state.get("step_count", 0) + 1
-                }
-            
-            try:
-                # Get verification LLM
-                llm = self._get_llm(task_type="reasoning")
-                structured_llm = llm.with_structured_output(VerificationResult)
+                # Handle error
+                error_category = self.error_handler.categorize_error(e)
+                state.error_state = error_category
                 
-                # Create verification prompt
-                verification_prompt = self._create_verification_prompt(state)
+                # Get retry strategy
+                retry_strategy = self.error_handler.get_retry_strategy(
+                    error_category,
+                    state.current_step
+                )
                 
-                # Verify the answer
-                rate_limiter.wait_if_needed()
-                verification_result = structured_llm.invoke(verification_prompt)
+                if not retry_strategy.should_retry:
+                    break
                 
-                if verification_result.is_valid and verification_result.confidence >= 0.8:
-                    # Answer is verified
-                    return {
-                        "current_fsm_state": FSMState.FINISHED,
-                        "confidence": verification_result.confidence
-                    }
-                else:
-                    # Need to retry or refine
-                    logger.warning(f"Verification failed: {verification_result.issues}")
-                    
-                    # Check stagnation
-                    stagnation_count = state.get("stagnation_counter", 0) + 1
-                    if stagnation_count >= self.max_stagnation:
-                        return {
-                            "current_fsm_state": FSMState.FINAL_FAILURE,
-                            "errors": ["Max verification attempts reached"]
-                        }
-                    
-                    # Go back to planning with verification feedback
-                    return {
-                        "current_fsm_state": FSMState.PLANNING,
-                        "stagnation_counter": stagnation_count,
-                        "errors": verification_result.issues
-                    }
-                    
-            except Exception as e:
-                logger.error(f"Error in verifying node: {e}")
-                return {
-                    "current_fsm_state": FSMState.FINISHED  # Accept answer as-is
-                }
+                # Wait for backoff
+                time.sleep(retry_strategy.backoff_factor)
         
-        def error_node(state: EnhancedAgentState) -> dict:
-            """
-            Enhanced error handler with categorization and recovery patterns (Layer D).
-            Categorizes errors and attempts appropriate recovery strategies.
-            """
-            logger.error(f"--- FSM STATE: ERROR ---")
-            errors = state.get("errors", ["Unknown error"])
-            error_log = state.get("error_log", [])
-            error_counts = state.get("error_counts", {})
-            
-            # Categorize the latest error
-            latest_error = errors[-1] if errors else "Unknown error"
-            error_category = self._categorize_error(latest_error)
-            
-            # Update error tracking
-            error_counts[error_category] = error_counts.get(error_category, 0) + 1
-            error_log.append({
-                "error": latest_error,
-                "category": error_category,
-                "timestamp": datetime.now().isoformat(),
-                "state": state.get("current_fsm_state", "UNKNOWN"),
-                "step_count": state.get("step_count", 0)
-            })
-            
-            # Keep only last 50 errors in log
-            if len(error_log) > 50:
-                error_log = error_log[-50:]
-            
-            logger.error(f"Error category: {error_category}, Occurrences: {error_counts[error_category]}")
-            logger.error(f"Errors: {errors}")
-            
-            # Attempt recovery based on error category
-            if error_category == "RATE_LIMIT" and error_counts[error_category] <= 2:
-                # Wait and retry for rate limit errors
-                logger.info("Rate limit error - waiting before retry")
-                time.sleep(5)  # Wait 5 seconds
-                return {
-                    "current_fsm_state": FSMState.PLANNING,  # Retry from planning
-                    "errors": [],  # Clear errors for retry
-                    "error_log": error_log,
-                    "error_counts": error_counts,
-                    "stagnation_counter": state.get("stagnation_counter", 0) + 1
-                }
-            elif error_category == "TOOL_VALIDATION" and error_counts[error_category] <= 3:
-                # For validation errors, try to replan with better parameters
-                return {
-                    "current_fsm_state": FSMState.PLANNING,
-                    "errors": ["Tool validation failed - replanning with corrected parameters"],
-                    "error_log": error_log,
-                    "error_counts": error_counts,
-                    "stagnation_counter": state.get("stagnation_counter", 0) + 1
-                }
-            elif error_category == "NETWORK" and error_counts[error_category] <= 2:
-                # Network errors - wait and retry
-                logger.info("Network error - waiting before retry")
-                time.sleep(3)
-                return {
-                    "current_fsm_state": state.get("current_fsm_state", FSMState.PLANNING),
-                    "errors": [],
-                    "error_log": error_log,
-                    "error_counts": error_counts
-                }
-            else:
-                # Too many errors or unrecoverable error - graceful degradation
-                final_message = self._create_graceful_error_message(error_category, latest_error, state)
-                
-                return {
-                    "final_answer": final_message,
-                    "current_fsm_state": FSMState.FINISHED,
-                    "error_log": error_log,
-                    "error_counts": error_counts
-                }
-        
-        def _categorize_error(self, error_str: str) -> str:
-            """Categorize error for appropriate handling."""
-            error_lower = str(error_str).lower()
-            
-            if "429" in error_lower or "rate limit" in error_lower:
-                return "RATE_LIMIT"
-            elif "validation" in error_lower or "invalid" in error_lower:
-                return "TOOL_VALIDATION"
-            elif "timeout" in error_lower or "connection" in error_lower:
-                return "NETWORK"
-            elif "authentication" in error_lower or "401" in error_lower:
-                return "AUTH"
-            elif "not found" in error_lower or "404" in error_lower:
-                return "NOT_FOUND"
-            elif "model" in error_lower and "decommissioned" in error_lower:
-                return "MODEL_ERROR"
-            else:
-                return "GENERAL"
-        
-        def _create_graceful_error_message(self, error_category: str, error: str, state: dict) -> str:
-            """Create a helpful error message with partial results if available."""
-            # Check if we have any partial results
-            tool_calls = state.get("tool_calls", [])
-            step_outputs = state.get("step_outputs", {})
-            
-            if tool_calls or step_outputs:
-                # We have some partial results
-                partial_info = "I was able to gather some information before encountering an error:\n\n"
-                
-                for call in tool_calls[-3:]:  # Show last 3 tool results
-                    if isinstance(call.get("output"), str) and len(call["output"]) > 0:
-                        partial_info += f"• {call['tool_name']}: {call['output'][:200]}...\n"
-                
-                partial_info += f"\nUnfortunately, I encountered a {error_category} error and couldn't complete the full analysis."
-                return partial_info
-            else:
-                # No partial results - provide helpful error message
-                error_messages = {
-                    "RATE_LIMIT": "I've hit the API rate limit. Please try again in a few moments.",
-                    "TOOL_VALIDATION": "I had trouble with the parameters for one of my tools. Please try rephrasing your question.",
-                    "NETWORK": "I'm having network connectivity issues. Please check your connection and try again.",
-                    "AUTH": "There's an authentication issue with one of my services. Please contact support.",
-                    "NOT_FOUND": "I couldn't find the resource you're looking for. Please verify the information and try again.",
-                    "MODEL_ERROR": "There's a configuration issue with the AI model. Please try again later.",
-                    "GENERAL": f"I encountered an error: {error}"
-                }
-                
-                return error_messages.get(error_category, f"I encountered an error: {error}")
-        
-        # --- FSM Router with Advanced Loop Detection (Layer C) ---
-        def fsm_router(state: EnhancedAgentState) -> str:
-            """
-            Advanced FSM routing function with stagnation detection and deterministic FSM control.
-            This is the brain of the FSM - it decides state transitions based on current state.
-            """
-            with correlation_context(state['correlation_id']):
-                current_state = state.get('current_fsm_state', FSMState.PLANNING)
-                logger.info(f"FSM Router evaluating state: {current_state}")
-                
-                # --- ENHANCED LOOP PREVENTION CHECK ---
-                # Check force termination flag
-                if state.get('force_termination', False):
-                    logger.warning("Force termination flag detected - ending execution")
-                    return END
-                
-                # Decrement loop counter and check
-                loop_state = decrement_loop_counter(state)
-                if loop_state.get('force_termination', False):
-                    logger.error("Loop limit reached - forcing termination")
-                    state['force_termination'] = True
-                    state['final_answer'] = "I apologize, but I've reached my processing limit while trying to answer your question. Please try rephrasing your query or breaking it into smaller parts."
-                    return END
-                
-                # Check for stagnation
-                if check_for_stagnation(state):
-                    logger.warning("Stagnation detected - attempting recovery")
-                    state['stagnation_counter'] = state.get('stagnation_counter', 0) + 1
-                    
-                    # If stagnating too long, terminate
-                    if state['stagnation_counter'] > 3:
-                        state['final_answer'] = "I'm having difficulty making progress on your question. The information might be too complex or ambiguous. Could you please provide more specific details?"
-                        return END
-                
-                # --- EXISTING FSM LOGIC WITH ENHANCEMENTS ---
-                # First, handle error states with recovery
-                if current_state == FSMState.ERROR:
-                    logger.error("In ERROR state - checking recovery options")
-                    
-                    # Use adaptive error handler
-                    recovery_state = create_adaptive_error_handler()(state)
-                    
-                    if recovery_state.get('should_terminate', False):
-                        logger.error("Error recovery failed - terminating")
-                        state['final_answer'] = recovery_state.get('final_error', 'An error occurred')
-                        return END
-                    
-                    # Try recovery strategy
-                    if recovery_state.get('recovery_strategy') == 'retry_with_backoff':
-                        time.sleep(recovery_state.get('wait_seconds', 1))
-                        return "planning_node"
-                    elif recovery_state.get('recovery_strategy') == 'self_correction':
-                        state['correction_prompt'] = recovery_state.get('correction_prompt', '')
-                        return "planning_node"
-                    else:
-                        return END
-                
-                # Check for tool execution failures that need recovery
-                if state.get('tool_errors', []):
-                    latest_error = state['tool_errors'][-1]
-                    if not latest_error.success:
-                        logger.warning(f"Tool error detected: {latest_error.error_category}")
-                        
-                        # Attempt self-correction for validation errors
-                        if latest_error.error_category == "validation_error":
-                            state['recovery_attempts'] = state.get('recovery_attempts', 0) + 1
-                            if state['recovery_attempts'] < 3:
-                                return "tool_execution_node"  # Retry with correction
-                            else:
-                                return "error_node"  # Escalate to error handling
-                
-                # Existing state transition logic
-                if current_state == FSMState.PLANNING:
-                    if state.get('master_plan'):
-                        return "tool_execution_node"
-                    else:
-                        logger.warning("No plan generated in PLANNING state")
-                        return "error_node"
-                        
-                elif current_state == FSMState.TOOL_EXECUTION:
-                    tools_remaining = self._count_remaining_tools(state['master_plan'], state)
-                    
-                    if tools_remaining == 0:
-                        logger.info("All tools executed - moving to synthesis")
-                        return "synthesizing_node"
-                    else:
-                        logger.info(f"{tools_remaining} tools remaining")
-                        return "tool_execution_node"
-                        
-                elif current_state == FSMState.SYNTHESIZING:
-                    # Add reflection check if enabled
-                    if state.get('enable_reflection', True) and not state.get('reflection_passed', True):
-                        logger.info("Synthesis complete but reflection required")
-                        state['draft_answer'] = state.get('final_answer', '')
-                        return "verifying_node"
-                    else:
-                        return "verifying_node"
-                        
-                elif current_state == FSMState.VERIFYING:
-                    if state.get('verification_passed', True):
-                        return END
-                    else:
-                        # If verification fails, might need to re-plan
-                        state['retry_count'] = state.get('retry_count', 0) + 1
-                        if state['retry_count'] < state.get('max_retries', 2):
-                            logger.info("Verification failed - replanning")
-                            return "planning_node"
-                        else:
-                            logger.warning("Max retries reached - finishing with current answer")
-                            return END
-                            
-                elif current_state == FSMState.FINISHED:
-                    return END
-                    
-                else:
-                    logger.error(f"Unknown state: {current_state}")
-                    return "error_node"
-        
-        # --- Build the Graph ---
-        workflow = StateGraph(EnhancedAgentState)
-        
-        # Add nodes
-        workflow.add_node("planning_node", planning_node)
-        workflow.add_node("tool_execution_node", tool_execution_node)
-        workflow.add_node("synthesizing_node", synthesizing_node)
-        workflow.add_node("verifying_node", verifying_node)
-        workflow.add_node("error_node", error_node)
-        
-        # Set entry point
-        workflow.set_entry_point("planning_node")
-        
-        # Add conditional edges from each node to the router
-        for node_name in ["planning_node", "tool_execution_node", 
-                         "synthesizing_node", "verifying_node", "error_node"]:
-            workflow.add_conditional_edges(
-                node_name,
-                fsm_router,
-                {
-                    "planning_node": "planning_node",
-                    "tool_execution_node": "tool_execution_node",
-                    "synthesizing_node": "synthesizing_node",
-                    "verifying_node": "verifying_node",
-                    "error_node": "error_node",
-                    END: END
-                }
-            )
-        
-        # Compile the graph
-        return workflow.compile()
+        # Return final result
+        return self._format_result(state)
     
-    # --- Helper Methods ---
+    def _execute_tool_with_retry(
+        self,
+        tool_name: str,
+        tool_input: Dict[str, Any],
+        state: AgentState
+    ) -> Dict[str, Any]:
+        """Execute a tool with retry logic."""
+        # Find tool
+        tool = next((t for t in self.tools if t.name == tool_name), None)
+        if not tool:
+            raise ValueError(f"Tool {tool_name} not found")
+        
+        # Execute with retry
+        result = self.error_handler.execute_with_retry(
+            tool.run,
+            tool_input,
+            max_retries=3,
+            backoff_factor=1.0
+        )
+        
+        return result
     
-    def _hydrate_planning_prompt(self, state: EnhancedAgentState) -> str:
-        """Create planning prompt with context from previous steps (Directive 2)."""
-        base_prompt = f"""You are a strategic planning engine. Create a step-by-step plan to answer this query:
-
-Query: {state['query']}
-
-"""
+    def _is_complete(self, tool_result: Dict[str, Any]) -> bool:
+        """Check if the current step is complete."""
+        # Check for final answer
+        if "final_answer" in tool_result:
+            return True
         
-        # Add previous results if available
-        step_outputs = state.get('step_outputs', {})
-        if step_outputs:
-            base_prompt += "Previous Step Results:\n"
-            for step_num, output in sorted(step_outputs.items()):
-                base_prompt += f"Step {step_num}: {output[:200]}...\n"
-            base_prompt += "\n"
+        # Check for error
+        if "error" in tool_result:
+            return True
         
-        # Add any errors from verification
-        errors = state.get('errors', [])
-        if errors:
-            base_prompt += f"Previous attempt had issues: {', '.join(errors)}\n\n"
-        
-        base_prompt += "Create a detailed plan with specific tool calls. Each tool has SPECIFIC parameter names.\n\nAvailable tools and their EXACT parameter requirements:\n- web_researcher: {\"query\": \"search query\", \"source\": \"wikipedia\" or \"search\"}\n- semantic_search_tool: {\"query\": \"search query\", \"filename\": \"knowledge_base.csv\", \"top_k\": 3}\n- python_interpreter: {\"code\": \"python code to execute\"}\n- tavily_search: {\"query\": \"search query\", \"max_results\": 3}\n- file_reader: {\"filename\": \"path/to/file.txt\", \"lines\": -1}\n- advanced_file_reader: {\"filename\": \"path/to/file\"}\n- image_analyzer: {\"filename\": \"path/to/image.jpg\", \"task\": \"describe\"}\n- image_analyzer_enhanced: {\"filename\": \"path/to/image.jpg\", \"task\": \"describe\" or \"chess\"}\n- video_analyzer: {\"url\": \"video_url\", \"action\": \"download_info\" or \"transcribe\"}\n- gaia_video_analyzer: {\"video_url\": \"googleusercontent_url\"}\n- audio_transcriber: {\"filename\": \"path/to/audio.mp3\"}\n- chess_logic_tool: {\"fen_string\": \"chess_position_in_FEN\", \"analysis_time_seconds\": 2.0}\n\nFormat your plan EXACTLY like this:\nStep 1: [Description] - Tool: tool_name with parameters: {\"param1\": \"value1\", \"param2\": value2}\nStep 2: [Description] - Tool: tool_name with parameters: {\"param\": \"value based on Step 1\"}\n\nCRITICAL: Use the EXACT parameter names shown above. Do NOT use generic \"query\" for tools that require specific parameters."
-        
-        return base_prompt
+        return False
     
-    def _validate_and_correct_plan(self, plan: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """FIX 1: Validate tool parameters and correct common mistakes."""
-        validated_plan = []
-        
-        for step in plan:
-            if not step.get("tool"):
-                validated_plan.append(step)
-                continue
-                
-            tool_name = step["tool"]
-            tool_input = step.get("input", {})
-            
-            # Skip if tool not in registry
-            if tool_name not in self.tool_registry:
-                logger.warning(f"Tool {tool_name} not found in registry, will use stub")
-                validated_plan.append(step)
-                continue
-            
-            tool = self.tool_registry[tool_name]
-            
-            # Try to get the tool's input schema
-            try:
-                if hasattr(tool, 'args_schema'):
-                    # Validate against Pydantic schema
-                    try:
-                        validated_input = tool.args_schema.model_validate(tool_input)
-                        step["input"] = validated_input.model_dump()
-                    except ValidationError as e:
-                        logger.warning(f"Validation error for {tool_name}: {e}")
-                        # Try to fix common issues
-                        corrected_input = self._correct_tool_input(tool_name, tool_input, e)
-                        if corrected_input:
-                            step["input"] = corrected_input
-                        else:
-                            # Mark step as invalid
-                            step["error"] = f"Invalid parameters: {str(e)}"
-                else:
-                    # No schema available, apply heuristic corrections
-                    step["input"] = self._correct_tool_input_heuristic(tool_name, tool_input)
-            except Exception as e:
-                logger.error(f"Error validating tool {tool_name}: {e}")
-                # Use input as-is
-            
-            validated_plan.append(step)
-        
-        return validated_plan
-    
-    def _correct_tool_input(self, tool_name: str, tool_input: Dict[str, Any], validation_error: ValidationError) -> Optional[Dict[str, Any]]:
-        """Try to correct tool input based on validation errors."""
-        corrected = tool_input.copy()
-        
-        # Extract missing fields from validation error
-        for error in validation_error.errors():
-            if error["type"] == "missing":
-                field_name = error["loc"][0]
-                
-                # Common corrections for missing fields
-                if field_name == "filename" and "query" in tool_input:
-                    # User provided 'query' instead of 'filename'
-                    corrected["filename"] = tool_input["query"]
-                    del corrected["query"]
-                elif field_name == "code" and "query" in tool_input:
-                    # User provided 'query' instead of 'code'
-                    corrected["code"] = tool_input["query"]
-                    del corrected["query"]
-                elif field_name == "video_url" and "url" in tool_input:
-                    # User provided 'url' instead of 'video_url'
-                    corrected["video_url"] = tool_input["url"]
-                    del corrected["url"]
-                elif field_name == "fen_string" and "query" in tool_input:
-                    # User provided 'query' instead of 'fen_string'
-                    corrected["fen_string"] = tool_input["query"]
-                    del corrected["query"]
-        
-        # Try validation again with corrected input
-        try:
-            tool = self.tool_registry[tool_name]
-            if hasattr(tool, 'args_schema'):
-                validated = tool.args_schema.model_validate(corrected)
-                return validated.model_dump()
-        except:
-            pass
-        
-        return None
-    
-    def _correct_tool_input_heuristic(self, tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
-        """Apply heuristic corrections when no schema is available."""
-        # Define expected parameters for each tool
-        tool_params = {
-            "file_reader": ["filename", "lines"],
-            "advanced_file_reader": ["filename"],
-            "audio_transcriber": ["filename"],
-            "image_analyzer": ["filename", "task"],
-            "image_analyzer_enhanced": ["filename", "task"],
-            "video_analyzer": ["url", "action"],
-            "gaia_video_analyzer": ["video_url"],
-            "chess_logic_tool": ["fen_string", "analysis_time_seconds"],
-            "python_interpreter": ["code"],
-            "web_researcher": ["query", "source", "date_range", "search_type"],
-            "semantic_search_tool": ["query", "filename", "top_k"],
-            "tavily_search": ["query", "max_results"]
-        }
-        
-        expected_params = tool_params.get(tool_name, ["query"])
-        corrected = {}
-        
-        # Map common mismatches
-        if "query" in tool_input and "query" not in expected_params:
-            # Figure out where to map 'query'
-            if "filename" in expected_params:
-                corrected["filename"] = tool_input["query"]
-            elif "code" in expected_params:
-                corrected["code"] = tool_input["query"]
-            elif "fen_string" in expected_params:
-                corrected["fen_string"] = tool_input["query"]
-            elif "url" in expected_params:
-                corrected["url"] = tool_input["query"]
-            elif "video_url" in expected_params:
-                corrected["video_url"] = tool_input["query"]
-        else:
-            # Keep query if it's expected
-            if "query" in tool_input and "query" in expected_params:
-                corrected["query"] = tool_input["query"]
-        
-        # Copy over other valid parameters
-        for param in expected_params:
-            if param in tool_input and param not in corrected:
-                corrected[param] = tool_input[param]
-        
-        # Add default values for missing required params
-        if tool_name == "file_reader" and "lines" not in corrected:
-            corrected["lines"] = -1
-        elif tool_name == "semantic_search_tool":
-            if "filename" not in corrected:
-                corrected["filename"] = "knowledge_base.csv"
-            if "top_k" not in corrected:
-                corrected["top_k"] = 3
-        elif tool_name == "tavily_search" and "max_results" not in corrected:
-            corrected["max_results"] = 3
-        elif tool_name == "chess_logic_tool" and "analysis_time_seconds" not in corrected:
-            corrected["analysis_time_seconds"] = 2.0
-        elif tool_name in ["image_analyzer", "image_analyzer_enhanced"] and "task" not in corrected:
-            corrected["task"] = "describe"
-        elif tool_name == "video_analyzer" and "action" not in corrected:
-            corrected["action"] = "download_info"
-        
-        return corrected
-    
-    def _translate_tool_parameters(self, tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
-        """FIX 2: Translate common parameter mismatches at execution time."""
-        # This provides a second layer of defense in case planning validation missed something
-        
-        # Quick translations based on tool name
-        translations = {
-            "file_reader": {"query": "filename"},
-            "advanced_file_reader": {"query": "filename"},
-            "audio_transcriber": {"query": "filename"},
-            "image_analyzer": {"query": "filename"},
-            "image_analyzer_enhanced": {"query": "filename"},
-            "python_interpreter": {"query": "code"},
-            "video_analyzer": {"query": "url"},
-            "gaia_video_analyzer": {"query": "video_url", "url": "video_url"},
-            "chess_logic_tool": {"query": "fen_string"}
-        }
-        
-        if tool_name not in translations:
-            return tool_input
-        
-        translated = tool_input.copy()
-        
-        for old_key, new_key in translations[tool_name].items():
-            if old_key in translated and new_key not in translated:
-                translated[new_key] = translated[old_key]
-                del translated[old_key]
-                logger.info(f"Translated parameter '{old_key}' to '{new_key}' for tool {tool_name}")
-        
-        return translated
-    
-    def _parse_plan_into_steps(self, plan_text: str, state: EnhancedAgentState) -> List[Dict[str, Any]]:
-        """Parse LLM plan into structured steps."""
-        steps = []
-        # Updated pattern to capture tool parameters
-        step_pattern = r"Step (\d+):\s*(.+?)(?:\n|$)"
-        matches = re.findall(step_pattern, plan_text, re.MULTILINE | re.DOTALL)
-        
-        for step_num, step_desc in matches:
-            # Extract tool name
-            tool_match = re.search(r"Tool:\s*(\w+)", step_desc, re.IGNORECASE)
-            tool_name = tool_match.group(1) if tool_match else None
-            
-            # Extract parameters - look for JSON-like structure
-            params_match = re.search(r"parameters:\s*(\{[^}]+\})", step_desc, re.IGNORECASE)
-            
-            if params_match:
-                try:
-                    # Parse the JSON parameters
-                    params_str = params_match.group(1)
-                    # Handle single quotes by replacing them with double quotes
-                    params_str = params_str.replace("'", '"')
-                    tool_params = json.loads(params_str)
-                except json.JSONDecodeError:
-                    # Fallback to extracting parameters manually
-                    logger.warning(f"Failed to parse JSON parameters for step {step_num}, using fallback parser")
-                    tool_params = self._fallback_parse_params(step_desc, tool_name)
-            else:
-                # Try to extract parameters from the description
-                tool_params = self._fallback_parse_params(step_desc, tool_name)
-            
-            # Check if this step has already been completed
-            completed = int(step_num) in state.get("step_outputs", {})
-            
-            steps.append({
-                "step": int(step_num),
-                "description": step_desc,
-                "tool": tool_name,
-                "input": tool_params if tool_name else None,
-                "completed": completed
-            })
-        
-        return steps
-    
-    def _fallback_parse_params(self, step_desc: str, tool_name: str) -> Dict[str, Any]:
-        """Fallback parameter extraction when JSON parsing fails."""
-        # Default parameters for each tool
-        tool_defaults = {
-            "python_interpreter": {"code": ""},
-            "file_reader": {"filename": "", "lines": -1},
-            "advanced_file_reader": {"filename": ""},
-            "image_analyzer": {"filename": "", "task": "describe"},
-            "image_analyzer_enhanced": {"filename": "", "task": "describe"},
-            "video_analyzer": {"url": "", "action": "download_info"},
-            "gaia_video_analyzer": {"video_url": ""},
-            "audio_transcriber": {"filename": ""},
-            "chess_logic_tool": {"fen_string": "", "analysis_time_seconds": 2.0},
-            "web_researcher": {"query": "", "source": "wikipedia"},
-            "semantic_search_tool": {"query": "", "filename": "knowledge_base.csv", "top_k": 3},
-            "tavily_search": {"query": "", "max_results": 3}
-        }
-        
-        # Get default parameters for this tool
-        params = tool_defaults.get(tool_name, {"query": ""})
-        
-        # Try to extract values from the description
-        # Look for quoted strings after "input:" or "parameters:"
-        input_match = re.search(r'(?:input|parameters):\s*["\']?([^"\']+)["\']?', step_desc, re.IGNORECASE)
-        if input_match:
-            input_value = input_match.group(1).strip()
-            
-            # Assign to the appropriate parameter based on tool
-            if tool_name == "python_interpreter":
-                params["code"] = input_value
-            elif tool_name in ["file_reader", "advanced_file_reader", "image_analyzer", "image_analyzer_enhanced", "audio_transcriber"]:
-                params["filename"] = input_value
-            elif tool_name in ["video_analyzer"]:
-                params["url"] = input_value
-            elif tool_name == "gaia_video_analyzer":
-                params["video_url"] = input_value
-            elif tool_name == "chess_logic_tool":
-                params["fen_string"] = input_value
-            else:
-                # For search tools, use "query"
-                params["query"] = input_value
-        
-        return params
-    
-    def _get_next_tool_from_plan(self, plan: List[Dict], state: EnhancedAgentState) -> Optional[Dict]:
-        """Get the next uncompleted tool from the plan."""
-        for step in plan:
-            if not step.get("completed") and step.get("tool"):
-                return step
-        return None
-    
-    def _count_remaining_tools(self, plan: List[Dict], state: EnhancedAgentState) -> int:
-        """Count remaining tools to execute."""
-        return sum(1 for step in plan if not step.get("completed") and step.get("tool"))
-    
-    def _determine_answer_schema(self, query: str) -> Optional[BaseModel]:
-        """Determine the appropriate answer schema based on query type."""
-        query_lower = query.lower()
-        
-        if any(indicator in query_lower for indicator in ["how many", "count", "number of"]):
-            return FinalIntegerAnswer
-        elif any(indicator in query_lower for indicator in ["who", "name", "person"]):
-            return FinalNameAnswer
-        else:
-            return FinalStringAnswer
-    
-    def _create_synthesis_prompt(self, state: EnhancedAgentState) -> str:
-        """Create synthesis prompt with all evidence."""
-        prompt = f"""Based on the following evidence, provide the final answer to the user's query.
-
-Query: {state['query']}
-
-Evidence:
-"""
-        
-        # Add all tool outputs
-        for tool_call in state.get("tool_calls", []):
-            prompt += f"\n{tool_call['tool_name']} output: {tool_call['output'][:500]}..."
-        
-        prompt += """
-
-CRITICAL: Provide ONLY the direct answer requested. Do not include explanations, prefixes like "The answer is", or any formatting. Just the answer itself.
-
-Examples:
-- For "How many?": Just the number (e.g., "7")
-- For "Who?": Just the name (e.g., "John Smith")
-- For "What?": Just the thing itself"""
-        
-        return prompt
-    
-    def _create_verification_prompt(self, state: EnhancedAgentState) -> str:
-        """Create verification prompt."""
-        return f"""Verify the following answer for accuracy and correct formatting.
-
-Query: {state['query']}
-Proposed Answer: {state['final_answer']}
-
-Evidence used:
-{json.dumps(state.get('step_outputs', {}), indent=2)}
-
-Check:
-1. Does the answer directly address the query?
-2. Is it supported by the evidence?
-3. Is it in the correct format (just the answer, no explanations)?
-4. Is it factually accurate based on the evidence?
-
-Provide a verification result."""
-    
-    def _categorize_error(self, error_str: str) -> str:
-        """Categorize error for appropriate handling."""
-        error_lower = str(error_str).lower()
-        
-        if "429" in error_lower or "rate limit" in error_lower:
-            return "RATE_LIMIT"
-        elif "validation" in error_lower or "invalid" in error_lower:
-            return "TOOL_VALIDATION"
-        elif "timeout" in error_lower or "connection" in error_lower:
-            return "NETWORK"
-        elif "authentication" in error_lower or "401" in error_lower:
-            return "AUTH"
-        elif "not found" in error_lower or "404" in error_lower:
-            return "NOT_FOUND"
-        elif "model" in error_lower and "decommissioned" in error_lower:
-            return "MODEL_ERROR"
-        else:
-            return "GENERAL"
-    
-    def _create_graceful_error_message(self, error_category: str, error: str, state: dict) -> str:
-        """Create a helpful error message with partial results if available."""
-        # Check if we have any partial results
-        tool_calls = state.get("tool_calls", [])
-        step_outputs = state.get("step_outputs", {})
-        
-        if tool_calls or step_outputs:
-            # We have some partial results
-            partial_info = "I was able to gather some information before encountering an error:\n\n"
-            
-            for call in tool_calls[-3:]:  # Show last 3 tool results
-                if isinstance(call.get("output"), str) and len(call["output"]) > 0:
-                    partial_info += f"• {call['tool_name']}: {call['output'][:200]}...\n"
-            
-            partial_info += f"\nUnfortunately, I encountered a {error_category} error and couldn't complete the full analysis."
-            return partial_info
-        else:
-            # No partial results - provide helpful error message
-            error_messages = {
-                "RATE_LIMIT": "I've hit the API rate limit. Please try again in a few moments.",
-                "TOOL_VALIDATION": "I had trouble with the parameters for one of my tools. Please try rephrasing your question.",
-                "NETWORK": "I'm having network connectivity issues. Please check your connection and try again.",
-                "AUTH": "There's an authentication issue with one of my services. Please contact support.",
-                "NOT_FOUND": "I couldn't find the resource you're looking for. Please verify the information and try again.",
-                "MODEL_ERROR": "There's a configuration issue with the AI model. Please try again later.",
-                "GENERAL": f"I encountered an error: {error}"
+    def _format_result(self, state: AgentState) -> Dict[str, Any]:
+        """Format the final result."""
+        if state.error_state:
+            return {
+                "status": "error",
+                "error": state.error_state.value,
+                "step": state.current_step,
+                "tool_results": state.tool_results
             }
-            
-            return error_messages.get(error_category, f"I encountered an error: {error}")
-
-    def _find_alternative_tool(self, failed_tool: str, state: EnhancedAgentState) -> Optional[str]:
-        """Find an alternative tool based on the failed tool and query context."""
-        # Define tool alternatives mapping
-        tool_alternatives = {
-            "web_researcher": ["tavily_search", "semantic_search_tool"],
-            "tavily_search": ["web_researcher", "semantic_search_tool"],
-            "gaia_video_analyzer": ["video_analyzer_production", "audio_transcriber"],
-            "video_analyzer_production": ["gaia_video_analyzer", "audio_transcriber"],
-            "chess_logic_tool": ["chess_analyzer_production", "python_interpreter"],
-            "chess_analyzer_production": ["chess_logic_tool", "python_interpreter"],
-            "file_reader": ["advanced_file_reader", "python_interpreter"],
-            "image_analyzer_enhanced": ["image_analyzer", "python_interpreter"],
-            "image_analyzer": ["image_analyzer_enhanced", "python_interpreter"],
-            # Add alternatives for stub tools
-            "video_analyzer": ["gaia_video_analyzer", "video_analyzer_production"],
-            "programming_language_identifier": ["python_interpreter"]
-        }
         
-        # Get alternatives for the failed tool
-        alternatives = tool_alternatives.get(failed_tool, [])
-        
-        # Filter alternatives that exist in the registry
-        available_alternatives = [alt for alt in alternatives if alt in self.tool_registry]
-        
-        if not available_alternatives:
-            return None
-        
-        # Check tool reliability to pick the best alternative
-        tool_reliability = state.get("tool_reliability", {})
-        best_alternative = None
-        best_score = -1
-        
-        for alt in available_alternatives:
-            stats = tool_reliability.get(alt, {"successes": 0, "failures": 0})
-            # Calculate a simple reliability score
-            total_calls = stats["successes"] + stats["failures"]
-            if total_calls == 0:
-                # Untested tool, give it a chance
-                score = 0.5
-            else:
-                score = stats["successes"] / total_calls
-            
-            if score > best_score:
-                best_score = score
-                best_alternative = alt
-        
-        return best_alternative
-    
-    def _apply_correction_to_input(self, tool_name: str, tool_input: dict, correction_prompt: str) -> dict:
-        """Apply correction suggestions to tool input based on error feedback."""
-        # Extract key corrections from the prompt
-        corrected_input = tool_input.copy()
-        
-        # Look for parameter corrections in the prompt
-        if "parameter names" in correction_prompt.lower():
-            # Apply parameter name corrections
-            corrected_input = self._correct_tool_input_heuristic(tool_name, tool_input)
-        
-        if "required parameters" in correction_prompt.lower():
-            # Add missing required parameters with defaults
-            tool_defaults = {
-                "file_reader": {"lines": -1},
-                "semantic_search_tool": {"filename": "knowledge_base.csv", "top_k": 3},
-                "tavily_search": {"max_results": 3},
-                "chess_logic_tool": {"analysis_time_seconds": 2.0}
+        # Get final answer
+        final_result = state.tool_results[-1]
+        if "final_answer" in final_result:
+            return {
+                "status": "success",
+                "answer": final_result["final_answer"],
+                "reasoning_path": state.reasoning_path,
+                "tool_results": state.tool_results
             }
-            
-            if tool_name in tool_defaults:
-                for param, default_value in tool_defaults[tool_name].items():
-                    if param not in corrected_input:
-                        corrected_input[param] = default_value
         
-        return corrected_input
-    
-    def _execute_tool_with_resilience(self, tool_name: str, tool_input: dict, state: dict) -> ToolExecutionResult:
-        """Execute a tool with comprehensive error handling and resilience patterns."""
-        tool = self.tool_registry[tool_name]
-        start_time = time.time()
-        
-        try:
-            # Apply rate limiting if needed
-            if hasattr(self, 'rate_limiter'):
-                self.rate_limiter.wait_if_needed()
-            
-            # Execute the tool
-            logger.info(f"Executing {tool_name} with input: {json.dumps(tool_input, indent=2)}")
-            output = tool.invoke(tool_input)
-            
-            execution_time = time.time() - start_time
-            logger.info(f"Tool {tool_name} completed in {execution_time:.2f}s")
-            
-            return ToolExecutionResult(
-                success=True,
-                output=output,
-                error=None,
-                error_category=None
-            )
-            
-        except ValidationError as e:
-            logger.error(f"Validation error in {tool_name}: {e}")
-            return ToolExecutionResult(
-                success=False,
-                output=None,
-                error=e,
-                error_category="validation_error",
-                retry_suggestions=["Check parameter names", "Verify data types", "Ensure required fields are present"]
-            )
-            
-        except Exception as e:
-            logger.error(f"Error executing {tool_name}: {e}")
-            error_category, _ = categorize_tool_error(e)
-            
-            return ToolExecutionResult(
-                success=False,
-                output=None,
-                error=e,
-                error_category=error_category,
-                retry_suggestions=self._get_retry_suggestions(error_category)
-            )
-    
-    def _get_retry_suggestions(self, error_category: str) -> List[str]:
-        """Get retry suggestions based on error category."""
-        suggestions = {
-            "rate_limit": ["Wait before retrying", "Use exponential backoff", "Consider alternative tool"],
-            "timeout": ["Retry with longer timeout", "Check network connection", "Try smaller request"],
-            "not_found": ["Verify resource exists", "Check spelling", "Try alternative query"],
-            "validation_error": ["Fix parameter names", "Check data types", "Review tool documentation"],
-            "unknown": ["Check tool availability", "Review input format", "Consider alternative approach"]
+        return {
+            "status": "incomplete",
+            "step": state.current_step,
+            "tool_results": state.tool_results
         }
-        return suggestions.get(error_category, ["Retry with modified input"])
-    
-    def run(self, inputs: dict):
-        """Run the FSM agent with comprehensive resilience and correlation tracking."""
-        correlation_id = str(uuid.uuid4())
-        
-        with correlation_context(correlation_id):
-            try:
-                query = inputs.get("input", inputs.get("query", ""))
-                logger.info(f"Starting resilient FSM execution", extra={'query_length': len(query), 'query_preview': query[:100]})
-                
-                # Layer B: Early validation using Pydantic
-                try:
-                    validated_query = ValidatedQuery(query=query)
-                    validated_query_str = validated_query.query
-                except ValidationError as e:
-                    logger.warning(f"FSM agent rejecting invalid input: '{query}' - {e}")
-                    return {
-                        "output": "❌ **Invalid Input**\n\nPlease provide a meaningful question with at least 3 characters including letters or numbers.\n\n**Examples:**\n- What is the weather today?\n- Calculate 2 + 2\n- Explain quantum computing",
-                        "intermediate_steps": [],
-                        "correlation_id": correlation_id,
-                        "confidence": 0.0,
-                        "total_steps": 0,
-                        "execution_time": 0.0
-                    }
-
-                # Create the initial state with comprehensive initialization
-                initial_state = {
-                    # Core fields
-                    "correlation_id": correlation_id,
-                    "query": validated_query_str,
-                    "input_query": validated_query,
-                    "messages": [HumanMessage(content=validated_query_str)],
-                    
-                    # Planning and execution
-                    "plan": "",
-                    "master_plan": [],
-                    "validated_plan": None,
-                    "tool_calls": [],
-                    "step_outputs": {},
-                    "final_answer": "",
-                    
-                    # FSM Control
-                    "current_fsm_state": FSMState.PLANNING,
-                    "stagnation_counter": 0,
-                    "max_stagnation": self.max_stagnation,
-                    "retry_count": 0,
-                    "max_retries": 3,
-                    
-                    # Failure context
-                    "failure_history": [],
-                    "circuit_breaker_status": "closed",
-                    "last_api_error": None,
-                    
-                    # Verification
-                    "verification_level": "thorough",  # Default to thorough
-                    "confidence": 0.0,
-                    "cross_validation_sources": [],
-                    
-                    # Error tracking
-                    "errors": [],
-                    
-                    # Performance
-                    "step_count": 0,
-                    "start_time": time.time(),
-                    "end_time": 0.0,
-                    
-                    # Adaptive tool selection
-                    "tool_reliability": {},
-                    "tool_preferences": {},
-                    
-                    # Loop detection (Layer C)
-                    "turn_count": 0,
-                    "action_history": [],
-                    "stagnation_score": 0,
-                    "error_log": [],
-                    "error_counts": {},
-                    
-                    # --- ENHANCED LOOP PREVENTION FROM RESILIENCE PATTERNS ---
-                    "remaining_loops": inputs.get("remaining_loops", 15),  # Allow override via inputs
-                    "last_state_hash": "",
-                    "force_termination": False,
-                    
-                    # --- TOOL ERROR RECOVERY ---
-                    "tool_errors": [],
-                    "recovery_attempts": 0,
-                    "fallback_level": 0,
-                    
-                    # --- REFLECTION AND QUALITY ASSURANCE ---
-                    "draft_answer": "",
-                    "reflection_passed": True,
-                    "reflection_issues": [],
-                    
-                    # --- HUMAN IN THE LOOP ---
-                    "requires_human_approval": False,
-                    "approval_request": None,
-                    "execution_paused": False
-                }
-                
-                # Log state transition
-                logger.info("FSM STATE: INITIAL", extra={'next_state': FSMState.PLANNING})
-                
-                # Run the graph with resilience
-                result = self.graph.invoke(initial_state)
-                
-                # Extract final answer with fallback
-                final_answer = result.get("final_answer", "Unable to determine answer")
-                confidence = result.get("confidence", 0.0)
-                total_steps = result.get("step_count", 0)
-                
-                # Log successful completion
-                execution_time = time.time() - initial_state["start_time"]
-                logger.info("FSM execution completed successfully", 
-                           extra={
-                               'final_answer_length': len(final_answer),
-                               'confidence': confidence,
-                               'total_steps': total_steps,
-                               'execution_time': execution_time
-                           })
-                
-                return {
-                    "output": final_answer,
-                    "intermediate_steps": result.get("tool_calls", []),
-                    "confidence": confidence,
-                    "total_steps": total_steps,
-                    "correlation_id": correlation_id,
-                    "execution_time": execution_time
-                }
-                
-            except Exception as e:
-                logger.error("FSM agent execution failed", extra={'error': str(e)}, exc_info=True)
-                
-                # Return graceful error response
-                return {
-                    "output": f"I encountered an error while processing your request. Please try again or rephrase your question.",
-                    "intermediate_steps": [],
-                    "error": str(e),
-                    "correlation_id": correlation_id,
-                    "confidence": 0.0,
-                    "total_steps": 0
-                }
-    
-    def stream(self, inputs: dict):
-        """Stream the FSM agent execution."""
-        # For now, just run normally
-        # Streaming can be implemented later if needed
-        yield self.run(inputs)
 
 def validate_user_prompt(prompt: str) -> bool:
     stripped = prompt.strip()
     return len(stripped) >= 3 and any(c.isalnum() for c in stripped) 
+
+# --- RETRIEVAL-AUGMENTED TOOL USE (RA-TU) IMPLEMENTATION ---
+class ToolDocumentation(BaseModel):
+    """Schema for tool documentation used in RA-TU"""
+    tool_name: str = Field(description="Name of the tool")
+    description: str = Field(description="Natural language description of the tool's purpose")
+    parameters: Dict[str, Any] = Field(description="Parameter specifications")
+    examples: List[Dict[str, Any]] = Field(description="Example usage patterns")
+    error_handling: Dict[str, str] = Field(description="Common error scenarios and resolutions")
+
+class ToolRegistry:
+    """Central registry for tool documentation and discovery"""
+    def __init__(self):
+        self.tool_docs: Dict[str, ToolDocumentation] = {}
+        self.tool_embeddings: Dict[str, List[float]] = {}
+        
+    def register_tool(self, tool_doc: ToolDocumentation):
+        """Register a tool with its documentation"""
+        self.tool_docs[tool_doc.tool_name] = tool_doc
+        # TODO: Generate and store embeddings for semantic search
+        
+    def get_tool_doc(self, tool_name: str) -> Optional[ToolDocumentation]:
+        """Retrieve tool documentation by name"""
+        return self.tool_docs.get(tool_name)
+        
+    def find_relevant_tools(self, task_description: str, top_k: int = 3) -> List[ToolDocumentation]:
+        """Find relevant tools for a given task using semantic search"""
+        # TODO: Implement semantic search using embeddings
+        return list(self.tool_docs.values())[:top_k]
+
+# --- MODEL CONTEXT PROTOCOL (MCP) IMPLEMENTATION ---
+class ToolCapability(BaseModel):
+    """MCP-compliant tool capability specification"""
+    name: str = Field(description="Name of the capability")
+    description: str = Field(description="Natural language description")
+    input_schema: Dict[str, Any] = Field(description="JSON Schema for inputs")
+    output_schema: Dict[str, Any] = Field(description="JSON Schema for outputs")
+    examples: List[Dict[str, Any]] = Field(description="Example inputs and outputs")
+
+class ToolAnnouncement(BaseModel):
+    """MCP-compliant tool announcement"""
+    tool_id: str = Field(description="Unique identifier for the tool")
+    version: str = Field(description="Tool version")
+    capabilities: List[ToolCapability] = Field(description="List of tool capabilities")
+    authentication: Dict[str, Any] = Field(description="Authentication requirements")
+    rate_limits: Dict[str, Any] = Field(description="Rate limiting specifications")
+
+class MCPToolRegistry:
+    """Registry for MCP-compliant tools"""
+    def __init__(self):
+        self.tools: Dict[str, ToolAnnouncement] = {}
+        
+    def register_tool(self, announcement: ToolAnnouncement):
+        """Register an MCP-compliant tool"""
+        self.tools[announcement.tool_id] = announcement
+        
+    def discover_tools(self, capability_filter: Optional[str] = None) -> List[ToolAnnouncement]:
+        """Discover tools matching capability requirements"""
+        if capability_filter:
+            return [
+                tool for tool in self.tools.values()
+                if any(cap.name == capability_filter for cap in tool.capabilities)
+            ]
+        return list(self.tools.values())

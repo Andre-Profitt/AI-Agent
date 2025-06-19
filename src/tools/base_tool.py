@@ -2,7 +2,7 @@ import os
 import logging
 import time
 import random
-from typing import Any
+from typing import Any, Dict, List, Optional
 import io
 from contextlib import redirect_stdout
 import pandas as pd
@@ -27,6 +27,10 @@ except ImportError:
 
 from langchain_core.tools import tool, StructuredTool
 from pydantic import BaseModel, Field
+from langchain.tools import BaseTool
+from langchain.tools import Tool
+import requests
+import re
 
 # PythonREPLTool is optional; fall back to a simple echo tool if absent
 try:
@@ -499,7 +503,7 @@ tavily_search = StructuredTool.from_function(
 
 # --- Tool Definitions ---
 
-def get_tools() -> list:
+def get_tools() -> List[BaseTool]:
     """
     Initializes and returns a list of all tools available to the agent.
     """
@@ -588,4 +592,73 @@ class SemanticSearchEngine:
     def __init__(self, *args, **kwargs):
         pass
     def search(self, *args, **kwargs):
-        return [] 
+        return []
+
+class WebSearchTool(BaseTool):
+    """Tool for searching the web."""
+    
+    name: str = "web_search"
+    description: str = "Search the web for information"
+    
+    def _run(self, query: str) -> str:
+        """Run the tool."""
+        try:
+            # TODO: Implement actual web search
+            return f"Web search results for: {query}"
+        except Exception as e:
+            logger.error(f"Error in web search: {str(e)}")
+            return f"Error searching web: {str(e)}"
+
+class CalculatorTool(BaseTool):
+    """Tool for performing calculations."""
+    
+    name: str = "calculator"
+    description: str = "Perform mathematical calculations"
+    
+    def _run(self, expression: str) -> str:
+        """Run the tool."""
+        try:
+            # TODO: Implement actual calculation
+            return f"Calculation result for: {expression}"
+        except Exception as e:
+            logger.error(f"Error in calculation: {str(e)}")
+            return f"Error calculating: {str(e)}"
+
+class CodeAnalysisTool(BaseTool):
+    """Tool for analyzing code."""
+    
+    name: str = "code_analysis"
+    description: str = "Analyze code for issues and improvements"
+    
+    def _run(self, code: str) -> str:
+        """Run the tool."""
+        try:
+            # TODO: Implement actual code analysis
+            return f"Code analysis results for: {code}"
+        except Exception as e:
+            logger.error(f"Error in code analysis: {str(e)}")
+            return f"Error analyzing code: {str(e)}"
+
+class DataValidationTool(BaseTool):
+    """Tool for validating data."""
+    
+    name: str = "data_validation"
+    description: str = "Validate data for quality and consistency"
+    
+    def _run(self, data: str) -> str:
+        """Run the tool."""
+        try:
+            # TODO: Implement actual data validation
+            return f"Data validation results for: {data}"
+        except Exception as e:
+            logger.error(f"Error in data validation: {str(e)}")
+            return f"Error validating data: {str(e)}"
+
+def get_tools() -> List[BaseTool]:
+    """Get all available tools."""
+    return [
+        WebSearchTool(),
+        CalculatorTool(),
+        CodeAnalysisTool(),
+        DataValidationTool()
+    ] 

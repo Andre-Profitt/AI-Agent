@@ -17,10 +17,11 @@ import logging
 import time
 import json
 import hashlib
-from typing import Annotated, List, TypedDict, Dict, Any, Optional, Literal, Union
+from typing import Annotated, List, TypedDict, Dict, Any, Optional, Literal, Union, Callable
 from dataclasses import dataclass
 from enum import Enum
 from contextlib import contextmanager
+from datetime import datetime
 
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_core.tools import StructuredTool
@@ -28,111 +29,95 @@ from langchain_groq import ChatGroq
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field, ValidationError, field_validator
+from src.error_handling import ToolExecutionResult
 
 logger = logging.getLogger(__name__)
 
 # --- SECTION 1: GraphRecursionError Prevention ---
 
-class LoopPreventionState(TypedDict):
-    """State keys for preventing infinite loops"""
-    remaining_loops: int  # State-based counter for guaranteed termination
-    stagnation_counter: int  # Tracks lack of progress
-    action_history: List[str]  # Hashes of recent actions for cycle detection
-    last_state_hash: str  # Hash of previous state to detect stagnation
+class ErrorCategory(str, Enum):
+    """Categories of errors for targeted recovery strategies"""
+    TRANSIENT = "transient"           # Temporary failures (network, rate limits)
+    PERMANENT = "permanent"           # Permanent failures (invalid input, auth)
+    LOGIC = "logic"                   # Logic errors (invalid state, bad plan)
+    RESOURCE = "resource"             # Resource issues (memory, CPU)
+    UNKNOWN = "unknown"               # Unclassified errors
 
-def calculate_state_hash(state: dict) -> str:
-    """Calculate a hash of the current state for stagnation detection"""
-    # Only hash relevant fields that indicate progress
-    relevant_fields = {
-        'tool_calls': state.get('tool_calls', []),
-        'final_answer': state.get('final_answer', ''),
-        'current_step': state.get('current_step', 0)
+class LoopPreventionState(BaseModel):
+    """State for preventing infinite loops"""
+    max_loops: int = Field(default=5, description="Maximum number of loops allowed")
+    current_loops: int = Field(default=0, description="Current number of loops")
+    last_state_hash: str = Field(default="", description="Hash of last state")
+    stagnation_score: int = Field(default=0, description="Score for detecting stagnation")
+    force_termination: bool = Field(default=False, description="Force termination flag")
+
+    model_config = {
+        "arbitrary_types_allowed": True,
+        "validate_assignment": True
     }
-    state_str = json.dumps(relevant_fields, sort_keys=True)
-    return hashlib.md5(state_str.encode()).hexdigest()
 
-def check_for_stagnation(state: dict) -> bool:
-    """Check if the agent is making no progress (stagnation)"""
-    current_hash = calculate_state_hash(state)
-    last_hash = state.get('last_state_hash', '')
-    
+def calculate_state_hash(state: Dict[str, Any]) -> str:
+    """Calculate a hash of the current state for loop detection"""
+    # Create a stable representation of the state
+    state_str = json.dumps(state, sort_keys=True)
+    return hashlib.sha256(state_str.encode()).hexdigest()
+
+def check_for_stagnation(current_hash: str, last_hash: str, state: LoopPreventionState) -> bool:
+    """Check if the system is stagnating"""
     if current_hash == last_hash:
-        state['stagnation_counter'] = state.get('stagnation_counter', 0) + 1
-        logger.warning(f"Stagnation detected. Counter: {state['stagnation_counter']}")
-        return state['stagnation_counter'] >= 3  # Stagnant for 3 iterations
+        state.stagnation_score += 1
     else:
-        state['stagnation_counter'] = 0
-        state['last_state_hash'] = current_hash
-        return False
+        state.stagnation_score = max(0, state.stagnation_score - 1)
+    
+    return state.stagnation_score >= 3
 
-def decrement_loop_counter(state: dict) -> dict:
-    """Decrement the loop counter and check for termination"""
-    remaining = state.get('remaining_loops', 15)
-    remaining -= 1
-    
-    logger.info(f"Loop counter: {remaining} remaining")
-    
-    return {
-        'remaining_loops': remaining,
-        'force_termination': remaining <= 0
-    }
+def decrement_loop_counter(state: LoopPreventionState) -> bool:
+    """Decrement the loop counter and check if we should continue"""
+    state.current_loops += 1
+    return state.current_loops < state.max_loops
 
 # --- SECTION 2: Tool Error Handling ---
 
-class ToolErrorStrategy(Enum):
-    """Strategies for handling tool errors"""
-    SIMPLE_RETRY = "simple_retry"
-    SELF_CORRECTION = "self_correction"
-    MODEL_FALLBACK = "model_fallback"
+class ToolErrorStrategy(BaseModel):
+    """Strategy for handling tool execution errors"""
+    max_retries: int = Field(default=3, description="Maximum number of retries")
+    retry_delay: float = Field(default=1.0, description="Delay between retries in seconds")
+    backoff_factor: float = Field(default=2.0, description="Exponential backoff factor")
+    error_categories: Dict[ErrorCategory, Callable] = Field(
+        default_factory=dict,
+        description="Error category handlers"
+    )
 
-@dataclass
-class ToolExecutionResult:
-    """Result of tool execution with error context"""
-    success: bool
-    output: Any
-    error: Optional[Exception] = None
-    error_category: Optional[str] = None
-    retry_suggestions: Optional[List[str]] = None
+    model_config = {
+        "arbitrary_types_allowed": True,
+        "validate_assignment": True
+    }
 
-def categorize_tool_error(error: Exception) -> tuple[str, ToolErrorStrategy]:
-    """Categorize tool errors and recommend handling strategy"""
-    error_str = str(error).lower()
+def categorize_tool_error(error: str) -> ErrorCategory:
+    """Categorize a tool error for appropriate handling"""
+    error_lower = error.lower()
     
-    if isinstance(error, ValidationError):
-        return "validation_error", ToolErrorStrategy.SELF_CORRECTION
-    elif "rate limit" in error_str or "429" in error_str:
-        return "rate_limit", ToolErrorStrategy.SIMPLE_RETRY
-    elif "timeout" in error_str:
-        return "timeout", ToolErrorStrategy.SIMPLE_RETRY
-    elif "not found" in error_str or "404" in error_str:
-        return "not_found", ToolErrorStrategy.SELF_CORRECTION
+    if any(x in error_lower for x in ["timeout", "connection", "rate limit", "temporary"]):
+        return ErrorCategory.TRANSIENT
+    elif any(x in error_lower for x in ["invalid", "unauthorized", "forbidden", "not found"]):
+        return ErrorCategory.PERMANENT
+    elif any(x in error_lower for x in ["logic", "state", "plan", "validation"]):
+        return ErrorCategory.LOGIC
+    elif any(x in error_lower for x in ["memory", "cpu", "resource", "quota"]):
+        return ErrorCategory.RESOURCE
     else:
-        return "unknown", ToolErrorStrategy.MODEL_FALLBACK
-
-def create_self_correction_prompt(tool_name: str, tool_input: dict, error: Exception) -> str:
-    """Create a prompt for self-correcting tool usage"""
-    return f"""Your previous tool call failed. Please correct it based on the error:
-
-Tool: {tool_name}
-Your Input: {json.dumps(tool_input, indent=2)}
-Error: {str(error)}
-
-Common fixes:
-1. Check parameter names match exactly
-2. Ensure required parameters are provided
-3. Verify data types (string vs int vs list)
-4. Check for typos in parameter values
-
-Please provide the corrected tool call."""
+        return ErrorCategory.UNKNOWN
 
 # --- SECTION 3: State Validation Patterns ---
 
 class ValidatedState(BaseModel):
     """Base class for validated state components"""
     
-    class Config:
-        validate_assignment = True  # Validate on every assignment
-        use_enum_values = True
+    model_config = {
+        "arbitrary_types_allowed": True,
+        "validate_assignment": True,
+        "use_enum_values": True
+    }
 
 class PlanStep(ValidatedState):
     """Validated plan step with comprehensive error checking"""
@@ -150,31 +135,29 @@ class PlanStep(ValidatedState):
             raise ValueError("Tool names cannot start with underscore")
         return v
 
-class StateValidator:
-    """Utilities for state validation and debugging"""
+class StateValidator(BaseModel):
+    """Validator for agent state transitions"""
+    required_fields: List[str] = Field(default_factory=list)
+    field_validators: Dict[str, Callable] = Field(default_factory=dict)
     
-    @staticmethod
-    def trace_state_corruption(state: dict, error: ValidationError) -> dict:
-        """Trace which node corrupted the state"""
-        error_details = {
-            'failed_field': None,
-            'bad_value': None,
-            'expected_type': None,
-            'corrupting_node': None
-        }
-        
-        # Extract error details from Pydantic
-        for err in error.errors():
-            error_details['failed_field'] = err['loc'][0] if err['loc'] else 'unknown'
-            error_details['bad_value'] = err['input']
-            error_details['expected_type'] = err['type']
-            
-        # Trace back through state history to find corrupting node
-        if 'node_history' in state:
-            # The last node is likely the culprit
-            error_details['corrupting_node'] = state['node_history'][-1]
-            
-        return error_details
+    model_config = {
+        "arbitrary_types_allowed": True,
+        "validate_assignment": True
+    }
+
+    def validate_state(self, state: Dict[str, Any]) -> bool:
+        """Validate the current state"""
+        # Check required fields
+        for field in self.required_fields:
+            if field not in state:
+                return False
+                
+        # Run field validators
+        for field, validator in self.field_validators.items():
+            if field in state and not validator(state[field]):
+                return False
+                
+        return True
 
 # --- SECTION 4: Plan-and-Execute Pattern ---
 
@@ -247,6 +230,11 @@ class ReflectionCriteria(BaseModel):
     check_logical_consistency: bool = True
     minimum_confidence: float = 0.8
 
+    model_config = {
+        "arbitrary_types_allowed": True,
+        "validate_assignment": True
+    }
+
 def create_reflection_node(criteria: ReflectionCriteria):
     """Factory for creating reflection nodes with specific criteria"""
     
@@ -309,6 +297,11 @@ class HumanApprovalRequest(BaseModel):
     reasoning: str
     alternatives: Optional[List[str]] = None
 
+    model_config = {
+        "arbitrary_types_allowed": True,
+        "validate_assignment": True
+    }
+
 def create_human_approval_node(risk_threshold: str = "high"):
     """Create a node that requests human approval for risky actions"""
     
@@ -344,70 +337,86 @@ def create_human_approval_node(risk_threshold: str = "high"):
 
 # --- SECTION 7: Comprehensive Error Recovery ---
 
-class ErrorRecoveryState(TypedDict):
-    """State for error recovery flow"""
-    error_history: List[Dict[str, Any]]
-    recovery_attempts: int
-    fallback_level: int  # 0=retry, 1=self-correct, 2=model upgrade, 3=human
-    circuit_breaker_trips: Dict[str, int]
+class ErrorRecoveryState(BaseModel):
+    """State for error recovery process"""
+    error_history: List[ToolExecutionResult] = Field(default_factory=list)
+    recovery_attempts: int = Field(default=0)
+    max_recovery_attempts: int = Field(default=3)
+    last_successful_state: Optional[Dict[str, Any]] = None
+    fallback_level: int = Field(default=0)
+    max_fallback_level: int = Field(default=3)
 
-def create_adaptive_error_handler(max_attempts: int = 3):
-    """Create an error handler that escalates through recovery strategies"""
+    model_config = {
+        "arbitrary_types_allowed": True,
+        "validate_assignment": True
+    }
+
+def create_self_correction_prompt(error: str, state: Dict[str, Any]) -> str:
+    """Create a prompt for self-correction based on error"""
+    return f"""
+    An error occurred: {error}
+    Current state: {json.dumps(state, indent=2)}
     
-    def error_recovery_node(state: ErrorRecoveryState) -> dict:
-        """Attempt to recover from errors with escalating strategies"""
-        latest_error = state['error_history'][-1] if state['error_history'] else None
-        
-        if not latest_error:
-            return {'error_resolved': True}
-            
-        error_category, strategy = categorize_tool_error(
-            Exception(latest_error['message'])
-        )
-        
-        recovery_result = {
-            'error_resolved': False,
-            'recovery_strategy': None,
-            'should_terminate': False
-        }
-        
-        # Escalate through strategies based on failure count
-        if state['recovery_attempts'] < max_attempts:
-            if state['fallback_level'] == 0:
-                # Level 0: Simple retry with backoff
-                recovery_result['recovery_strategy'] = 'retry_with_backoff'
-                recovery_result['wait_seconds'] = 2 ** state['recovery_attempts']
-                
-            elif state['fallback_level'] == 1:
-                # Level 1: Self-correction with error context
-                recovery_result['recovery_strategy'] = 'self_correction'
-                recovery_result['correction_prompt'] = create_self_correction_prompt(
-                    latest_error.get('tool_name', 'unknown'),
-                    latest_error.get('tool_input', {}),
-                    Exception(latest_error['message'])
-                )
-                
-            elif state['fallback_level'] == 2:
-                # Level 2: Upgrade to more capable model
-                recovery_result['recovery_strategy'] = 'model_fallback'
-                recovery_result['fallback_model'] = 'gpt-4'
-                
-            else:
-                # Level 3: Request human intervention
-                recovery_result['recovery_strategy'] = 'human_intervention'
-                recovery_result['should_terminate'] = True
-                
-            recovery_result['fallback_level'] = state['fallback_level'] + 1
-            recovery_result['recovery_attempts'] = state['recovery_attempts'] + 1
-            
-        else:
-            # Max attempts reached
-            recovery_result['should_terminate'] = True
-            recovery_result['final_error'] = create_user_friendly_error(latest_error)
-            
-        return recovery_result
+    Please analyze the error and suggest corrections to:
+    1. The current state
+    2. The execution plan
+    3. The tool parameters
     
-    return error_recovery_node
+    Provide specific, actionable corrections.
+    """
+
+def create_adaptive_error_handler(
+    error_category: ErrorCategory,
+    state: ErrorRecoveryState
+) -> Callable:
+    """Create an adaptive error handler based on error category and state"""
+    
+    def handle_transient_error(error: str) -> Dict[str, Any]:
+        """Handle transient errors with retries and backoff"""
+        if state.recovery_attempts < state.max_recovery_attempts:
+            delay = (2 ** state.recovery_attempts) * 1.0  # Exponential backoff
+            time.sleep(delay)
+            state.recovery_attempts += 1
+            return {"should_retry": True, "delay": delay}
+        return {"should_retry": False, "error": "Max retries exceeded"}
+        
+    def handle_permanent_error(error: str) -> Dict[str, Any]:
+        """Handle permanent errors with fallback strategies"""
+        if state.fallback_level < state.max_fallback_level:
+            state.fallback_level += 1
+            return {"should_retry": True, "fallback_level": state.fallback_level}
+        return {"should_retry": False, "error": "No more fallback strategies"}
+        
+    def handle_logic_error(error: str) -> Dict[str, Any]:
+        """Handle logic errors with state correction"""
+        if state.last_successful_state:
+            return {
+                "should_retry": True,
+                "corrected_state": state.last_successful_state
+            }
+        return {"should_retry": False, "error": "No valid state to restore"}
+        
+    def handle_resource_error(error: str) -> Dict[str, Any]:
+        """Handle resource errors with cleanup and retry"""
+        # Implement resource cleanup
+        return {"should_retry": True, "cleanup_performed": True}
+        
+    def handle_unknown_error(error: str) -> Dict[str, Any]:
+        """Handle unknown errors with basic retry"""
+        if state.recovery_attempts < state.max_recovery_attempts:
+            state.recovery_attempts += 1
+            return {"should_retry": True}
+        return {"should_retry": False, "error": "Max retries exceeded"}
+    
+    handlers = {
+        ErrorCategory.TRANSIENT: handle_transient_error,
+        ErrorCategory.PERMANENT: handle_permanent_error,
+        ErrorCategory.LOGIC: handle_logic_error,
+        ErrorCategory.RESOURCE: handle_resource_error,
+        ErrorCategory.UNKNOWN: handle_unknown_error
+    }
+    
+    return handlers.get(error_category, handle_unknown_error)
 
 # --- SECTION 8: Building the Resilient Graph ---
 
@@ -491,7 +500,7 @@ def build_resilient_graph(tools: list, config: dict = None) -> StateGraph:
             return "synthesizer"
             
         # Check stagnation
-        if check_for_stagnation(state):
+        if check_for_stagnation(state['last_state_hash'], state['last_state_hash'], state['loop_prevention_state']):
             logger.warning("Stagnation detected, terminating")
             return "synthesizer"
             
@@ -565,7 +574,7 @@ def handle_step_failure(state: dict, step: PlanStep, error: Exception) -> dict:
             success=False,
             output=None,
             error=error,
-            error_category=categorize_tool_error(error)[0]
+            error_category=categorize_tool_error(str(error))
         )]
     }
 
