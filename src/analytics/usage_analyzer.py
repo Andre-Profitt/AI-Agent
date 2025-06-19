@@ -507,22 +507,6 @@ def run_usage_analysis():
         "recommendations_count": len(insights['recommendations'])
     })
     
-    print("\n📈 Usage Analysis Results:")
-    print(f"Total queries analyzed: {len(analyzer.usage_history)}")
-    print(f"Unique patterns found: {len(analyzer.query_patterns)}")
-    
-    print("\n🔥 Popular Patterns:")
-    for pattern in insights['popular_patterns'][:3]:
-        print(f"  {pattern['pattern']}: {pattern['count']} uses")
-    
-    print("\n⚠️ Problem Patterns:")
-    for pattern in insights['problem_patterns'][:3]:
-        print(f"  {pattern['pattern']}: {', '.join(pattern['issues'])}")
-    
-    print("\n💡 Recommendations:")
-    for rec in insights['recommendations'][:5]:
-        print(f"  - {rec}")
-    
     # Save report
     report_file = analyzer.save_analytics_report()
     logger.info("Analytics report saved", extra={

@@ -4,6 +4,7 @@ Integration configuration for external services
 
 import os
 import asyncio
+import logging
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
 from src.infrastructure.resilience.circuit_breaker import (
@@ -11,6 +12,8 @@ from src.infrastructure.resilience.circuit_breaker import (
     CircuitBreakerConfig,
     circuit_breaker
 )
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class IntegrationConfig:
@@ -37,23 +40,59 @@ class IntegrationConfig:
     enable_logging: bool = True
     
     def __init__(self):
-        # Load from environment
-        self.supabase_url = os.getenv('SUPABASE_URL', '')
-        self.supabase_key = os.getenv('SUPABASE_KEY', '')
-        self.groq_api_key = os.getenv('GROQ_API_KEY', '')
-        self.openai_api_key = os.getenv('OPENAI_API_KEY', '')
-        self.anthropic_api_key = os.getenv('ANTHROPIC_API_KEY', '')
-        
-        # Tool flags
-        self.enable_file_tools = os.getenv('ENABLE_FILE_TOOLS', 'true').lower() == 'true'
-        self.enable_web_tools = os.getenv('ENABLE_WEB_TOOLS', 'true').lower() == 'true'
-        self.enable_code_tools = os.getenv('ENABLE_CODE_TOOLS', 'true').lower() == 'true'
-        self.enable_media_tools = os.getenv('ENABLE_MEDIA_TOOLS', 'true').lower() == 'true'
-        
-        # Monitoring flags
-        self.enable_prometheus = os.getenv('ENABLE_PROMETHEUS', 'true').lower() == 'true'
-        self.enable_health_checks = os.getenv('ENABLE_HEALTH_CHECKS', 'true').lower() == 'true'
-        self.enable_logging = os.getenv('ENABLE_LOGGING', 'true').lower() == 'true'
+        self._circuit_breaker = None
+        # Load configuration synchronously for initialization
+        self._load_config_sync()
+    
+    def _load_config_sync(self):
+        """Load configuration synchronously during initialization"""
+        try:
+            self.supabase_url = self._safe_get_env("SUPABASE_URL", "")
+            self.supabase_key = self._safe_get_env("SUPABASE_KEY", "")
+            self.groq_api_key = self._safe_get_env("GROQ_API_KEY", "")
+            self.openai_api_key = self._safe_get_env("OPENAI_API_KEY", "")
+            self.anthropic_api_key = self._safe_get_env("ANTHROPIC_API_KEY", "")
+            
+            # Tool flags
+            self.enable_file_tools = self._safe_get_env("ENABLE_FILE_TOOLS", "true").lower() == "true"
+            self.enable_web_tools = self._safe_get_env("ENABLE_WEB_TOOLS", "true").lower() == "true"
+            self.enable_code_tools = self._safe_get_env("ENABLE_CODE_TOOLS", "true").lower() == "true"
+            self.enable_media_tools = self._safe_get_env("ENABLE_MEDIA_TOOLS", "true").lower() == "true"
+            
+            # Monitoring flags
+            self.enable_prometheus = self._safe_get_env("ENABLE_PROMETHEUS", "true").lower() == "true"
+            self.enable_health_checks = self._safe_get_env("ENABLE_HEALTH_CHECKS", "true").lower() == "true"
+            self.enable_logging = self._safe_get_env("ENABLE_LOGGING", "true").lower() == "true"
+            
+            logger.info("Configuration loaded successfully")
+            
+        except Exception as e:
+            logger.error("Failed to load configuration", extra={"error": str(e)})
+            raise
+    
+    def _safe_get_env(self, key: str, default: str = "") -> str:
+        """Safely get environment variable with validation"""
+        try:
+            value = os.environ.get(key, default)
+            if key.endswith("_URL") and value:
+                # Validate URL format
+                if not value.startswith(("http://", "https://")):
+                    logger.warning("Invalid URL format", extra={"key": key, "value": value})
+                    return default
+            return value
+        except Exception as e:
+            logger.error("Environment variable access failed", 
+                        extra={"key": key, "error": str(e)})
+            return default
+    
+    @circuit_breaker("config_check", CircuitBreakerConfig(failure_threshold=5, recovery_timeout=15))
+    async def is_configured_safe(self) -> bool:
+        """Check if configuration is valid with circuit breaker protection"""
+        try:
+            return bool(self.supabase_url and self.supabase_key)
+        except Exception as e:
+            logger.error("Configuration check failed", extra={"error": str(e)})
+            return False
     
     @circuit_breaker("config_validation", CircuitBreakerConfig(failure_threshold=3, recovery_timeout=30))
     async def validate_supabase_connection(self) -> bool:
@@ -69,7 +108,8 @@ class IntegrationConfig:
             result = await client.table('_test_connection').select('*').limit(1).execute()
             return True
             
-        except Exception:
+        except Exception as e:
+            logger.error("Supabase connection validation failed", extra={"error": str(e)})
             return False
     
     @circuit_breaker("config_validation", CircuitBreakerConfig(failure_threshold=3, recovery_timeout=30))
@@ -86,7 +126,8 @@ class IntegrationConfig:
             try:
                 # Simple API test
                 validation_results['groq'] = await self._test_groq_api()
-            except Exception:
+            except Exception as e:
+                logger.error("Groq API validation failed", extra={"error": str(e)})
                 validation_results['groq'] = False
                 
         return validation_results
@@ -102,7 +143,8 @@ class IntegrationConfig:
                     timeout=5
                 ) as response:
                     return response.status == 200
-        except Exception:
+        except Exception as e:
+            logger.error("Groq API test failed", extra={"error": str(e)})
             return False
     
     def to_dict(self) -> Dict[str, Any]:

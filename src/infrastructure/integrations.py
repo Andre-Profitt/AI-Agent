@@ -142,12 +142,12 @@ class IntegrationConfig:
             logger.error(f"Failed to update configuration: {e}")
             return False
     
-    def validate(self) -> tuple[bool, List[str]]:
+    async def validate(self) -> tuple[bool, List[str]]:
         """Validate configuration and return issues"""
         issues = []
         
         # Validate Supabase if enabled
-        if self.supabase.is_configured():
+        if await self.supabase.is_configured_safe():
             if not self.supabase.url.startswith("https://"):
                 issues.append("Supabase URL must start with https://")
         

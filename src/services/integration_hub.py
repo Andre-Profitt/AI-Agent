@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.infrastructure.integrations import integration_config
 from src.tools.base_tool import BaseTool
-from src.utils.logging import get_logger
+from src.utils.structured_logging import get_structured_logger
 from src.services.circuit_breaker import CircuitBreaker
 from src.infrastructure.resilience.circuit_breaker import (
     CircuitBreaker as ResilienceCircuitBreaker,
@@ -48,7 +48,7 @@ from src.core.exceptions import (
     MaxRetriesExceededError
 )
 
-logger = get_logger(__name__)
+logger = get_structured_logger(__name__)
 
 # ============================================
 # TOOL CALL TRACKER - PREVENT LOOPS
@@ -75,7 +75,7 @@ class ToolCallTracker:
         """Check if tool call is allowed"""
         # Check depth
         if len(self.call_stack) >= self.max_depth:
-            logger.warning(f"Max call depth {self.max_depth} reached")
+            logger.warning("Max call depth reached")
             return False
         
         # Check for repeated calls
@@ -122,45 +122,53 @@ class ToolCallTracker:
 # ============================================
 
 class CircuitBreaker:
-    """Circuit breaker for tool reliability"""
+    """Simple circuit breaker implementation"""
     
     def __init__(self, failure_threshold: int = 5, recovery_timeout: float = 60.0, half_open_attempts: int = 3):
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
         self.half_open_attempts = half_open_attempts
-        self.failures = defaultdict(int)
-        self.last_failure_time = {}
-        self.circuit_open = set()
+        self.failure_counts = defaultdict(int)
+        self.last_failure_times = defaultdict(float)
+        self.half_open_attempts_count = defaultdict(int)
     
     def is_open(self, tool_name: str) -> bool:
-        """Check if circuit is open for tool"""
-        if tool_name not in self.circuit_open:
+        """Check if circuit breaker is open for a tool"""
+        if tool_name not in self.last_failure_times:
             return False
+            
+        time_since_failure = time.time() - self.last_failure_times[tool_name]
         
-        # Check if recovery timeout has passed
-        if time.time() - self.last_failure_time[tool_name] > self.recovery_timeout:
-            # Try to close circuit
-            self.circuit_open.remove(tool_name)
-            self.failures[tool_name] = 0
-            logger.info(f"Circuit breaker closed for {tool_name}")
-            return False
+        if self.failure_counts[tool_name] >= self.failure_threshold:
+            if time_since_failure < self.recovery_timeout:
+                return True
+            else:
+                # Try half-open state
+                if self.half_open_attempts_count[tool_name] < self.half_open_attempts:
+                    self.half_open_attempts_count[tool_name] += 1
+                    return False
+                else:
+                    # Reset to closed state
+                    self.failure_counts[tool_name] = 0
+                    self.half_open_attempts_count[tool_name] = 0
+                    del self.last_failure_times[tool_name]
+                    logger.info("Circuit breaker closed", extra={"tool_name": tool_name})
+                    return False
         
-        return True
+        return False
     
     def record_success(self, tool_name: str):
-        """Record successful execution"""
-        self.failures[tool_name] = 0
-        if tool_name in self.circuit_open:
-            self.circuit_open.remove(tool_name)
+        """Record successful operation"""
+        self.failure_counts[tool_name] = 0
+        self.half_open_attempts_count[tool_name] = 0
+        if tool_name in self.last_failure_times:
+            del self.last_failure_times[tool_name]
     
     def record_failure(self, tool_name: str):
-        """Record failed execution"""
-        self.failures[tool_name] += 1
-        self.last_failure_time[tool_name] = time.time()
-        
-        if self.failures[tool_name] >= self.failure_threshold:
-            self.circuit_open.add(tool_name)
-            logger.warning(f"Circuit breaker opened for {tool_name}")
+        """Record failed operation"""
+        self.failure_counts[tool_name] += 1
+        self.last_failure_times[tool_name] = time.time()
+        self.half_open_attempts_count[tool_name] = 0
 
 # ============================================
 # UNIFIED TOOL MANAGEMENT SYSTEM
@@ -191,60 +199,66 @@ class ToolContext:
         self.tool_outputs[tool_name] = output
 
 class RateLimitManager:
-    """Manage rate limits for individual tools"""
+    """Rate limiting for tools"""
     
     def __init__(self):
-        self.tool_limits = {}
-        self.call_history = defaultdict(list)
+        self.rate_limits = {}
+        self.call_timestamps = defaultdict(list)
     
     def set_limit(self, tool_name: str, calls_per_minute: int, burst_size: int = None):
         """Set rate limit for a tool"""
-        self.tool_limits[tool_name] = {
+        self.rate_limits[tool_name] = {
             'calls_per_minute': calls_per_minute,
-            'burst_size': burst_size or calls_per_minute * 2,
-            'window_start': time.time()
+            'burst_size': burst_size or calls_per_minute
         }
-        logger.info(f"Set rate limit for {tool_name}: {calls_per_minute} calls/minute")
+        logger.info("Set rate limit", extra={
+            "tool_name": tool_name, 
+            "calls_per_minute": calls_per_minute
+        })
     
     async def check_and_wait(self, tool_name: str) -> bool:
         """Check rate limit and wait if necessary"""
-        if tool_name not in self.tool_limits:
+        if tool_name not in self.rate_limits:
             return True
-        
-        limit = self.tool_limits[tool_name]
+            
+        limit = self.rate_limits[tool_name]
         now = time.time()
         
-        # Clean old calls
-        window_start = now - 60
-        self.call_history[tool_name] = [
-            t for t in self.call_history[tool_name] if t > window_start
+        # Clean old timestamps
+        cutoff = now - 60
+        self.call_timestamps[tool_name] = [
+            ts for ts in self.call_timestamps[tool_name] 
+            if ts > cutoff
         ]
         
-        # Check if under limit
-        if len(self.call_history[tool_name]) >= limit['calls_per_minute']:
+        # Check if we're at the limit
+        if len(self.call_timestamps[tool_name]) >= limit['calls_per_minute']:
             # Calculate wait time
-            oldest_call = self.call_history[tool_name][0]
+            oldest_call = min(self.call_timestamps[tool_name])
             wait_time = 60 - (now - oldest_call)
             
             if wait_time > 0:
-                logger.info(f"Rate limit reached for {tool_name}, waiting {wait_time:.2f}s")
+                logger.info("Rate limit reached", extra={
+                    "tool_name": tool_name, 
+                    "wait_time": round(wait_time, 2)
+                })
                 await asyncio.sleep(wait_time)
         
         # Record this call
-        self.call_history[tool_name].append(now)
+        self.call_timestamps[tool_name].append(now)
         return True
     
     def get_tool_stats(self, tool_name: str) -> Dict[str, Any]:
         """Get rate limit statistics for a tool"""
-        if tool_name not in self.tool_limits:
+        if tool_name not in self.rate_limits:
             return {}
         
-        limit = self.tool_limits[tool_name]
+        limit = self.rate_limits[tool_name]
         now = time.time()
         window_start = now - 60
         
         recent_calls = [
-            t for t in self.call_history[tool_name] if t > window_start
+            t for t in self.call_timestamps[tool_name] if t > window_start
         ]
         
         return {
@@ -255,16 +269,16 @@ class RateLimitManager:
         }
 
 class ToolCompatibilityChecker:
-    """Check tool compatibility and requirements"""
+    """Check compatibility between tools"""
     
     def __init__(self):
-        self.compatibility_matrix = {}
         self.tool_requirements = {}
+        self.compatibility_matrix = {}
     
     def register_tool_requirements(self, tool_name: str, requirements: Dict[str, Any]):
-        """Register tool requirements"""
+        """Register requirements for a tool"""
         self.tool_requirements[tool_name] = requirements
-        logger.info(f"Registered requirements for tool: {tool_name}")
+        logger.info("Registered requirements for tool", extra={"tool_name": tool_name})
     
     def check_compatibility(self, tool1: str, tool2: str) -> bool:
         """Check if two tools are compatible"""
@@ -306,32 +320,42 @@ class ToolCompatibilityChecker:
         return incompatible
 
 class ResourcePoolManager:
-    """Manage pooled resources for expensive connections"""
+    """Manage resource pools for tools"""
     
     def __init__(self):
         self.pools = {}
-        self.pool_configs = {}
+        self.pool_stats = {}
     
     async def create_pool(self, resource_type: str, factory_func: Callable, 
                          min_size: int = 2, max_size: int = 10):
         """Create a resource pool"""
-        self.pools[resource_type] = {
-            'available': asyncio.Queue(maxsize=max_size),
-            'in_use': set(),
+        pool = {
             'factory': factory_func,
             'min_size': min_size,
-            'max_size': max_size
+            'max_size': max_size,
+            'resources': [],
+            'in_use': set(),
+            'lock': asyncio.Lock()
         }
         
-        # Pre-create minimum resources
-        for _ in range(min_size):
-            try:
-                resource = await factory_func()
-                await self.pools[resource_type]['available'].put(resource)
-            except Exception as e:
-                logger.warning(f"Failed to create resource for {resource_type}: {e}")
+        self.pools[resource_type] = pool
         
-        logger.info(f"Created resource pool for {resource_type}: {min_size}-{max_size} resources")
+        # Initialize with minimum resources
+        for _ in range(min_size):
+            resource = await factory_func()
+            pool['resources'].append(resource)
+        
+        self.pool_stats[resource_type] = {
+            'created': min_size,
+            'in_use': 0,
+            'available': min_size
+        }
+        
+        logger.info("Created resource pool", extra={
+            "resource_type": resource_type, 
+            "min_size": min_size, 
+            "max_size": max_size
+        })
     
     async def acquire(self, resource_type: str, timeout: float = 30.0):
         """Acquire a resource from pool"""
@@ -340,12 +364,13 @@ class ResourcePoolManager:
             raise ValueError(f"No pool for resource type: {resource_type}")
         
         try:
-            resource = await asyncio.wait_for(
-                pool['available'].get(), 
-                timeout=timeout
-            )
-            pool['in_use'].add(id(resource))
-            return resource
+            async with pool['lock']:
+                resource = await asyncio.wait_for(
+                    pool['resources'].get(), 
+                    timeout=timeout
+                )
+                pool['in_use'].add(id(resource))
+                return resource
         except asyncio.TimeoutError:
             # Create new resource if under max
             if len(pool['in_use']) < pool['max_size']:
@@ -363,7 +388,7 @@ class ResourcePoolManager:
         if pool and id(resource) in pool['in_use']:
             pool['in_use'].remove(id(resource))
             try:
-                await pool['available'].put(resource)
+                await pool['resources'].put(resource)
             except asyncio.QueueFull:
                 logger.warning(f"Resource pool full for {resource_type}, discarding resource")
     
@@ -374,53 +399,41 @@ class ResourcePoolManager:
             return {}
         
         return {
-            'available': pool['available'].qsize(),
+            'available': pool['resources'].qsize(),
             'in_use': len(pool['in_use']),
             'total_capacity': pool['max_size'],
             'utilization': len(pool['in_use']) / pool['max_size']
         }
 
 class UnifiedToolRegistry:
-    """Unified registry that combines ToolRegistry and MCPToolRegistry"""
+    """Unified tool registry with enhanced features"""
     
     def __init__(self):
-        self.tools: Dict[str, BaseTool] = {}
-        self.tool_docs: Dict[str, Dict[str, Any]] = {}
-        self.mcp_announcements: Dict[str, Dict[str, Any]] = {}
-        self.tool_reliability: Dict[str, Dict[str, Any]] = {}
-        self.tool_preferences: Dict[str, List[str]] = {}
-        self._initialized = False
-        
+        self.tools = {}
+        self.tool_docs = {}
+        self.mcp_announcements = {}
+        self.tool_metrics = defaultdict(lambda: {
+            'total_calls': 0,
+            'successful_calls': 0,
+            'failed_calls': 0,
+            'avg_latency': 0.0,
+            'last_used': None
+        })
+    
     def register(self, tool: BaseTool, tool_doc: Dict[str, Any] = None, 
                 mcp_announcement: Dict[str, Any] = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        """Register a tool in both registries and maintain mapping"""
-        if hasattr(tool, 'name'):
-            self.tools[tool.name] = tool
-            
-            # Register tool documentation
-            if tool_doc:
-                self.tool_docs[tool.name] = tool_doc
-            
-            # Register MCP announcement
-            if mcp_announcement:
-                self.mcp_announcements[tool.name] = mcp_announcement
-            
-            # Initialize reliability metrics
-            if tool.name not in self.tool_reliability:
-                self.tool_reliability[tool.name] = {
-                    "success_count": 0,
-                    "failure_count": 0,
-                    "total_calls": 0,
-                    "avg_latency": 0.0,
-                    "last_used": None,
-                    "last_error": None
-                }
-            
-            logger.info(f"Registered tool: {tool.name}")
-            return tool_doc or {}, mcp_announcement or {}
-        else:
-            logger.warning(f"Tool without name attribute: {tool}")
-            return {}, {}
+        """Register a tool with documentation and MCP announcement"""
+        tool_name = tool.name
+        
+        self.tools[tool_name] = tool
+        if tool_doc:
+            self.tool_docs[tool_name] = tool_doc
+        if mcp_announcement:
+            self.mcp_announcements[tool_name] = mcp_announcement
+        
+        logger.info("Registered tool", extra={"tool_name": tool.name})
+        
+        return self.tool_docs.get(tool_name, {}), self.mcp_announcements.get(tool_name, {})
     
     def get_tool(self, name: str) -> Optional[BaseTool]:
         """Get tool by name"""
@@ -435,9 +448,9 @@ class UnifiedToolRegistry:
         """Get tools filtered by reliability score"""
         reliable_tools = []
         for tool_name, tool in self.tools.items():
-            reliability = self.tool_reliability.get(tool_name, {})
-            total_calls = reliability.get("total_calls", 0)
-            success_count = reliability.get("success_count", 0)
+            reliability = self.tool_metrics[tool_name]
+            total_calls = reliability['total_calls']
+            success_count = reliability['successful_calls']
             
             if total_calls == 0:
                 # New tools get benefit of doubt
@@ -450,35 +463,25 @@ class UnifiedToolRegistry:
     def update_tool_metrics(self, tool_name: str, success: bool, latency: float, 
                            error_message: str = None):
         """Update tool reliability metrics"""
-        if tool_name not in self.tool_reliability:
-            self.tool_reliability[tool_name] = {
-                "success_count": 0,
-                "failure_count": 0,
-                "total_calls": 0,
-                "avg_latency": 0.0,
-                "last_used": None,
-                "last_error": None
-            }
-        
-        metrics = self.tool_reliability[tool_name]
-        metrics["total_calls"] += 1
-        metrics["last_used"] = datetime.now()
+        metrics = self.tool_metrics[tool_name]
+        metrics['total_calls'] += 1
+        metrics['last_used'] = datetime.now()
         
         if success:
-            metrics["success_count"] += 1
+            metrics['successful_calls'] += 1
         else:
-            metrics["failure_count"] += 1
-            metrics["last_error"] = error_message
+            metrics['failed_calls'] += 1
+            metrics['last_error'] = error_message
         
         # Update average latency
-        if metrics["total_calls"] == 1:
-            metrics["avg_latency"] = latency
+        if metrics['total_calls'] == 1:
+            metrics['avg_latency'] = latency
         else:
             alpha = 0.1  # Exponential moving average
-            metrics["avg_latency"] = alpha * latency + (1 - alpha) * metrics["avg_latency"]
+            metrics['avg_latency'] = alpha * latency + (1 - alpha) * metrics['avg_latency']
 
 class ToolOrchestrator:
-    """Central tool orchestrator with fallback mechanisms"""
+    """Enhanced tool orchestrator with fallback and compatibility checking"""
     
     def __init__(self, registry: UnifiedToolRegistry, cache: Any, db_client: Any = None,
                  rate_limit_manager: RateLimitManager = None,
@@ -491,12 +494,12 @@ class ToolOrchestrator:
         self.rate_limit_manager = rate_limit_manager
         self.compatibility_checker = compatibility_checker
         self.resource_manager = resource_manager
-        self.call_tracker = ToolCallTracker()  # Add tracker
-        self.circuit_breaker = CircuitBreaker()  # Add circuit breaker
+        self.call_tracker = ToolCallTracker()
+        self.circuit_breaker = CircuitBreaker()
     
     async def execute_with_fallback(self, tool_name: str, params: Dict[str, Any], 
                                   session_id: str = None) -> Dict[str, Any]:
-        """Execute tool with caching, metrics, and fallback"""
+        """Execute tool with fallback mechanism"""
         start_time = time.time()
         
         # Check if call is allowed
@@ -557,7 +560,7 @@ class ToolOrchestrator:
             if not result["success"]:
                 fallback_result = await self._try_fallback_tools(tool_name, params)
                 if fallback_result:
-                    logger.info(f"Fallback tool succeeded for {tool_name}")
+                    logger.info("Fallback tool succeeded", extra={"tool_name": tool_name})
                     return fallback_result
             
             return result
@@ -622,7 +625,24 @@ class ToolOrchestrator:
     
     async def _try_fallback_tools(self, failed_tool: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Try fallback tools when primary tool fails"""
-        # Get tool category
+        fallback_tools = self._get_fallback_tools(failed_tool)
+        
+        for fallback_tool in fallback_tools:
+            logger.info("Trying fallback tool", extra={"fallback_tool": fallback_tool})
+            
+            try:
+                result = await self._execute_tool(self.registry.get_tool(fallback_tool), params)
+                logger.info("Fallback tool succeeded", extra={"fallback_tool": fallback_tool})
+                return result
+            except Exception as e:
+                logger.error("Fallback tool failed", error=e, extra={"fallback_tool": fallback_tool})
+                continue
+        
+        return None
+
+    def _get_fallback_tools(self, failed_tool: str) -> List[str]:
+        """Get list of fallback tools for a given tool"""
+        # Implement fallback logic based on tool category
         tool_categories = {
             'web_search': ['tavily_search', 'web_researcher', 'wikipedia_search'],
             'code_execution': ['python_interpreter', 'code_executor', 'repl_tool'],
@@ -639,54 +659,10 @@ class ToolOrchestrator:
         
         if not failed_category:
             logger.warning(f"No fallback category found for {failed_tool}")
-            return None
+            return []
         
         # Try other tools in same category
-        for fallback_tool in tool_categories[failed_category]:
-            if fallback_tool != failed_tool and fallback_tool in self.registry.tools:
-                logger.info(f"Trying fallback tool: {fallback_tool}")
-                
-                try:
-                    # Adapt parameters if needed
-                    adapted_params = self._adapt_params(failed_tool, fallback_tool, params)
-                    result = await self._execute_tool(
-                        self.registry.get_tool(fallback_tool), 
-                        adapted_params
-                    )
-                    
-                    if result["success"]:
-                        logger.info(f"Fallback tool {fallback_tool} succeeded")
-                        return result
-                        
-                except Exception as e:
-                    logger.warning(f"Fallback tool {fallback_tool} failed: {e}")
-                    continue
-        
-        return None
-
-    def _adapt_params(self, source_tool: str, target_tool: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Adapt parameters from one tool format to another"""
-        # Define parameter mappings
-        param_mappings = {
-            ('web_search', 'tavily_search'): {'query': 'query'},
-            ('web_search', 'wikipedia_search'): {'query': 'search_query'},
-            ('file_reader', 'document_reader'): {'filename': 'file_path', 'lines': 'max_lines'},
-            ('calculator', 'python_interpreter'): lambda p: {'code': f"result = {p.get('expression', '')}; print(result)"}
-        }
-        
-        # Check for direct mapping
-        mapping_key = (source_tool, target_tool)
-        if mapping_key in param_mappings:
-            mapping = param_mappings[mapping_key]
-            
-            if callable(mapping):
-                return mapping(params)
-            else:
-                return {target_key: params.get(source_key, '') 
-                       for source_key, target_key in mapping.items()}
-        
-        # Default: return params as-is
-        return params
+        return [fallback_tool for fallback_tool in tool_categories[failed_category] if fallback_tool != failed_tool]
     
     @circuit_breaker("db_metrics_update", CircuitBreakerConfig(failure_threshold=5, recovery_timeout=60))
     async def _update_database_metrics(self, tool_name: str, success: bool, latency: float, error: str = None):
@@ -775,23 +751,19 @@ class EnhancedSession:
         return self.tool_performance.get(tool_name)
 
 class IntegratedSessionManager:
-    """Session manager with tool integration"""
+    """Enhanced session manager with tool context tracking"""
     
     def __init__(self):
-        self.sessions: Dict[str, EnhancedSession] = {}
-        self.tool_orchestrator: Optional[ToolOrchestrator] = None
+        self.sessions = {}
+        self.tool_orchestrator = None
     
     def create_session(self, session_id: str = None) -> str:
         """Create a new enhanced session"""
         if not session_id:
             session_id = str(uuid.uuid4())
         
-        if session_id not in self.sessions:
-            session = EnhancedSession(session_id=session_id)
-            session.shared_context.session_id = session_id
-            self.sessions[session_id] = session
-            logger.info(f"Created enhanced session: {session_id}")
-        
+        self.sessions[session_id] = EnhancedSession(session_id=session_id)
+        logger.info("Created enhanced session", extra={"session_id": session_id})
         return session_id
     
     def get_session(self, session_id: str) -> Optional[EnhancedSession]:
@@ -1171,7 +1143,7 @@ class IntegrationHub:
             for tool in production_tools:
                 unified_tool_registry.register(tool)
             
-            logger.info(f"Registered {len(unified_tool_registry.tools)} tools in unified registry")
+            logger.info("Registered tools in unified registry", extra={"tool_count": len(unified_tool_registry.tools)})
             
         except ImportError as e:
             logger.warning(f"Some tool modules not available: {e}")
@@ -1421,23 +1393,23 @@ def get_unified_registry() -> UnifiedToolRegistry:
 # ============================================
 
 class SemanticToolDiscovery:
-    """Semantic tool discovery based on task descriptions"""
+    """Semantic tool discovery using embeddings"""
     
     def __init__(self, embedding_manager: EmbeddingManager):
         self.embedding_manager = embedding_manager
         self.tool_embeddings = {}
+        self.tool_descriptions = {}
     
     def index_tool(self, tool_name: str, description: str, examples: List[str]):
         """Index a tool for semantic search"""
-        # Combine description and examples
-        combined_text = f"{description} " + " ".join(examples)
-        embedding = self.embedding_manager.encode(combined_text)
-        self.tool_embeddings[tool_name] = {
-            'embedding': embedding,
-            'description': description,
-            'examples': examples
-        }
-        logger.info(f"Indexed tool for semantic search: {tool_name}")
+        # Create embedding from description and examples
+        text = f"{description} {' '.join(examples)}"
+        embedding = self.embedding_manager.encode(text)
+        
+        self.tool_embeddings[tool_name] = embedding
+        self.tool_descriptions[tool_name] = description
+        
+        logger.info("Indexed tool for semantic search", extra={"tool_name": tool_name})
     
     def find_tools_for_task(self, task_description: str, top_k: int = 5) -> List[Tuple[str, float]]:
         """Find relevant tools for a task using semantic similarity"""
@@ -1445,7 +1417,7 @@ class SemanticToolDiscovery:
         
         similarities = []
         for tool_name, tool_data in self.tool_embeddings.items():
-            similarity = self._cosine_similarity(task_embedding, tool_data['embedding'])
+            similarity = self._cosine_similarity(task_embedding, tool_data)
             similarities.append((tool_name, similarity))
         
         # Sort by similarity
@@ -1460,26 +1432,26 @@ class SemanticToolDiscovery:
             return 0.0
 
 class ToolVersionManager:
-    """Manage tool versions and compatibility"""
+    """Manage tool versions and migrations"""
     
     def __init__(self):
         self.tool_versions = {}
-        self.version_history = defaultdict(list)
+        self.migration_paths = {}
     
     def register_version(self, tool_name: str, version: str, schema: Dict[str, Any]):
-        """Register a tool version"""
-        version_key = f"{tool_name}:{version}"
-        self.tool_versions[version_key] = {
-            'schema': schema,
-            'registered_at': datetime.now(),
-            'deprecated': False
-        }
-        self.version_history[tool_name].append(version)
-        logger.info(f"Registered version {version} for tool {tool_name}")
+        """Register a new version of a tool"""
+        if tool_name not in self.tool_versions:
+            self.tool_versions[tool_name] = {}
+        
+        self.tool_versions[tool_name][version] = schema
+        logger.info("Registered version", extra={
+            "tool_name": tool_name, 
+            "version": version
+        })
     
     def get_latest_version(self, tool_name: str) -> Optional[str]:
         """Get latest version of a tool"""
-        versions = self.version_history.get(tool_name, [])
+        versions = self.tool_versions.get(tool_name, {})
         return versions[-1] if versions else None
     
     def migrate_params(self, tool_name: str, params: Dict[str, Any], 
@@ -1570,17 +1542,17 @@ class MonitoringDashboard:
         return {
             'total_tools': len(registry.tools),
             'reliability_scores': {
-                name: metrics.get('success_count', 0) / max(metrics.get('total_calls', 1), 1)
-                for name, metrics in registry.tool_reliability.items()
+                name: metrics.get('successful_calls', 0) / max(metrics.get('total_calls', 1), 1)
+                for name, metrics in registry.tool_metrics.items()
             },
             'most_used': sorted(
-                registry.tool_reliability.items(),
+                registry.tool_metrics.items(),
                 key=lambda x: x[1].get('total_calls', 0),
                 reverse=True
             )[:5],
             'avg_latencies': {
                 name: metrics.get('avg_latency', 0.0)
-                for name, metrics in registry.tool_reliability.items()
+                for name, metrics in registry.tool_metrics.items()
             }
         }
     
@@ -1732,7 +1704,7 @@ class IntegrationTestFramework:
         doc, mcp = registry.register(test_tool, {"description": "Test tool"})
         
         assert registry.get_tool("test_tool") == test_tool
-        assert "test_tool" in registry.tool_reliability
+        assert "test_tool" in registry.tool_metrics
         
         return "Tool registration working"
     
@@ -1792,7 +1764,7 @@ class IntegrationTestFramework:
         return "Cross-tool communication framework available"
 
 class MigrationHelper:
-    """Help migrate from old registry system to unified system"""
+    """Helper for migrating tools between registries"""
     
     def __init__(self, old_registry, unified_registry: UnifiedToolRegistry):
         self.old_registry = old_registry
@@ -1803,7 +1775,7 @@ class MigrationHelper:
         migration_report = {
             'migrated': [],
             'failed': [],
-            'warnings': []
+            'skipped': []
         }
         
         # Migrate from old ToolRegistry
@@ -1829,13 +1801,16 @@ class MigrationHelper:
                         self.unified_registry.mcp_announcements[tool_name] = announcement
                         migration_report['migrated'].append(f"{tool_name}_mcp")
                 except Exception as e:
-                    migration_report['warnings'].append({
+                    migration_report['skipped'].append({
                         'tool': tool_name,
-                        'warning': f"MCP migration failed: {e}"
+                        'warning': f"MCP migration skipped: {e}"
                     })
         
-        logger.info(f"Migration completed: {len(migration_report['migrated'])} migrated, "
-                   f"{len(migration_report['failed'])} failed")
+        logger.info("Migration completed", extra={
+            "migrated_count": len(migration_report['migrated']),
+            "failed_count": len(migration_report['failed']),
+            "skipped_count": len(migration_report['skipped'])
+        })
         
         return migration_report
     
@@ -1849,33 +1824,4 @@ class MigrationHelper:
         }
         
         # Add any additional conversion logic here
-        return tool_doc
-
-# New helper functions for new components
-def get_tool_compatibility_checker() -> Optional[ToolCompatibilityChecker]:
-    """Get tool compatibility checker"""
-    return integration_hub.get_tool_compatibility_checker() if integration_hub else None
-
-def get_semantic_discovery() -> Optional['SemanticToolDiscovery']:
-    """Get semantic tool discovery"""
-    return integration_hub.get_semantic_discovery() if integration_hub else None
-
-def get_resource_manager() -> Optional[ResourcePoolManager]:
-    """Get resource pool manager"""
-    return integration_hub.get_resource_manager() if integration_hub else None
-
-def get_tool_version_manager() -> Optional[ToolVersionManager]:
-    """Get tool version manager"""
-    return integration_hub.get_tool_version_manager() if integration_hub else None
-
-def get_monitoring_dashboard() -> Optional[MonitoringDashboard]:
-    """Get monitoring dashboard"""
-    return integration_hub.get_monitoring_dashboard() if integration_hub else None
-
-def get_rate_limit_manager() -> Optional[RateLimitManager]:
-    """Get rate limit manager"""
-    return integration_hub.get_rate_limit_manager() if integration_hub else None
-
-def get_test_framework() -> Optional[IntegrationTestFramework]:
-    """Get integration test framework"""
-    return integration_hub.get_test_framework() if integration_hub else None 
+        return tool_doc 

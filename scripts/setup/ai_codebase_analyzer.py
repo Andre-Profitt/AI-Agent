@@ -22,10 +22,11 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import traceback
+from src.utils.structured_logging import get_structured_logger
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+logger = get_structured_logger(__name__)
 
 
 @dataclass
@@ -529,40 +530,25 @@ class CodebaseAnalyzer:
 
 def print_report(report: Dict[str, Any]) -> None:
     """Pretty print the analysis report"""
-    print("\n" + "="*80)
-    print("🔍 CODEBASE ANALYSIS REPORT")
-    print("="*80 + "\n")
+    logger.info("CODEBASE ANALYSIS REPORT", extra={"section": "header"})
     
     # Summary
     summary = report["summary"]
-    print(f"📊 SUMMARY")
-    print(f"   Total upgrade points: {summary['total_upgrade_points']}")
-    print(f"   Files analyzed: {summary['files_analyzed']}")
-    print(f"   By category:")
-    for cat, count in summary["by_category"].items():
-        print(f"      - {cat.capitalize()}: {count}")
-    print()
+    logger.info("SUMMARY", extra={"total_upgrade_points": summary['total_upgrade_points'], "files_analyzed": summary['files_analyzed']})
+    logger.info("By category", extra={"by_category": summary['by_category']})
     
     # Details by category
     for category in ["monitoring", "orchestration", "testing", "agent_specific"]:
         if category in report:
             cat_data = report[category]
-            print(f"\n📌 {category.upper()} UPGRADE POINTS")
-            print("-" * 60)
-            
+            logger.info("UPGRADE POINTS", extra={"category": category})
             for priority in ["high", "medium", "low"]:
                 points = cat_data[f"{priority}_priority"]
                 if points:
-                    print(f"\n🔴 {priority.upper()} Priority ({len(points)} items):")
+                    logger.info("Priority points", extra={"priority": priority, "count": len(points)})
                     for point in points[:3]:  # Show top 3
-                        print(f"   📁 {point['file']}:{point['line']}")
-                        print(f"      Issue: {point['description']}")
-                        print(f"      Fix: {point['suggestion']}")
-                        print()
-            
-            print("\n💡 Recommendations:")
-            for rec in cat_data["recommendations"]:
-                print(f"   • {rec}")
+                        logger.info("Upgrade point", extra={"file": point['file'], "line": point['line'], "description": point['description'], "suggestion": point['suggestion']})
+            logger.info("Recommendations", extra={"recommendations": cat_data["recommendations"]})
 
 
 def generate_markdown_report(report: Dict[str, Any]) -> str:

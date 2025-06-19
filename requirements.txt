@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # Core dependencies
-numpy==2.3.0
+numpy==1.26.4
 langchain==0.3.25
 langchain-core==0.3.64
 langchain-openai==0.3.20
@@ -30,14 +30,14 @@ matplotlib==3.8.2
 networkx==3.2.1
 
 # Web framework and API
-fastapi==0.104.1
+fastapi==0.115.2
 gradio==5.25.2
 uvicorn==0.24.0
 aiofiles==23.2.1
 aiohttp==3.9.1
 
 # Data processing
-pandas==2.1.4
+pandas==2.2.3
 openpyxl==3.1.2
 pypdf==5.6.0
 python-docx==1.1.0
