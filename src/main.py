@@ -19,6 +19,9 @@ from src.presentation.cli.cli_interface import CLIInterface
 from src.application.agents.agent_factory import AgentFactory
 from src.application.tools.tool_factory import ToolFactory
 from src.core.use_cases.process_message import ProcessMessageUseCase
+from src.core.use_cases.manage_agent import ManageAgentUseCase
+from src.core.use_cases.execute_tool import ExecuteToolUseCase
+from src.core.use_cases.manage_session import ManageSessionUseCase
 from src.shared.types import SystemConfig, Environment
 
 
@@ -85,24 +88,53 @@ class AIAgentApplication:
         self.container.register_instance("logging_service", logging_service)
     
     async def _initialize_services(self) -> None:
-        """Initialize all application services."""
-        # Use container to resolve all dependencies
+        """Initialize all application services with proper dependency injection."""
+        
+        # Resolve all repositories from container
+        agent_repo = self.container.resolve("agent_repository")
         message_repo = self.container.resolve("message_repository")
         tool_repo = self.container.resolve("tool_repository")
         session_repo = self.container.resolve("session_repository")
+        
+        # Resolve executors and services
         agent_executor = self.container.resolve("agent_executor")
         tool_executor = self.container.resolve("tool_executor")
         logging_service = self.container.resolve("logging_service")
-        # Initialize use cases
+        
+        # Initialize ProcessMessageUseCase with ALL dependencies
         process_message_use_case = ProcessMessageUseCase(
-            agent_repository=None,  # TODO: wire up agent repo if needed
+            agent_repository=agent_repo,  # FIX: Wire up agent repository
             message_repository=message_repo,
             agent_executor=agent_executor,
             logging_service=logging_service,
             config=self.config.agent_config
         )
+        
+        # Register the use case in container
         self.container.register_instance("process_message_use_case", process_message_use_case)
-        self.logger.info("All services initialized successfully")
+        
+        # Initialize other use cases
+        manage_agent_use_case = ManageAgentUseCase(
+            agent_repository=agent_repo,
+            logging_service=logging_service
+        )
+        self.container.register_instance("manage_agent_use_case", manage_agent_use_case)
+        
+        execute_tool_use_case = ExecuteToolUseCase(
+            tool_repository=tool_repo,
+            tool_executor=tool_executor,
+            logging_service=logging_service
+        )
+        self.container.register_instance("execute_tool_use_case", execute_tool_use_case)
+        
+        manage_session_use_case = ManageSessionUseCase(
+            session_repository=session_repo,
+            message_repository=message_repo,
+            logging_service=logging_service
+        )
+        self.container.register_instance("manage_session_use_case", manage_session_use_case)
+        
+        self.logger.info("All services initialized with proper dependency injection")
     
     async def _initialize_interfaces(self) -> None:
         """Initialize user interfaces."""

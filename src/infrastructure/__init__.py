@@ -9,7 +9,6 @@ This module contains infrastructure components including:
 - Integrations
 """
 
-from .database import Database
 from .database_enhanced import DatabaseEnhanced
 from .config import Config
 from .config_cli import ConfigCLI
@@ -18,7 +17,6 @@ from .gaia_logic import GaiaLogic
 from .integrations import Integrations
 
 __all__ = [
-    "Database",
     "DatabaseEnhanced",
     "Config",
     "ConfigCLI",

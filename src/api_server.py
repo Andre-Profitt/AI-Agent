@@ -8,6 +8,7 @@ import json
 import logging
 import time
 import uuid
+import os
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Union
 from contextlib import asynccontextmanager
@@ -26,12 +27,20 @@ from src.unified_architecture import (
     MultiAgentPlatform, Agent, Task, Resource, Conflict, 
     PerformanceMetrics, WorkflowDefinition, WorkflowExecution
 )
+from src.unified_architecture.platform import PlatformConfig
+from src.unified_architecture.enhanced_platform import AgentMetadata
+from src.core.entities.agent import AgentType
+from src.application.agents.agent_factory import AgentFactory
 from src.infrastructure.database.supabase_repositories import (
     SupabaseAgentRepository, SupabaseTaskRepository, 
     SupabaseSessionRepository, SupabaseToolRepository
 )
 from src.infrastructure.monitoring.metrics import MetricsCollector
 from src.infrastructure.circuit_breaker.circuit_breaker import CircuitBreakerRegistry
+from src.infrastructure.agents.concrete_agents import (
+    FSMReactAgentImpl, NextGenAgentImpl, CrewAgentImpl, SpecializedAgentImpl
+)
+from src.infrastructure.di.container import get_container
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -259,6 +268,86 @@ async def health_check():
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=503, detail="Health check failed")
+
+# Global variables
+agent_factory = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager with proper platform initialization"""
+    global platform, redis_client, agent_factory
+    
+    # Initialize DI container
+    container = get_container()
+    
+    # Initialize Redis connection
+    try:
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+        global redis_client
+        redis_client = await aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+        await redis_client.ping()
+        logger.info("Redis connection established")
+    except Exception as e:
+        logger.warning(f"Redis connection failed: {e}")
+        redis_client = None
+    
+    # Initialize platform with configuration
+    try:
+        # Create platform configuration
+        platform_config = PlatformConfig(
+            max_concurrent_tasks=100,
+            task_timeout=300,
+            heartbeat_interval=30,
+            cleanup_interval=3600,
+            enable_marketplace=True,
+            enable_dashboard=True,
+            enable_performance_tracking=True,
+            enable_conflict_resolution=True,
+            storage_backend="redis" if redis_client else "memory",
+            log_level="INFO"
+        )
+        
+        # Create and initialize platform
+        global platform
+        platform = MultiAgentPlatform(platform_config)
+        
+        # Start platform services
+        await platform.start()
+        
+        # Initialize agent factory
+        global agent_factory
+        agent_factory = AgentFactory()
+        
+        # Pre-create some default agents
+        await _initialize_default_agents(platform, agent_factory)
+        
+        logger.info("Multi-Agent Platform initialized successfully")
+        
+    except Exception as e:
+        logger.error(f"Failed to initialize platform: {e}")
+        raise
+    
+    yield
+    
+    # Cleanup on shutdown
+    try:
+        # Shutdown platform
+        if platform:
+            await platform.stop()
+            logger.info("Platform stopped")
+        
+        # Shutdown all agents
+        if agent_factory:
+            await agent_factory.shutdown_all()
+            logger.info("All agents shut down")
+        
+        # Close Redis connection
+        if redis_client:
+            await redis_client.close()
+            logger.info("Redis connection closed")
+            
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
 
 # Agent Management
 @router.post("/agents", response_model=AgentResponse)
@@ -881,10 +970,28 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Redis connection failed: {e}")
         redis_client = None
     
-    # Initialize platform
+    # Initialize platform with proper configuration
     try:
-        platform = MultiAgentPlatform()
-        logger.info("Multi-Agent Platform initialized")
+        # Configure platform
+        platform_config = PlatformConfig(
+            max_concurrent_tasks=100,
+            enable_marketplace=True,
+            enable_dashboard=True,
+            enable_performance_tracking=True,
+            enable_conflict_resolution=True,
+            storage_backend="redis" if redis_client else "memory",
+            log_level="INFO"
+        )
+        
+        # Create and initialize platform
+        platform = MultiAgentPlatform(platform_config)
+        await platform.start()
+        
+        # Register default agents
+        await _register_default_agents(platform)
+        
+        logger.info("Multi-Agent Platform initialized and started successfully")
+        
     except Exception as e:
         logger.error(f"Failed to initialize platform: {e}")
         raise
@@ -892,9 +999,48 @@ async def lifespan(app: FastAPI):
     yield
     
     # Cleanup
+    if platform:
+        await platform.stop()
+        logger.info("Platform stopped")
+    
     if redis_client:
         await redis_client.close()
         logger.info("Redis connection closed")
+
+async def _register_default_agents(platform: MultiAgentPlatform):
+    """Register default agents with the platform"""
+    try:
+        # Create and register FSM React Agent
+        fsm_agent = FSMReactAgentImpl()
+        await fsm_agent.initialize()
+        await platform.register_agent(fsm_agent, fsm_agent.metadata)
+        logger.info("FSM React Agent registered")
+        
+        # Create and register Next Gen Agent
+        next_gen_agent = NextGenAgentImpl()
+        await next_gen_agent.initialize()
+        await platform.register_agent(next_gen_agent, next_gen_agent.metadata)
+        logger.info("Next Gen Agent registered")
+        
+        # Create and register Crew Agent
+        crew_agent = CrewAgentImpl()
+        await crew_agent.initialize()
+        await platform.register_agent(crew_agent, crew_agent.metadata)
+        logger.info("Crew Agent registered")
+        
+        # Create and register specialized agents for common domains
+        domains = ["data_analysis", "code_generation", "research", "creative"]
+        for domain in domains:
+            specialized_agent = SpecializedAgentImpl(domain)
+            await specialized_agent.initialize()
+            await platform.register_agent(specialized_agent, specialized_agent.metadata)
+            logger.info(f"Specialized {domain} Agent registered")
+        
+        logger.info(f"Total agents registered: {len(platform.agents)}")
+        
+    except Exception as e:
+        logger.error(f"Failed to register default agents: {e}")
+        raise
 
 # Create FastAPI application
 app = FastAPI(

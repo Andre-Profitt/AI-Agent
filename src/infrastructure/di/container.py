@@ -11,6 +11,7 @@ from src.infrastructure.database.in_memory_message_repository import InMemoryMes
 from src.infrastructure.database.in_memory_session_repository import InMemorySessionRepository
 from src.infrastructure.database.in_memory_tool_repository import InMemoryToolRepository
 from src.infrastructure.database.in_memory_user_repository import InMemoryUserRepository
+from src.infrastructure.database.in_memory_agent_repository import InMemoryAgentRepository
 from src.infrastructure.logging.logging_service import LoggingService
 from src.infrastructure.config.configuration_service import ConfigurationService
 from src.application.agents.agent_executor import AgentExecutor
@@ -181,6 +182,7 @@ def setup_container():
     container.register('session_repository', lambda c: InMemorySessionRepository())
     container.register('tool_repository', lambda c: InMemoryToolRepository())
     container.register('user_repository', lambda c: InMemoryUserRepository())
+    container.register('agent_repository', lambda c: InMemoryAgentRepository())
     # Register services
     container.register('logging_service', lambda c: LoggingService(LoggingConfig()), singleton=True)
     container.register('configuration_service', lambda c: ConfigurationService(), singleton=True)

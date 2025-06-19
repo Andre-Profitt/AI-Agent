@@ -30,7 +30,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # =============================
-# PART 1: UNIFIED AGENT INTERFACE
+# ENUMS AND CONSTANTS
 # =============================
 
 class AgentCapability(Enum):
@@ -43,6 +43,18 @@ class AgentCapability(Enum):
     COLLABORATION = auto()
     PLANNING = auto()
     EXECUTION = auto()
+    VISION = auto()
+    AUDIO = auto()
+    TEXT_PROCESSING = auto()
+    DATA_ANALYSIS = auto()
+    WEB_SCRAPING = auto()
+    FILE_PROCESSING = auto()
+    MATHEMATICS = auto()
+    CREATIVITY = auto()
+    DECISION_MAKING = auto()
+    OPTIMIZATION = auto()
+    SIMULATION = auto()
+    MONITORING = auto()
 
 class AgentStatus(Enum):
     """Agent operational status"""
@@ -52,6 +64,19 @@ class AgentStatus(Enum):
     OFFLINE = auto()
     ERROR = auto()
     MAINTENANCE = auto()
+
+class TaskStatus(Enum):
+    """Task execution status"""
+    PENDING = auto()
+    RUNNING = auto()
+    COMPLETED = auto()
+    FAILED = auto()
+    CANCELLED = auto()
+    TIMEOUT = auto()
+
+# =============================
+# PART 1: UNIFIED AGENT INTERFACE
+# =============================
 
 @dataclass
 class AgentMetadata:

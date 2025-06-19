@@ -8,7 +8,7 @@ from uuid import UUID
 import time
 import logging
 
-from src.core.entities.agent import Agent, AgentState
+from src.core.entities.agent import Agent, AgentState, AgentType
 from src.core.entities.message import Message, MessageType
 from src.core.interfaces.agent_repository import AgentRepository
 from src.core.interfaces.message_repository import MessageRepository
