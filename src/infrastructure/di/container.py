@@ -1,31 +1,13 @@
-"""
-Dependency injection container for managing service dependencies.
-"""
+"""Enhanced Dependency Injection Container with Agent Factory Integration"""
 
-from typing import Dict, Any, Type, Optional, Callable
 import logging
-from functools import wraps
-
+from typing import Any, Callable, Dict, Optional, Type, TypeVar
 from src.shared.exceptions import InfrastructureException
-from src.infrastructure.database.in_memory_message_repository import InMemoryMessageRepository
-from src.infrastructure.database.in_memory_session_repository import InMemorySessionRepository
-from src.infrastructure.database.in_memory_tool_repository import InMemoryToolRepository
-from src.infrastructure.database.in_memory_user_repository import InMemoryUserRepository
-from src.infrastructure.database.in_memory_agent_repository import InMemoryAgentRepository
-from src.infrastructure.logging.logging_service import LoggingService
-from src.infrastructure.config.configuration_service import ConfigurationService
-from src.application.agents.agent_executor import AgentExecutor
-from src.application.tools.tool_executor import ToolExecutor
-from src.shared.types.config import LoggingConfig
 
+T = TypeVar('T')
 
-class Container:
-    """
-    Simple dependency injection container.
-    
-    This container manages the creation and lifecycle of services,
-    ensuring proper dependency resolution and singleton management.
-    """
+class DIContainer:
+    """Enhanced Dependency Injection Container"""
     
     def __init__(self):
         self._services: Dict[str, Any] = {}
@@ -33,80 +15,52 @@ class Container:
         self._singletons: Dict[str, Any] = {}
         self.logger = logging.getLogger(__name__)
     
-    def register(self, service_name: str, factory: Callable, singleton: bool = True) -> None:
-        """
-        Register a service with the container.
+    def register_singleton(self, name: str, factory: Callable[[], T]) -> None:
+        """Register a singleton service"""
+        if name in self._singletons:
+            raise InfrastructureException(f"Singleton {name} already registered")
         
-        Args:
-            service_name: Name of the service
-            factory: Factory function to create the service
-            singleton: Whether the service should be a singleton
-        """
-        self._factories[service_name] = factory
-        if not singleton:
-            self._services[service_name] = None  # Mark as non-singleton
+        self._factories[name] = factory
+        self.logger.debug(f"Registered singleton: {name}")
     
-    def register_instance(self, service_name: str, instance: Any) -> None:
-        """
-        Register an existing instance with the container.
-        
-        Args:
-            service_name: Name of the service
-            instance: The service instance
-        """
-        self._singletons[service_name] = instance
+    def register_transient(self, name: str, factory: Callable[[], T]) -> None:
+        """Register a transient service"""
+        self._factories[name] = factory
+        self.logger.debug(f"Registered transient: {name}")
     
-    def resolve(self, service_name: str) -> Any:
-        """
-        Resolve a service from the container.
+    def register_instance(self, name: str, instance: T) -> None:
+        """Register an existing instance"""
+        self._services[name] = instance
+        self._singletons[name] = instance
+        self.logger.debug(f"Registered instance: {name}")
+    
+    def resolve(self, name: str) -> Any:
+        """Resolve a service by name"""
+        # Check if instance already exists
+        if name in self._services:
+            return self._services[name]
         
-        Args:
-            service_name: Name of the service to resolve
-            
-        Returns:
-            The resolved service instance
-            
-        Raises:
-            InfrastructureException: If service cannot be resolved
-        """
-        # Check if we have a singleton instance
-        if service_name in self._singletons:
-            return self._singletons[service_name]
+        # Check if it's a singleton that needs to be created
+        if name in self._singletons:
+            return self._singletons[name]
         
-        # Check if we have a factory
-        if service_name not in self._factories:
-            raise InfrastructureException(f"Service '{service_name}' not registered")
-        
-        # Create new instance
-        factory = self._factories[service_name]
-        try:
-            instance = factory(self)
+        # Check if factory exists
+        if name in self._factories:
+            # Create instance
+            instance = self._factories[name]()
             
-            # Store as singleton if configured
-            if service_name not in self._services or self._services[service_name] is not None:
-                self._singletons[service_name] = instance
+            # If it's meant to be a singleton, store it
+            if name in self._factories and name not in self._services:
+                self._singletons[name] = instance
+                self._services[name] = instance
             
             return instance
-            
-        except Exception as e:
-            self.logger.error(f"Failed to resolve service '{service_name}': {str(e)}")
-            raise InfrastructureException(f"Failed to resolve service '{service_name}': {str(e)}")
-    
-    def resolve_all(self, service_names: list[str]) -> Dict[str, Any]:
-        """
-        Resolve multiple services at once.
         
-        Args:
-            service_names: List of service names to resolve
-            
-        Returns:
-            Dictionary mapping service names to instances
-        """
-        return {name: self.resolve(name) for name in service_names}
+        raise InfrastructureException(f"Service {name} not registered")
     
-    def has_service(self, service_name: str) -> bool:
-        """Check if a service is registered."""
-        return service_name in self._factories or service_name in self._singletons
+    def has(self, name: str) -> bool:
+        """Check if a service is registered"""
+        return name in self._services or name in self._factories
     
     def clear(self) -> None:
         """Clear all registered services."""
@@ -120,17 +74,99 @@ class Container:
 
 
 # Global container instance
-_container: Optional[Container] = None
+_container: Optional[DIContainer] = None
 
 
-def get_container() -> Container:
-    """Get the global container instance."""
+def get_container() -> DIContainer:
+    """Get the global container instance"""
     global _container
     if _container is None:
-        _container = Container()
+        _container = DIContainer()
+        setup_container()
     return _container
 
 
+def setup_container() -> None:
+    """Setup all container dependencies including Agent Factory"""
+    container = get_container()
+    
+    # Import all required modules
+    from src.infrastructure.config.configuration_service import ConfigurationService
+    from src.infrastructure.logging.logging_service import LoggingService
+    from src.application.agents.agent_factory import AgentFactory
+    from src.application.tools.tool_factory import ToolFactory
+    
+    # Repositories
+    from src.infrastructure.database.in_memory_agent_repository import InMemoryAgentRepository
+    from src.infrastructure.database.in_memory_message_repository import InMemoryMessageRepository
+    from src.infrastructure.database.in_memory_tool_repository import InMemoryToolRepository
+    from src.infrastructure.database.in_memory_session_repository import InMemorySessionRepository
+    
+    # Use cases
+    from src.core.use_cases.process_message import ProcessMessageUseCase
+    from src.core.use_cases.manage_agent import ManageAgentUseCase
+    from src.core.use_cases.execute_tool import ExecuteToolUseCase
+    from src.core.use_cases.manage_session import ManageSessionUseCase
+    
+    # Executors
+    from src.application.agents.agent_executor import AgentExecutor
+    from src.application.tools.tool_executor import ToolExecutor
+    
+    # Register configuration as singleton
+    container.register_singleton("configuration_service", ConfigurationService)
+    
+    # Register logging as singleton
+    container.register_singleton("logging_service", lambda: LoggingService(
+        container.resolve("configuration_service").config.logging_config
+    ))
+    
+    # Register repositories as singletons
+    container.register_singleton("agent_repository", InMemoryAgentRepository)
+    container.register_singleton("message_repository", InMemoryMessageRepository)
+    container.register_singleton("tool_repository", InMemoryToolRepository)
+    container.register_singleton("session_repository", InMemorySessionRepository)
+    
+    # Register factories as singletons
+    container.register_singleton("tool_factory", ToolFactory)
+    container.register_singleton("agent_factory", lambda: AgentFactory(
+        tool_factory=container.resolve("tool_factory")
+    ))
+    
+    # Register executors
+    container.register_singleton("agent_executor", lambda: AgentExecutor())
+    container.register_singleton("tool_executor", lambda: ToolExecutor())
+    
+    # Register use cases as transient (new instance each time)
+    container.register_transient("process_message_use_case", lambda: ProcessMessageUseCase(
+        agent_repository=container.resolve("agent_repository"),
+        message_repository=container.resolve("message_repository"),
+        agent_executor=container.resolve("agent_executor"),
+        logging_service=container.resolve("logging_service"),
+        config=container.resolve("configuration_service").config.agent_config
+    ))
+    
+    container.register_transient("manage_agent_use_case", lambda: ManageAgentUseCase(
+        agent_repository=container.resolve("agent_repository"),
+        agent_factory=container.resolve("agent_factory"),
+        logging_service=container.resolve("logging_service")
+    ))
+    
+    container.register_transient("execute_tool_use_case", lambda: ExecuteToolUseCase(
+        tool_repository=container.resolve("tool_repository"),
+        tool_executor=container.resolve("tool_executor"),
+        logging_service=container.resolve("logging_service")
+    ))
+    
+    container.register_transient("manage_session_use_case", lambda: ManageSessionUseCase(
+        session_repository=container.resolve("session_repository"),
+        message_repository=container.resolve("message_repository"),
+        logging_service=container.resolve("logging_service")
+    ))
+    
+    container.logger.info("Dependency container configured successfully")
+
+
+# Legacy compatibility functions
 def inject(*service_names: str):
     """
     Decorator to inject dependencies into a function or method.
@@ -142,10 +178,11 @@ def inject(*service_names: str):
         Decorated function with injected dependencies
     """
     def decorator(func: Callable) -> Callable:
+        from functools import wraps
         @wraps(func)
         def wrapper(*args, **kwargs):
             container = get_container()
-            dependencies = container.resolve_all(service_names)
+            dependencies = {name: container.resolve(name) for name in service_names}
             
             # Inject dependencies as keyword arguments
             kwargs.update(dependencies)
@@ -172,20 +209,4 @@ def singleton(cls: Type) -> Type:
             instances[cls] = cls(*args, **kwargs)
         return instances[cls]
     
-    return get_instance
-
-
-def setup_container():
-    container = get_container()
-    # Register repositories
-    container.register('message_repository', lambda c: InMemoryMessageRepository())
-    container.register('session_repository', lambda c: InMemorySessionRepository())
-    container.register('tool_repository', lambda c: InMemoryToolRepository())
-    container.register('user_repository', lambda c: InMemoryUserRepository())
-    container.register('agent_repository', lambda c: InMemoryAgentRepository())
-    # Register services
-    container.register('logging_service', lambda c: LoggingService(LoggingConfig()), singleton=True)
-    container.register('configuration_service', lambda c: ConfigurationService(), singleton=True)
-    container.register('agent_executor', lambda c: AgentExecutor(), singleton=True)
-    container.register('tool_executor', lambda c: ToolExecutor(), singleton=True)
-    return container 
+    return get_instance 

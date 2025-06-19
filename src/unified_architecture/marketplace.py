@@ -39,11 +39,11 @@ class RatingCategory(Enum):
 @dataclass
 class AgentRating:
     """Rating for an agent"""
-    id: UUID = field(default_factory=uuid4)
     agent_id: UUID = field()
     reviewer_id: UUID = field()
     category: RatingCategory = field()
     score: float = field()  # 1.0 to 5.0
+    id: UUID = field(default_factory=uuid4)
     review: str = field(default="")
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime = field(default_factory=datetime.utcnow)
@@ -56,12 +56,12 @@ class AgentRating:
 @dataclass
 class AgentListing:
     """Listing for an agent in the marketplace"""
-    id: UUID = field(default_factory=uuid4)
     agent_id: UUID = field()
     name: str = field()
     description: str = field()
     version: str = field()
     author: str = field()
+    id: UUID = field(default_factory=uuid4)
     capabilities: List[AgentCapability] = field(default_factory=list)
     tags: List[str] = field(default_factory=list)
     status: ListingStatus = field(default=ListingStatus.PENDING_REVIEW)

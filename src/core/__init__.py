@@ -10,14 +10,14 @@ This module contains core components including:
 """
 
 from .optimized_chain_of_thought import OptimizedChainOfThought
-from .langchain_enhanced import LangChainEnhanced
+from .langchain_enhanced import EnhancedLangChainAgent
 from .llamaindex_enhanced import LlamaIndexEnhanced
 from .langgraph_resilience_patterns import LangGraphResiliencePatterns
 from .reasoning_path import ReasoningPath
 
 __all__ = [
     "OptimizedChainOfThought",
-    "LangChainEnhanced",
+    "EnhancedLangChainAgent",
     "LlamaIndexEnhanced", 
     "LangGraphResiliencePatterns",
     "ReasoningPath"

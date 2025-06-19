@@ -40,6 +40,9 @@ from ui import (
     export_conversation_to_file
 )
 from gaia_logic import GAIAEvaluator, GAIA_AVAILABLE
+from src.agents.gaia_enhanced_agent import EnhancedGAIAAgent
+from src.monitoring.gaia_dashboard import get_gaia_dashboard
+from src.optimization.gaia_optimizer import get_gaia_optimizer
 
 # Only load .env file if not in a Hugging Face Space
 if config.environment != Environment.HUGGINGFACE_SPACE:
@@ -132,6 +135,7 @@ class AIAgentApp:
         self.log_handler = None
         self.model_name = None
         self.integration_hub = None
+        self.gaia_agent = None
         self.setup_environment()
         self.initialize_components()
         
@@ -173,6 +177,15 @@ class AIAgentApp:
                 
                 # Initialize session manager
                 self.session_manager = SessionManager(max_sessions=10)
+                
+                # Initialize enhanced GAIA agent
+                try:
+                    self.gaia_agent = EnhancedGAIAAgent(log_handler=self.log_handler)
+                    logger.info("Enhanced GAIA agent initialized")
+                except Exception as e:
+                    logger.warning(f"Enhanced GAIA agent initialization failed: {e}")
+                    self.gaia_agent = None
+                
                 logger.info("All components initialized successfully")
                 break
             except Exception as e:
@@ -264,44 +277,80 @@ class AIAgentApp:
             error_message = f"I encountered an error: {str(e)}"
             return history + [[message, error_message]], session_id
         
+    async def chat_interface_logic_sync(self, message: str, history: List[List[str]]) -> str:
+        """Enhanced chat interface with database tracking"""
+        try:
+            # Validate input
+            validation_result = validate_user_prompt(message)
+            if not validation_result.is_valid:
+                return f"❌ {validation_result.error_message}"
+            
+            # Process with enhanced agent
+            if self.gaia_agent:
+                response = await self.gaia_agent.process_query(
+                    message, 
+                    difficulty='medium',
+                    session_id=str(uuid4())
+                )
+            else:
+                # Fallback to existing agent
+                response = self.agent.run({"input": message})
+                response = response.get("output", "No response generated")
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error in chat interface: {e}")
+            return f"❌ An error occurred: {str(e)}"
+    
+    async def get_gaia_metrics(self) -> Dict[str, Any]:
+        """Get GAIA performance metrics"""
+        if self.gaia_agent:
+            return await self.gaia_agent.get_performance_metrics()
+        return {"error": "GAIA agent not available"}
+
     def build_interface(self):
         """Build the Gradio interface."""
-        return build_gradio_interface(
-            self.process_chat_message,
-            self.process_gaia_questions,
-            self.session_manager
-        )
+        return create_interface()
 
-def build_gradio_interface(process_chat_message, process_gaia_questions, session_manager):
-    """Build the Gradio interface with all tabs and features."""
+def create_interface():
+    """Create the main Gradio interface with GAIA dashboard"""
     
-    # Create custom CSS
-    custom_css = create_custom_css()
-    
-    with gr.Blocks(css=custom_css, title="AI Agent System") as interface:
-        gr.Markdown("# 🤖 Advanced AI Agent System")
+    with gr.Blocks(title="GAIA AI Agent") as interface:
+        gr.Markdown("# 🤖 GAIA AI Agent with Database Integration")
         
         with gr.Tabs():
-            # Main Chat Tab
-            with gr.Tab("💬 Advanced Chat"):
-                create_main_chat_interface(process_chat_message, session_manager)
+            # Chat Tab
+            with gr.TabItem("💬 Advanced Chat"):
+                chatbot = gr.Chatbot(height=600)
+                msg = gr.Textbox(label="Ask me anything...", placeholder="Type your question here")
+                clear = gr.Button("Clear")
+                
+                # Chat functionality
+                msg.submit(chat_interface_logic_sync, [msg, chatbot], [msg, chatbot])
+                clear.click(lambda: None, None, chatbot, queue=False)
             
             # GAIA Evaluation Tab
-            if GAIA_AVAILABLE:
-                with gr.Tab("🏆 GAIA Evaluation"):
-                    create_gaia_evaluation_tab(process_gaia_questions)
+            with gr.TabItem("🏆 GAIA Evaluation"):
+                gr.Markdown("## GAIA Benchmark Evaluation")
+                # Add GAIA evaluation components here
             
-            # Analytics Tab
-            with gr.Tab("📊 Analytics"):
-                create_analytics_tab()
+            # Performance Dashboard Tab
+            with gr.TabItem("📊 Performance Dashboard"):
+                dashboard = get_gaia_dashboard()
+                dashboard_interface = dashboard.create_dashboard_interface()
             
-            # Documentation Tab
-            with gr.Tab("📚 Documentation"):
-                create_documentation_tab()
-        
-        # Footer
-        gr.Markdown("---")
-        gr.Markdown("Built with ❤️ using Gradio and LangChain")
+            # Optimization Tab
+            with gr.TabItem("⚡ Performance Optimization"):
+                gr.Markdown("## Automated Performance Analysis")
+                optimize_btn = gr.Button("🔍 Analyze Performance", variant="primary")
+                report_output = gr.Markdown()
+                
+                def generate_optimization_report():
+                    optimizer = get_gaia_optimizer()
+                    return asyncio.run(optimizer.get_optimization_report())
+                
+                optimize_btn.click(generate_optimization_report, outputs=[report_output])
     
     return interface
 

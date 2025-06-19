@@ -9,17 +9,17 @@ This module contains infrastructure components including:
 - Integrations
 """
 
-from .database_enhanced import DatabaseEnhanced
+# from .database_enhanced import DatabaseEnhanced  # Removed, does not exist
 from .config import Config
-from .config_cli import ConfigCLI
+# from .config_cli import ConfigCLI  # Removed, does not exist
 from .session import Session
 from .gaia_logic import GaiaLogic
 from .integrations import Integrations
 
 __all__ = [
-    "DatabaseEnhanced",
+    # "DatabaseEnhanced",  # Removed
     "Config",
-    "ConfigCLI",
+    # "ConfigCLI",  # Removed
     "Session",
     "GaiaLogic",
     "Integrations"
