@@ -7,14 +7,14 @@
 # Core dependencies
 numpy==1.24.3
 langchain==0.3.25
-langchain-core==0.3.60
+langchain-core==0.3.64
 langchain-openai==0.3.20
 langchain-community==0.3.20
 langgraph==0.2.70
 llama-index==0.9.9
 llama-index-core==0.9.56
 llama-index-readers-file==0.4.9
-pydantic==2.5.0
+pydantic==2.7.4
 typing-extensions==4.8.0
 duckduckgo-search==3.9.3
 
