@@ -1,0 +1,101 @@
+{
+  "baseline": {
+    "cpu_percent": 65.0447219609947,
+    "memory_percent": 39.76330112248644,
+    "memory_mb": 693.1032844493699,
+    "baseline_operation_time": 0.03548312187194824
+  },
+  "circuit_breaker": {
+    "iterations": 1000,
+    "unprotected_time": 1.206346035003662,
+    "protected_time": 1.2397778034210205,
+    "overhead_ms": 0.0334317684173584,
+    "overhead_percent": 2.7713249305997767,
+    "breaker_stats": {
+      "name": "test_breaker",
+      "call_count": 1000,
+      "success_count": 1000,
+      "failure_count": 0
+    }
+  },
+  "parallel_execution": {
+    "task_count": 10,
+    "task_duration": 0.1,
+    "sequential_time": 1.004997730255127,
+    "parallel_time": 1.0073139667510986,
+    "speedup": 0.9977005813753955,
+    "efficiency": 19.95401162750791,
+    "executed_tasks": 10
+  },
+  "database": {
+    "iterations": 100,
+    "avg_query_time": 0.010743827819824218,
+    "p95_query_time": 0.01122903823852539,
+    "p99_query_time": 0.011281251907348633,
+    "circuit_breaker_trips": 0,
+    "breaker_stats": {
+      "name": "db_test",
+      "call_count": 100,
+      "success_count": 100,
+      "failure_count": 0
+    }
+  },
+  "agent": {
+    "query_count": 4,
+    "avg_response_time": 0.20268017053604126,
+    "min_response_time": 0.2020397186279297,
+    "max_response_time": 0.20354580879211426,
+    "response_times": [
+      0.2023622989654541,
+      0.202772855758667,
+      0.20354580879211426,
+      0.2020397186279297
+    ]
+  },
+  "memory": {
+    "initial_mb": 150.0,
+    "after_agents_mb": 175.0,
+    "final_mb": 190.0,
+    "agent_overhead_mb": 25.0,
+    "workflow_overhead_mb": 15.0,
+    "total_overhead_mb": 40.0
+  },
+  "load_testing": {
+    "10": {
+      "total_requests": 10,
+      "successful": 10,
+      "failed": 0,
+      "total_time": 0.04111218452453613,
+      "throughput": 243.2368923142945,
+      "avg_latency": 0.040679526329040525,
+      "p95_latency": 0.040708065032958984
+    },
+    "50": {
+      "total_requests": 50,
+      "successful": 50,
+      "failed": 0,
+      "total_time": 0.04373931884765625,
+      "throughput": 1143.1362288505145,
+      "avg_latency": 0.042987194061279294,
+      "p95_latency": 0.042999982833862305
+    },
+    "100": {
+      "total_requests": 100,
+      "successful": 100,
+      "failed": 0,
+      "total_time": 0.04300713539123535,
+      "throughput": 2325.1955539540427,
+      "avg_latency": 0.04159463405609131,
+      "p95_latency": 0.04175901412963867
+    },
+    "200": {
+      "total_requests": 200,
+      "successful": 200,
+      "failed": 0,
+      "total_time": 0.047998905181884766,
+      "throughput": 4166.761705129096,
+      "avg_latency": 0.045540839433670044,
+      "p95_latency": 0.04571795463562012
+    }
+  }
+}
