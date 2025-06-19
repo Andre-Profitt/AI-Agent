@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 from src.tools.base_tool import BaseTool
 from src.reasoning.reasoning_path import ReasoningPath, ReasoningType, AdvancedReasoning
 from src.errors.error_category import ErrorCategory, ErrorHandler
-from src.data_quality import DataQualityLevel, DataQualityValidator, ValidationResult
+from src.data_quality import DataQualityLevel, DataQualityValidator, ValidationResult, ValidatedQuery
 
 # Import resilience patterns
 from src.langgraph_resilience_patterns import (

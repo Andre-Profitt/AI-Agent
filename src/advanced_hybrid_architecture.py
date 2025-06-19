@@ -22,16 +22,16 @@ from datetime import datetime, timedelta
 try:
     from .advanced_agent_fsm import FSMReActAgent
     from .tools.base_tool import BaseTool
-    from .tools.semantic_search_tool import SemanticSearchTool
-    from .tools.python_interpreter import PythonInterpreter
-    from .tools.weather import WeatherTool
+    from .tools.semantic_search_tool import semantic_search_tool
+    from .tools.python_interpreter import python_interpreter
+    from .tools.weather import get_weather
 except ImportError:
     # Fallback for direct execution
     from advanced_agent_fsm import FSMReActAgent
     from tools.base_tool import BaseTool
-    from tools.semantic_search_tool import SemanticSearchTool
-    from tools.python_interpreter import PythonInterpreter
-    from tools.weather import WeatherTool
+    from tools.semantic_search_tool import semantic_search_tool
+    from tools.python_interpreter import python_interpreter
+    from tools.weather import get_weather
 
 # Import the new Optimized Chain of Thought system
 try:
@@ -104,9 +104,7 @@ class AdvancedHybridAgent:
         # Initialize core components
         try:
             self.fsm_agent = FSMReActAgent(
-                name=f"{name}_fsm",
-                tools=self._initialize_tools(),
-                config=self.config.get('fsm', {})
+                tools=self._initialize_tools()
             )
         except Exception as e:
             logger.warning(f"FSM agent initialization failed: {e}")
@@ -130,7 +128,7 @@ class AdvancedHybridAgent:
         self.emergent_behavior_detector = EmergentBehaviorDetector()
         
         # State management
-        self.current_state = AgentState(mode=AgentMode.HYBRID_ADAPTIVE)
+        self.current_state = AgentState(mode=AgentMode.HYBRID_ADAPTIVE, current_query="")
         self.state_history: List[AgentState] = []
         
         # Performance optimization
@@ -673,6 +671,39 @@ async def demo_hybrid_architecture():
     history = agent.get_reasoning_history()
     for entry in history:
         print(f"{entry['timestamp']:.2f}: {entry['mode']} - {entry['query'][:50]}... (conf: {entry['confidence']:.2f})")
+
+# Create a wrapper class for semantic search tool
+class SemanticSearchTool(BaseTool):
+    def __init__(self):
+        super().__init__("semantic_search", "Perform semantic search on knowledge base")
+    
+    def execute(self, query: str, filename: str, top_k: int = 3) -> str:
+        return semantic_search_tool(query, filename, top_k)
+    
+    def _run(self, query: str, filename: str, top_k: int = 3) -> str:
+        return semantic_search_tool(query, filename, top_k)
+
+# Create a wrapper class for python interpreter tool
+class PythonInterpreter(BaseTool):
+    def __init__(self):
+        super().__init__("python_interpreter", "Execute Python code")
+    
+    def execute(self, code: str) -> str:
+        return python_interpreter(code)
+    
+    def _run(self, code: str) -> str:
+        return python_interpreter(code)
+
+# Create a wrapper class for weather tool
+class WeatherTool(BaseTool):
+    def __init__(self):
+        super().__init__("weather", "Get weather information for a location")
+    
+    def execute(self, location: str, units: str = "metric") -> str:
+        return get_weather(location, units)
+    
+    def _run(self, location: str, units: str = "metric") -> str:
+        return get_weather(location, units)
 
 if __name__ == "__main__":
     asyncio.run(demo_hybrid_architecture()) 
