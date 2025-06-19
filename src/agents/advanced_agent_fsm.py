@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from enum import Enum
 from contextlib import contextmanager
 from collections import defaultdict
+from pathlib import Path
+import aiofiles
 
 from langchain_core.messages import AnyMessage, BaseMessage, SystemMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_groq import ChatGroq
@@ -26,6 +28,20 @@ from src.tools.base_tool import BaseTool
 from src.reasoning.reasoning_path import ReasoningPath, ReasoningType, AdvancedReasoning
 from src.errors.error_category import ErrorCategory, ErrorHandler
 from src.data_quality import DataQualityLevel, DataQualityValidator, ValidationResult, ValidatedQuery
+
+# Import GAIA components
+from src.gaia_components.advanced_reasoning_engine import (
+    AdvancedReasoningEngine, ReasoningPath, ReasoningStep
+)
+from src.gaia_components.enhanced_memory_system import (
+    EnhancedMemorySystem, MemoryType, MemoryPriority
+)
+from src.gaia_components.adaptive_tool_system import (
+    AdaptiveToolSystem, ToolType
+)
+from src.gaia_components.multi_agent_orchestrator import (
+    MultiAgentGAIASystem, MultiAgentOrchestrator
+)
 
 # Import resilience patterns
 from src.langgraph_resilience_patterns import (
@@ -670,8 +686,8 @@ Available tools and their exact parameters:
 Use EXACT parameter names. Respond ONLY with the JSON object, no markdown or explanations."""
 
             messages = [
-                {},
-                {}"}
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": query}
             ]
             
             try:
@@ -685,18 +701,18 @@ Use EXACT parameter names. Respond ONLY with the JSON object, no markdown or exp
                 # Extract the content
                 plan_json = response["choices"][0]["message"]["content"]
                 
-                logger.debug("Raw plan response received", extra={})
+                logger.debug("Raw plan response received", extra={"correlation_id": correlation_id})
                 
                 # Parse and validate using Pydantic
                 try:
                     plan_response = PlanResponse.model_validate_json(plan_json)
                     logger.info("Plan validation successful", 
-                               extra={})
+                               extra={"correlation_id": correlation_id})
                     return plan_response
                     
                 except ValidationError as e:
-                    logger.error("Plan validation failed", extra={})
-                    raise ValueError(f"Plan validation failed: {}", extra={"_http_err_": "http_err", "_timeout_err_": "timeout_err", "_req_err_": "req_err", "_query_length_": 'query_length', "_steps_": "steps", "_query_": "query", "_query_": "query", "_code_": "code", "_query_": "query", "_filename_": "filename", "_url_": "url", "_video_url_": "video_url", "_role_": "role", "_role_": "role", "_response_length_": 'response_length', "_total_steps_": 'total_steps', "_validation_errors_": 'validation_errors', "e": e})
+                    logger.error("Plan validation failed", extra={"correlation_id": correlation_id, "e": e})
+                    raise ValueError(f"Plan validation failed: {e}")
                     
             except Exception as e:
                 logger.error("Plan creation failed", extra={'error': str(e)})
@@ -802,6 +818,9 @@ class FSMReActAgent:
         
         # Initialize rate limiter
         self.rate_limiter = RateLimiter()
+        
+        # Initialize GAIA components
+        self._initialize_gaia_components()
         
         # Initialize error handler with metric awareness
         try:
@@ -1600,3 +1619,618 @@ def create_gaia_optimized_plan(query: str) -> Dict[str, any]:
         "confidence_threshold": 0.95 if question_analysis["type"] == "calculation" else 0.8,
         "verification_required": question_analysis["type"] in ["calculation", "factual_lookup"]
     }
+
+# Complete FSMReActAgent implementation with GAIA integration
+def _create_fsm_graph(self):
+    """Create the FSM graph with GAIA component integration"""
+    # Initialize GAIA components
+    self._initialize_gaia_components()
+    
+    # Create state graph
+    workflow = StateGraph(EnhancedAgentState)
+    
+    # Add nodes
+    workflow.add_node("planning", self._planning_node)
+    workflow.add_node("awaiting_plan_response", self._awaiting_plan_response_node)
+    workflow.add_node("validating_plan", self._validating_plan_node)
+    workflow.add_node("tool_execution", self._tool_execution_node)
+    workflow.add_node("synthesizing", self._synthesizing_node)
+    workflow.add_node("verifying", self._verifying_node)
+    workflow.add_node("finished", self._finished_node)
+    workflow.add_node("error_recovery", self._error_recovery_node)
+    workflow.add_node("human_approval", self._human_approval_node)
+    
+    # Add edges
+    workflow.add_edge("planning", "awaiting_plan_response")
+    workflow.add_edge("awaiting_plan_response", "validating_plan")
+    workflow.add_edge("validating_plan", "tool_execution")
+    workflow.add_edge("tool_execution", "synthesizing")
+    workflow.add_edge("synthesizing", "verifying")
+    workflow.add_edge("verifying", "finished")
+    workflow.add_edge("verifying", "error_recovery")
+    workflow.add_edge("error_recovery", "tool_execution")
+    workflow.add_edge("error_recovery", "human_approval")
+    workflow.add_edge("human_approval", "finished")
+    
+    # Add conditional edges
+    workflow.add_conditional_edges(
+        "planning",
+        self._check_plan_response,
+        {
+            "awaiting_plan_response": "awaiting_plan_response",
+            "error_recovery": "error_recovery"
+        }
+    )
+    
+    workflow.add_conditional_edges(
+        "validating_plan",
+        self._check_plan_validation,
+        {
+            "tool_execution": "tool_execution",
+            "error_recovery": "error_recovery"
+        }
+    )
+    
+    workflow.add_conditional_edges(
+        "tool_execution",
+        self._check_tool_execution,
+        {
+            "synthesizing": "synthesizing",
+            "error_recovery": "error_recovery"
+        }
+    )
+    
+    workflow.add_conditional_edges(
+        "synthesizing",
+        self._check_synthesis,
+        {
+            "verifying": "verifying",
+            "error_recovery": "error_recovery"
+        }
+    )
+    
+    workflow.add_conditional_edges(
+        "verifying",
+        self._check_verification,
+        {
+            "finished": "finished",
+            "error_recovery": "error_recovery"
+        }
+    )
+    
+    workflow.add_conditional_edges(
+        "error_recovery",
+        self._check_error_recovery,
+        {
+            "tool_execution": "tool_execution",
+            "human_approval": "human_approval",
+            "finished": "finished"
+        }
+    )
+    
+    workflow.add_conditional_edges(
+        "human_approval",
+        self._check_human_approval,
+        {
+            "finished": "finished",
+            "tool_execution": "tool_execution"
+        }
+    )
+    
+    # Set entry point
+    workflow.set_entry_point("planning")
+    
+    return workflow.compile()
+
+
+def _initialize_gaia_components(self):
+    """Initialize GAIA components with proper error handling"""
+    try:
+        # Initialize reasoning engine
+        self.reasoning_engine = AdvancedReasoningEngine(
+            model_name=self.model_name
+        )
+        
+        # Initialize memory system
+        memory_path = Path("data/agent_memories")
+        memory_path.mkdir(parents=True, exist_ok=True)
+        self.memory_system = EnhancedMemorySystem(
+            persist_directory=str(memory_path)
+        )
+        
+        # Initialize adaptive tool system
+        tool_learning_path = Path("data/tool_learning")
+        tool_learning_path.mkdir(parents=True, exist_ok=True)
+        self.adaptive_tools = AdaptiveToolSystem(
+            persist_directory=str(tool_learning_path)
+        )
+        
+        # Initialize multi-agent system
+        orchestrator = MultiAgentOrchestrator(max_agents=10)
+        self.multi_agent = MultiAgentGAIASystem(orchestrator)
+        
+        logger.info("GAIA components initialized successfully")
+        
+    except Exception as e:
+        logger.warning(f"Failed to initialize GAIA components: {e}")
+        # Set components to None if initialization fails
+        self.reasoning_engine = None
+        self.memory_system = None
+        self.adaptive_tools = None
+        self.multi_agent = None
+
+
+def _planning_node(self, state: EnhancedAgentState) -> EnhancedAgentState:
+    """Planning node with GAIA reasoning engine"""
+    correlation_id = state.get("correlation_id", str(uuid.uuid4()))
+    
+    with correlation_context(correlation_id):
+        try:
+            query = state.get("query", "")
+            
+            # Use GAIA reasoning engine if available
+            if self.reasoning_engine:
+                reasoning_path = self.reasoning_engine.generate_reasoning_path(query)
+                state["reasoning_path"] = reasoning_path
+                
+                # Create plan based on reasoning
+                plan_steps = []
+                for step in reasoning_path.steps:
+                    plan_steps.append(PlanStep(
+                        step_name=step.step_type,
+                        parameters={"content": step.content},
+                        reasoning=step.content,
+                        expected_output="reasoning_result"
+                    ))
+                
+                plan = PlanResponse(
+                    steps=plan_steps,
+                    total_steps=len(plan_steps),
+                    confidence=reasoning_path.confidence
+                )
+            else:
+                # Fallback to original planning
+                plan = self.planner.create_structured_plan(query, correlation_id=correlation_id)
+            
+            state["validated_plan"] = plan
+            state["current_fsm_state"] = "AWAITING_PLAN_RESPONSE"
+            
+            logger.info("Planning completed", extra={"correlation_id": correlation_id})
+            
+        except Exception as e:
+            logger.error(f"Planning failed: {e}", extra={"correlation_id": correlation_id})
+            state["errors"].append(f"Planning error: {e}")
+            state["current_fsm_state"] = "ERROR_RECOVERY"
+        
+        return state
+
+
+def _awaiting_plan_response_node(self, state: EnhancedAgentState) -> EnhancedAgentState:
+    """Await plan response node"""
+    state["current_fsm_state"] = "VALIDATING_PLAN"
+    return state
+
+
+def _validating_plan_node(self, state: EnhancedAgentState) -> EnhancedAgentState:
+    """Validate plan node"""
+    plan = state.get("validated_plan")
+    if plan and plan.confidence > 0.5:
+        state["current_fsm_state"] = "TOOL_EXECUTION"
+    else:
+        state["current_fsm_state"] = "ERROR_RECOVERY"
+    return state
+
+
+def _tool_execution_node(self, state: EnhancedAgentState) -> EnhancedAgentState:
+    """Tool execution node with adaptive tool system"""
+    correlation_id = state.get("correlation_id", str(uuid.uuid4()))
+    
+    with correlation_context(correlation_id):
+        try:
+            plan = state.get("validated_plan")
+            if not plan:
+                raise ValueError("No plan available for execution")
+            
+            tool_calls = []
+            
+            for step in plan.steps:
+                # Use adaptive tool system if available
+                if self.adaptive_tools:
+                    # Get tool recommendations
+                    recommendations = self.adaptive_tools.recommend_tools_for_task(
+                        step.reasoning, max_recommendations=3
+                    )
+                    
+                    if recommendations:
+                        # Use the best recommended tool
+                        best_tool, confidence = recommendations[0]
+                        
+                        if confidence > 0.5:
+                            # Execute tool
+                            result = self.adaptive_tools.execute_with_recovery(
+                                best_tool.id, step.parameters, step.reasoning
+                            )
+                            
+                            tool_calls.append({
+                                "tool": best_tool.name,
+                                "input": step.parameters,
+                                "output": result.get("result"),
+                                "success": result.get("success", False),
+                                "confidence": confidence
+                            })
+                else:
+                    # Fallback to original tool execution
+                    tool = self.select_best_tool(step.reasoning, self.tools)
+                    if tool:
+                        try:
+                            # Execute tool
+                            if hasattr(tool, '__call__'):
+                                result = tool(**step.parameters)
+                            else:
+                                result = str(step.parameters)
+                            
+                            tool_calls.append({
+                                "tool": getattr(tool, 'name', 'unknown'),
+                                "input": step.parameters,
+                                "output": result,
+                                "success": True
+                            })
+                        except Exception as e:
+                            tool_calls.append({
+                                "tool": getattr(tool, 'name', 'unknown'),
+                                "input": step.parameters,
+                                "output": str(e),
+                                "success": False
+                            })
+            
+            state["tool_calls"].extend(tool_calls)
+            state["current_fsm_state"] = "SYNTHESIZING"
+            
+            logger.info(f"Tool execution completed with {len(tool_calls)} calls", 
+                       extra={"correlation_id": correlation_id})
+            
+        except Exception as e:
+            logger.error(f"Tool execution failed: {e}", extra={"correlation_id": correlation_id})
+            state["errors"].append(f"Tool execution error: {e}")
+            state["current_fsm_state"] = "ERROR_RECOVERY"
+        
+        return state
+
+
+def _synthesizing_node(self, state: EnhancedAgentState) -> EnhancedAgentState:
+    """Synthesizing node with memory system integration"""
+    correlation_id = state.get("correlation_id", str(uuid.uuid4()))
+    
+    with correlation_context(correlation_id):
+        try:
+            query = state.get("query", "")
+            tool_calls = state.get("tool_calls", [])
+            
+            # Extract results from tool calls
+            results = [call["output"] for call in tool_calls if call.get("success")]
+            
+            # Use memory system if available
+            if self.memory_system:
+                # Store episodic memory
+                self.memory_system.store_episodic(
+                    content=f"Query: {query}, Results: {str(results)}",
+                    event_type="query_processing",
+                    metadata={
+                        "query": query,
+                        "tools_used": [call["tool"] for call in tool_calls],
+                        "success_count": len(results)
+                    }
+                )
+                
+                # Retrieve relevant memories
+                relevant_memories = self.memory_system.search_memories(query, k=3)
+                
+                # Enhance synthesis with memory context
+                memory_context = ""
+                if relevant_memories:
+                    memory_context = "\n\nRelevant past experiences:\n"
+                    for memory in relevant_memories:
+                        memory_context += f"- {memory.content}\n"
+                
+                # Create enhanced synthesis
+                synthesis_input = f"Query: {query}\nResults: {str(results)}{memory_context}"
+                
+                # Store in working memory
+                self.memory_system.store_working(
+                    content=synthesis_input,
+                    priority=MemoryPriority.HIGH
+                )
+            else:
+                synthesis_input = f"Query: {query}\nResults: {str(results)}"
+            
+            # Use answer synthesizer
+            final_answer = self.synthesizer.synthesize_with_verification(results, query)
+            
+            state["final_answer"] = final_answer
+            state["current_fsm_state"] = "VERIFYING"
+            
+            logger.info("Synthesis completed", extra={"correlation_id": correlation_id})
+            
+        except Exception as e:
+            logger.error(f"Synthesis failed: {e}", extra={"correlation_id": correlation_id})
+            state["errors"].append(f"Synthesis error: {e}")
+            state["current_fsm_state"] = "ERROR_RECOVERY"
+        
+        return state
+
+
+def _verifying_node(self, state: EnhancedAgentState) -> EnhancedAgentState:
+    """Verifying node"""
+    # Simple verification - check if we have a final answer
+    if state.get("final_answer"):
+        state["current_fsm_state"] = "FINISHED"
+    else:
+        state["current_fsm_state"] = "ERROR_RECOVERY"
+    return state
+
+
+def _finished_node(self, state: EnhancedAgentState) -> EnhancedAgentState:
+    """Finished node"""
+    state["end_time"] = time.time()
+    state["current_fsm_state"] = "FINISHED"
+    return state
+
+
+def _error_recovery_node(self, state: EnhancedAgentState) -> EnhancedAgentState:
+    """Error recovery node"""
+    state["retry_count"] = state.get("retry_count", 0) + 1
+    
+    if state["retry_count"] < state.get("max_retries", 3):
+        state["current_fsm_state"] = "PLANNING"
+    else:
+        state["current_fsm_state"] = "FINISHED"
+    
+    return state
+
+
+def _human_approval_node(self, state: EnhancedAgentState) -> EnhancedAgentState:
+    """Human approval node"""
+    state["requires_human_approval"] = True
+    state["current_fsm_state"] = "FINISHED"
+    return state
+
+
+# Conditional edge functions
+def _check_plan_response(self, state: EnhancedAgentState) -> str:
+    """Check if plan response is ready"""
+    if state.get("validated_plan"):
+        return "awaiting_plan_response"
+    return "error_recovery"
+
+
+def _check_plan_validation(self, state: EnhancedAgentState) -> str:
+    """Check if plan validation passed"""
+    plan = state.get("validated_plan")
+    if plan and plan.confidence > 0.5:
+        return "tool_execution"
+    return "error_recovery"
+
+
+def _check_tool_execution(self, state: EnhancedAgentState) -> str:
+    """Check if tool execution completed"""
+    tool_calls = state.get("tool_calls", [])
+    if tool_calls and any(call.get("success") for call in tool_calls):
+        return "synthesizing"
+    return "error_recovery"
+
+
+def _check_synthesis(self, state: EnhancedAgentState) -> str:
+    """Check if synthesis completed"""
+    if state.get("final_answer"):
+        return "verifying"
+    return "error_recovery"
+
+
+def _check_verification(self, state: EnhancedAgentState) -> str:
+    """Check if verification passed"""
+    if state.get("final_answer"):
+        return "finished"
+    return "error_recovery"
+
+
+def _check_error_recovery(self, state: EnhancedAgentState) -> str:
+    """Check error recovery strategy"""
+    retry_count = state.get("retry_count", 0)
+    if retry_count < 3:
+        return "tool_execution"
+    elif retry_count < 5:
+        return "human_approval"
+    else:
+        return "finished"
+
+
+def _check_human_approval(self, state: EnhancedAgentState) -> str:
+    """Check human approval status"""
+    if state.get("requires_human_approval"):
+        return "finished"
+    return "tool_execution"
+
+
+def _calculate_complexity(self, query: str) -> float:
+    """Calculate query complexity"""
+    # Simple complexity calculation
+    words = query.split()
+    complexity = len(words) * 0.1
+    
+    # Add complexity for special patterns
+    if any(word in query.lower() for word in ["calculate", "compute", "analyze"]):
+        complexity += 0.3
+    if any(word in query.lower() for word in ["compare", "difference", "between"]):
+        complexity += 0.2
+    
+    return min(complexity, 1.0)
+
+
+def _is_valid_tool(self, tool_name: str) -> bool:
+    """Check if tool is valid"""
+    return any(tool.name == tool_name for tool in self.tools)
+
+
+def _mock_tool_wrapper(self, tool_name: str, **kwargs):
+    """Mock tool wrapper for testing"""
+    return {"result": f"Mock result from {tool_name}", "success": True}
+
+
+async def run(self, query: str, correlation_id: str = None) -> Dict[str, Any]:
+    """Run the GAIA-enhanced FSM agent"""
+    if not correlation_id:
+        correlation_id = str(uuid.uuid4())
+    
+    with correlation_context(correlation_id):
+        try:
+            # Validate input
+            validation_result = validate_user_prompt(query)
+            if not validation_result.is_valid:
+                return {
+                    "success": False,
+                    "error": f"Invalid input: {validation_result.validation_errors}",
+                    "correlation_id": correlation_id
+                }
+            
+            # Initialize state
+            initial_state = {
+                "correlation_id": correlation_id,
+                "query": query,
+                "input_query": validation_result,
+                "plan": "",
+                "master_plan": [],
+                "validated_plan": None,
+                "tool_calls": [],
+                "step_outputs": {},
+                "final_answer": "",
+                "current_fsm_state": "PLANNING",
+                "stagnation_counter": 0,
+                "max_stagnation": 5,
+                "retry_count": 0,
+                "max_retries": 3,
+                "failure_history": [],
+                "circuit_breaker_status": "closed",
+                "last_api_error": None,
+                "verification_level": "thorough",
+                "confidence": 0.0,
+                "cross_validation_sources": [],
+                "messages": [],
+                "errors": [],
+                "step_count": 0,
+                "start_time": time.time(),
+                "end_time": 0.0,
+                "tool_reliability": {},
+                "tool_preferences": {},
+                "turn_count": 0,
+                "action_history": [],
+                "stagnation_score": 0,
+                "error_log": [],
+                "error_counts": {},
+                "remaining_loops": 15,
+                "last_state_hash": "",
+                "force_termination": False,
+                "tool_errors": [],
+                "recovery_attempts": 0,
+                "fallback_level": 0,
+                "draft_answer": "",
+                "reflection_passed": False,
+                "reflection_issues": [],
+                "requires_human_approval": False,
+                "approval_request": None,
+                "execution_paused": False
+            }
+            
+            # Execute FSM
+            result = await self.graph.ainvoke(initial_state)
+            
+            # Extract final answer
+            final_answer = result.get("final_answer", "")
+            
+            # Clean up answer
+            if final_answer:
+                final_answer = self._extract_clean_answer(final_answer)
+            
+            # Calculate confidence
+            confidence = self._calculate_confidence(result)
+            
+            # Prepare response
+            response = {
+                "success": True,
+                "answer": final_answer,
+                "confidence": confidence,
+                "correlation_id": correlation_id,
+                "tool_calls": result.get("tool_calls", []),
+                "errors": result.get("errors", []),
+                "start_time": result.get("start_time", 0),
+                "end_time": result.get("end_time", 0),
+                "execution_time": result.get("end_time", 0) - result.get("start_time", 0)
+            }
+            
+            # Store in memory if available
+            if self.memory_system:
+                asyncio.create_task(
+                    self.memory_system.store_episodic(
+                        query=query,
+                        response=final_answer,
+                        tools_used=[call["tool"] for call in response["tool_calls"]],
+                        success=response["success"]
+                    )
+                )
+            
+            logger.info("GAIA agent execution completed", 
+                       extra={"correlation_id": correlation_id, "confidence": confidence})
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"GAIA agent execution failed: {e}", 
+                        extra={"correlation_id": correlation_id})
+            
+            return {
+                "success": False,
+                "error": str(e),
+                "correlation_id": correlation_id,
+                "answer": "",
+                "confidence": 0.0
+            }
+
+
+def _extract_clean_answer(self, answer: str) -> str:
+    """Extract clean answer without formatting artifacts"""
+    # Remove LaTeX boxing
+    answer = re.sub(r'\\boxed\{([^}]+)\}', r'\1', answer)
+    
+    # Remove "final answer" prefixes
+    answer = re.sub(r'^[Tt]he\s+final\s+answer\s+is\s*:?\s*', '', answer)
+    answer = re.sub(r'^[Ff]inal\s+answer\s*:?\s*', '', answer)
+    
+    # Remove tool call artifacts
+    answer = re.sub(r'<tool_call>.*?</tool_call>', '', answer, flags=re.DOTALL)
+    
+    # Clean up whitespace
+    answer = answer.strip()
+    
+    return answer
+
+
+def _calculate_confidence(self, result: Dict[str, Any]) -> float:
+    """Calculate confidence score"""
+    base_confidence = 0.5
+    
+    # Increase confidence for successful tool calls
+    tool_calls = result.get("tool_calls", [])
+    if tool_calls:
+        successful_calls = sum(1 for call in tool_calls if call.get("success"))
+        base_confidence += (successful_calls / len(tool_calls)) * 0.3
+    
+    # Decrease confidence for errors
+    errors = result.get("errors", [])
+    if errors:
+        base_confidence -= len(errors) * 0.1
+    
+    # Increase confidence for longer answers
+    final_answer = result.get("final_answer", "")
+    if len(final_answer) > 10:
+        base_confidence += 0.1
+    
+    return max(0.0, min(1.0, base_confidence))

@@ -1,0 +1,86 @@
+# Requirements for GAIA-Enhanced FSMReActAgent
+
+# Core dependencies
+langchain>=0.1.0
+langchain-groq>=0.1.0
+langgraph>=0.0.20
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Async and networking
+asyncio>=3.4.3
+aiofiles>=23.0.0
+httpx>=0.25.0
+requests>=2.31.0
+urllib3>=2.0.0
+
+# Vector storage and embeddings
+numpy>=1.24.0
+scikit-learn>=1.3.0
+faiss-cpu>=1.7.4  # For local vector search, use faiss-gpu for GPU support
+# pinecone-client>=2.2.0  # Optional: for cloud vector storage
+
+# Multi-agent coordination
+networkx>=3.0
+
+# Performance and monitoring
+prometheus-client>=0.18.0
+psutil>=5.9.0
+
+# Circuit breaker and resilience
+py-circuit-breaker>=0.1.0
+tenacity>=8.2.0
+
+# Data processing
+pandas>=2.0.0
+openpyxl>=3.1.0  # For Excel file support
+
+# Logging and debugging
+python-json-logger>=2.0.0
+colorlog>=6.7.0
+
+# Testing
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-mock>=3.10.0
+
+# Optional: CrewAI integration
+# crewai>=0.1.0
+
+# Optional: Advanced embeddings
+# sentence-transformers>=2.2.0
+# openai>=1.0.0  # For OpenAI embeddings
+
+# Environment and configuration
+python-dotenv>=1.0.0
+
+# Development tools
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.0.0
+pre-commit>=3.0.0
+
+# Documentation
+sphinx>=6.0.0
+sphinx-rtd-theme>=1.2.0
+
+# Installation instructions:
+# 1. Create a virtual environment:
+#    python -m venv venv
+#    source venv/bin/activate  # On Windows: venv\Scripts\activate
+#
+# 2. Install requirements:
+#    pip install -r requirements_gaia.txt
+#
+# 3. Set up environment variables:
+#    Create a .env file with:
+#    GROQ_API_KEY=your-groq-api-key-here
+#
+# 4. Initialize directories:
+#    python -c "from pathlib import Path; [Path(d).mkdir(parents=True, exist_ok=True) for d in ['agent_memories', 'tool_learning', 'logs', 'cache']]"
+#
+# 5. Run tests:
+#    pytest tests/
+#
+# 6. Run example:
+#    python examples/gaia_usage_example.py 
