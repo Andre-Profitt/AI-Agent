@@ -31,7 +31,7 @@ orchestration_patterns:
   no_circuit_breaker:
     - pattern: "external_api"
       description: "External API calls without circuit breaker"
-    - pattern: "supabase\."
+    - pattern: "supabase\\."
       description: "Database calls without circuit breaker"
 
 testing_patterns:
@@ -49,4 +49,26 @@ testing_patterns:
     - pattern: "test_.*real.*api"
       description: "Tests using real APIs"
     - pattern: "test_.*without.*mock"
-      description: "Tests without proper mocking" 
+      description: "Tests without proper mocking"
+
+agent_patterns:
+  missing_tool_registration:
+    - pattern: "class\\s+\\w+Tool"
+      description: "Tools not registered with orchestrator"
+    - pattern: "@tool"
+      description: "Tool decorators without registration"
+  langgraph_issues:
+    - pattern: "langgraph"
+      description: "LangGraph without proper state management"
+    - pattern: "StateGraph"
+      description: "StateGraph without error handling"
+  fsm_issues:
+    - pattern: "fsm"
+      description: "FSM without error handling"
+    - pattern: "state.*machine"
+      description: "State machine without timeout handling"
+  async_tool_calls:
+    - pattern: "await\\s+tool"
+      description: "Sequential async tool calls"
+    - pattern: "async.*def.*tool"
+      description: "Async tools without parallel execution" 
