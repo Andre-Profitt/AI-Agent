@@ -103,11 +103,11 @@ class AgentFactory:
             # Store the agent
             self.created_agents[agent_id] = agent
             
-            self.logger.info(f"Created {agent_type.value} agent: {name} ({agent_id})")
+            self.logger.info("Created {} agent: {} ({})", extra={"agent_type_value": agent_type.value, "name": name, "agent_id": agent_id})
             return agent
             
         except Exception as e:
-            self.logger.error(f"Failed to create agent {name}: {e}")
+            self.logger.error("Failed to create agent {}: {}", extra={"name": name, "e": e})
             raise
     
     async def create_fsm_agent(
@@ -175,7 +175,7 @@ class AgentFactory:
             agent = await self.create_agent(agent_type, name, config)
             agents.append(agent)
         
-        self.logger.info(f"Created agent team with {len(agents)} members")
+        self.logger.info("Created agent team with {} members", extra={"len_agents_": len(agents)})
         return agents
     
     def get_agent(self, agent_id: str) -> Optional[BaseAgent]:
@@ -197,22 +197,22 @@ class AgentFactory:
         """Shutdown a specific agent"""
         agent = self.created_agents.get(agent_id)
         if not agent:
-            self.logger.warning(f"Agent {agent_id} not found")
+            self.logger.warning("Agent {} not found", extra={"agent_id": agent_id})
             return False
         
         try:
             success = await agent.shutdown()
             if success:
                 del self.created_agents[agent_id]
-                self.logger.info(f"Agent {agent_id} shut down successfully")
+                self.logger.info("Agent {} shut down successfully", extra={"agent_id": agent_id})
             return success
         except Exception as e:
-            self.logger.error(f"Failed to shutdown agent {agent_id}: {e}")
+            self.logger.error("Failed to shutdown agent {}: {}", extra={"agent_id": agent_id, "e": e})
             return False
     
     async def shutdown_all(self):
         """Shutdown all created agents"""
-        self.logger.info(f"Shutting down {len(self.created_agents)} agents")
+        self.logger.info("Shutting down {} agents", extra={"len_self_created_agents_": len(self.created_agents)})
         
         shutdown_tasks = []
         for agent_id, agent in self.created_agents.items():
@@ -223,7 +223,7 @@ class AgentFactory:
         results = await asyncio.gather(*shutdown_tasks, return_exceptions=True)
         
         success_count = sum(1 for result in results if result is True)
-        self.logger.info(f"Successfully shut down {success_count}/{len(self.created_agents)} agents")
+        self.logger.info("Successfully shut down {}/{} agents", extra={"success_count": success_count, "len_self_created_agents_": len(self.created_agents)})
     
     def get_agent_statistics(self) -> Dict[str, Any]:
         """Get statistics about created agents"""

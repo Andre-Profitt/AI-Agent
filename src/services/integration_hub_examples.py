@@ -5,20 +5,21 @@ import logging
 from typing import Dict, Any, List
 from datetime import datetime
 import time
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-async def demonstrate_tool_compatibility_checker():
+async def demonstrate_tool_compatibility_checker() -> Any:
     """Demonstrate ToolCompatibilityChecker functionality"""
-    print("\n=== Tool Compatibility Checker Demo ===")
+    logger.info("\n=== Tool Compatibility Checker Demo ===")
     
     from src.integration_hub import get_tool_compatibility_checker
     
     checker = get_tool_compatibility_checker()
     if not checker:
-        print("Tool compatibility checker not available")
+        logger.info("Tool compatibility checker not available")
         return
     
     # Register tool requirements
@@ -46,25 +47,25 @@ async def demonstrate_tool_compatibility_checker():
     })
     
     # Check compatibility
-    print(f"search_tool + file_processor compatible: {checker.check_compatibility('search_tool', 'file_processor')}")
-    print(f"search_tool + incompatible_tool compatible: {checker.check_compatibility('search_tool', 'incompatible_tool')}")
+    logger.info("search_tool + file_processor compatible: {}", extra={"checker_check_compatibility__search_tool____file_processor__": checker.check_compatibility('search_tool', 'file_processor')})
+    logger.info("search_tool + incompatible_tool compatible: {}", extra={"checker_check_compatibility__search_tool____incompatible_tool__": checker.check_compatibility('search_tool', 'incompatible_tool')})
     
     # Get compatible tools
     compatible = checker.get_compatible_tools("search_tool")
-    print(f"Tools compatible with search_tool: {compatible}")
+    logger.info("Tools compatible with search_tool: {}", extra={"compatible": compatible})
     
     incompatible = checker.get_incompatible_tools("search_tool")
-    print(f"Tools incompatible with search_tool: {incompatible}")
+    logger.info("Tools incompatible with search_tool: {}", extra={"incompatible": incompatible})
 
-async def demonstrate_semantic_tool_discovery():
+async def demonstrate_semantic_tool_discovery() -> Any:
     """Demonstrate SemanticToolDiscovery functionality"""
-    print("\n=== Semantic Tool Discovery Demo ===")
+    logger.info("\n=== Semantic Tool Discovery Demo ===")
     
     from src.integration_hub import get_semantic_discovery
     
     discovery = get_semantic_discovery()
     if not discovery:
-        print("Semantic tool discovery not available")
+        logger.info("Semantic tool discovery not available")
         return
     
     # Index tools with descriptions and examples
@@ -95,23 +96,23 @@ async def demonstrate_semantic_tool_discovery():
     
     for task in tasks:
         tools = discovery.find_tools_for_task(task, top_k=3)
-        print(f"\nTask: {task}")
+        logger.info("\nTask: {}", extra={"task": task})
         for tool_name, similarity in tools:
-            print(f"  - {tool_name}: {similarity:.3f}")
+            logger.info("  - {}: {}", extra={"tool_name": tool_name, "similarity": similarity})
 
-async def demonstrate_resource_pool_manager():
+async def demonstrate_resource_pool_manager() -> Any:
     """Demonstrate ResourcePoolManager functionality"""
-    print("\n=== Resource Pool Manager Demo ===")
+    logger.info("\n=== Resource Pool Manager Demo ===")
     
     from src.integration_hub import get_resource_manager
     
     resource_manager = get_resource_manager()
     if not resource_manager:
-        print("Resource pool manager not available")
+        logger.info("Resource pool manager not available")
         return
     
     # Create a mock database connection factory
-    async def create_db_connection():
+    async def create_db_connection() -> Any:
         await asyncio.sleep(0.1)  # Simulate connection time
         return {"connection_id": f"conn_{int(time.time() * 1000)}", "status": "connected"}
     
@@ -119,36 +120,36 @@ async def demonstrate_resource_pool_manager():
     await resource_manager.create_pool("database", create_db_connection, min_size=2, max_size=5)
     
     # Demonstrate acquiring and releasing resources
-    print("Acquiring database connections...")
+    logger.info("Acquiring database connections...")
     connections = []
     
     for i in range(3):
         conn = await resource_manager.acquire("database")
         connections.append(conn)
-        print(f"  Acquired connection {i+1}: {conn['connection_id']}")
+        logger.info("  Acquired connection {}: {}", extra={"i_1": i+1, "conn__connection_id_": conn['connection_id']})
     
     # Check pool stats
     stats = resource_manager.get_pool_stats("database")
-    print(f"Pool stats: {stats}")
+    logger.info("Pool stats: {}", extra={"stats": stats})
     
     # Release connections
     for i, conn in enumerate(connections):
         await resource_manager.release("database", conn)
-        print(f"  Released connection {i+1}: {conn['connection_id']}")
+        logger.info("  Released connection {}: {}", extra={"i_1": i+1, "conn__connection_id_": conn['connection_id']})
     
     # Check final stats
     final_stats = resource_manager.get_pool_stats("database")
-    print(f"Final pool stats: {final_stats}")
+    logger.info("Final pool stats: {}", extra={"final_stats": final_stats})
 
-async def demonstrate_tool_version_manager():
+async def demonstrate_tool_version_manager() -> Any:
     """Demonstrate ToolVersionManager functionality"""
-    print("\n=== Tool Version Manager Demo ===")
+    logger.info("\n=== Tool Version Manager Demo ===")
     
     from src.integration_hub import get_tool_version_manager
     
     version_manager = get_tool_version_manager()
     if not version_manager:
-        print("Tool version manager not available")
+        logger.info("Tool version manager not available")
         return
     
     # Register different versions of a tool
@@ -178,29 +179,29 @@ async def demonstrate_tool_version_manager():
     
     # Get latest version
     latest = version_manager.get_latest_version("search_tool")
-    print(f"Latest version of search_tool: {latest}")
+    logger.info("Latest version of search_tool: {}", extra={"latest": latest})
     
     # Test parameter migration
     old_params = {"query": "AI research", "max_results": 5}
     migrated_params = version_manager.migrate_params("search_tool", old_params, "1.0", "2.0")
-    print(f"Migrated params 1.0->2.0: {migrated_params}")
+    logger.info("Migrated params 1.0->2.0: {}", extra={"migrated_params": migrated_params})
     
     migrated_params_2 = version_manager.migrate_params("search_tool", migrated_params, "2.0", "3.0")
-    print(f"Migrated params 2.0->3.0: {migrated_params_2}")
+    logger.info("Migrated params 2.0->3.0: {}", extra={"migrated_params_2": migrated_params_2})
     
     # Deprecate old version
     version_manager.deprecate_version("search_tool", "1.0")
-    print("Deprecated search_tool version 1.0")
+    logger.info("Deprecated search_tool version 1.0")
 
-async def demonstrate_rate_limit_manager():
+async def demonstrate_rate_limit_manager() -> Any:
     """Demonstrate RateLimitManager functionality"""
-    print("\n=== Rate Limit Manager Demo ===")
+    logger.info("\n=== Rate Limit Manager Demo ===")
     
     from src.integration_hub import get_rate_limit_manager
     
     rate_manager = get_rate_limit_manager()
     if not rate_manager:
-        print("Rate limit manager not available")
+        logger.info("Rate limit manager not available")
         return
     
     # Set rate limits for different tools
@@ -208,11 +209,11 @@ async def demonstrate_rate_limit_manager():
     rate_manager.set_limit("search_tool", calls_per_minute=5, burst_size=8)
     
     # Simulate tool calls
-    print("Simulating tool calls with rate limiting...")
+    logger.info("Simulating tool calls with rate limiting...")
     
-    async def simulate_tool_call(tool_name: str, call_number: int):
+    async def simulate_tool_call(tool_name: str, call_number: int) -> Any:
         await rate_manager.check_and_wait(tool_name)
-        print(f"  {tool_name} call {call_number} executed at {datetime.now().strftime('%H:%M:%S')}")
+        logger.info("  {} call {} executed at {}", extra={"tool_name": tool_name, "call_number": call_number, "datetime_now___strftime___H": datetime.now().strftime('%H})
     
     # Make multiple calls to test rate limiting
     tasks = []
@@ -226,75 +227,75 @@ async def demonstrate_rate_limit_manager():
     api_stats = rate_manager.get_tool_stats("api_tool")
     search_stats = rate_manager.get_tool_stats("search_tool")
     
-    print(f"\nAPI tool stats: {api_stats}")
-    print(f"Search tool stats: {search_stats}")
+    logger.info("\nAPI tool stats: {}", extra={"api_stats": api_stats})
+    logger.info("Search tool stats: {}", extra={"search_stats": search_stats})
 
-async def demonstrate_monitoring_dashboard():
+async def demonstrate_monitoring_dashboard() -> Any:
     """Demonstrate MonitoringDashboard functionality"""
-    print("\n=== Monitoring Dashboard Demo ===")
+    logger.info("\n=== Monitoring Dashboard Demo ===")
     
     from src.integration_hub import get_monitoring_dashboard
     
     dashboard = get_monitoring_dashboard()
     if not dashboard:
-        print("Monitoring dashboard not available")
+        logger.info("Monitoring dashboard not available")
         return
     
     # Collect metrics
-    print("Collecting metrics...")
+    logger.info("Collecting metrics...")
     metrics = await dashboard.collect_metrics()
     
-    print(f"Tool metrics: {metrics.get('tool_metrics', {})}")
-    print(f"Session metrics: {metrics.get('session_metrics', {})}")
-    print(f"Resource metrics: {metrics.get('resource_metrics', {})}")
+    logger.info("Tool metrics: {metrics.get('tool_metrics', {})}")
+    logger.info("Session metrics: {metrics.get('session_metrics', {})}")
+    logger.info("Resource metrics: {metrics.get('resource_metrics', {})}")
     
     # Check for alerts
     alerts = dashboard.get_alerts()
     if alerts:
-        print(f"Active alerts: {alerts}")
+        logger.info("Active alerts: {}", extra={"alerts": alerts})
     else:
-        print("No active alerts")
+        logger.info("No active alerts")
     
     # Get alerts by severity
     critical_alerts = dashboard.get_alerts(severity="critical")
     warning_alerts = dashboard.get_alerts(severity="warning")
     
-    print(f"Critical alerts: {len(critical_alerts)}")
-    print(f"Warning alerts: {len(warning_alerts)}")
+    logger.info("Critical alerts: {}", extra={"len_critical_alerts_": len(critical_alerts)})
+    logger.info("Warning alerts: {}", extra={"len_warning_alerts_": len(warning_alerts)})
 
-async def demonstrate_integration_test_framework():
+async def demonstrate_integration_test_framework() -> Any:
     """Demonstrate IntegrationTestFramework functionality"""
-    print("\n=== Integration Test Framework Demo ===")
+    logger.info("\n=== Integration Test Framework Demo ===")
     
     from src.integration_hub import get_test_framework, get_integration_hub
     
     test_framework = get_test_framework()
     if not test_framework:
-        print("Integration test framework not available")
+        logger.info("Integration test framework not available")
         return
     
     # Run integration tests
-    print("Running integration tests...")
+    logger.info("Running integration tests...")
     results = await test_framework.run_integration_tests()
     
-    print("Test Results:")
+    logger.info("Test Results:")
     for test_name, result in results.items():
         status = "PASSED" if result['passed'] else "FAILED"
-        print(f"  {test_name}: {status}")
+        logger.info("  {}: {}", extra={"test_name": test_name, "status": status})
         if not result['passed']:
-            print(f"    Error: {result.get('error', 'Unknown error')}")
+            logger.info("    Error: {}", extra={"result_get__error____Unknown_error__": result.get('error', 'Unknown error')})
         else:
-            print(f"    Details: {result.get('details', 'No details')}")
+            logger.info("    Details: {}", extra={"result_get__details____No_details__": result.get('details', 'No details')})
 
-async def demonstrate_migration_helper():
+async def demonstrate_migration_helper() -> Any:
     """Demonstrate MigrationHelper functionality"""
-    print("\n=== Migration Helper Demo ===")
+    logger.info("\n=== Migration Helper Demo ===")
     
     from src.integration_hub import MigrationHelper, get_unified_registry
     
     # Create a mock old registry
     class MockOldRegistry:
-        def __init__(self):
+        def __init__(self) -> None:
             self.tools = {
                 "old_search": type('MockTool', (), {'name': 'old_search', 'description': 'Old search tool'})(),
                 "old_file_reader": type('MockTool', (), {'name': 'old_file_reader', 'description': 'Old file reader'})()
@@ -310,39 +311,39 @@ async def demonstrate_migration_helper():
     migration_helper = MigrationHelper(old_registry, unified_registry)
     
     # Perform migration
-    print("Migrating tools from old registry...")
+    logger.info("Migrating tools from old registry...")
     migration_report = migration_helper.migrate_tools()
     
-    print(f"Migration results:")
-    print(f"  Migrated: {migration_report['migrated']}")
-    print(f"  Failed: {migration_report['failed']}")
-    print(f"  Warnings: {migration_report['warnings']}")
+    logger.info("Migration results:")
+    logger.info("  Migrated: {}", extra={"migration_report__migrated_": migration_report['migrated']})
+    logger.info("  Failed: {}", extra={"migration_report__failed_": migration_report['failed']})
+    logger.info("  Warnings: {}", extra={"migration_report__warnings_": migration_report['warnings']})
 
-async def demonstrate_advanced_orchestrator_features():
+async def demonstrate_advanced_orchestrator_features() -> Any:
     """Demonstrate advanced ToolOrchestrator features"""
-    print("\n=== Advanced Orchestrator Features Demo ===")
+    logger.info("\n=== Advanced Orchestrator Features Demo ===")
     
     from src.integration_hub import get_tool_orchestrator
     
     orchestrator = get_tool_orchestrator()
     if not orchestrator:
-        print("Tool orchestrator not available")
+        logger.info("Tool orchestrator not available")
         return
     
     # Test compatibility checking
-    print("Testing compatibility checking...")
+    logger.info("Testing compatibility checking...")
     result = await orchestrator.execute_with_compatibility_check("test_tool", {"param": "value"})
-    print(f"Compatibility check result: {result}")
+    logger.info("Compatibility check result: {}", extra={"result": result})
     
     # Test resource pool execution
-    print("Testing resource pool execution...")
+    logger.info("Testing resource pool execution...")
     result = await orchestrator.execute_with_resource_pool("test_tool", {"param": "value"}, "database")
-    print(f"Resource pool result: {result}")
+    logger.info("Resource pool result: {}", extra={"result": result})
 
-async def main():
+async def main() -> Any:
     """Run all demonstrations"""
-    print("Integration Hub Improvements - Comprehensive Demo")
-    print("=" * 50)
+    logger.info("Integration Hub Improvements - Comprehensive Demo")
+    logger.info("=" * 50)
     
     # Initialize integration hub
     from src.integration_hub import initialize_integrations
@@ -360,11 +361,11 @@ async def main():
         await demonstrate_migration_helper()
         await demonstrate_advanced_orchestrator_features()
         
-        print("\n" + "=" * 50)
-        print("All demonstrations completed successfully!")
+        logger.info("\n" + str("=" * 50))
+        logger.info("All demonstrations completed successfully!")
         
     except Exception as e:
-        print(f"Error during demonstration: {e}")
+        logger.info("Error during demonstration: {}", extra={"e": e})
         logger.exception("Demonstration failed")
     
     finally:

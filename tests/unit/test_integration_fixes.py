@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 async def test_tool_call_tracker():
     """Test tool call loop prevention"""
-    print("\n=== Testing Tool Call Tracker ===")
+    logger.info("\n=== Testing Tool Call Tracker ===")
     
     tracker = ToolCallTracker(max_depth=3, max_repeats=2)
     
@@ -60,11 +60,11 @@ async def test_tool_call_tracker():
     for _ in range(3):
         tracker.end_call()
     
-    print("✅ Tool call tracker working correctly")
+    logger.info("✅ Tool call tracker working correctly")
 
 def test_circuit_breaker():
     """Test circuit breaker pattern"""
-    print("\n=== Testing Circuit Breaker ===")
+    logger.info("\n=== Testing Circuit Breaker ===")
     
     breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=1.0)
     
@@ -85,11 +85,11 @@ def test_circuit_breaker():
     breaker.record_success("test_tool")
     assert breaker.is_open("test_tool") == False
     
-    print("✅ Circuit breaker working correctly")
+    logger.info("✅ Circuit breaker working correctly")
 
 def test_local_knowledge_tool():
     """Test enhanced local knowledge search"""
-    print("\n=== Testing Local Knowledge Tool ===")
+    logger.info("\n=== Testing Local Knowledge Tool ===")
     
     # Create temporary cache directory
     cache_dir = Path("./test_knowledge_cache")
@@ -124,11 +124,11 @@ def test_local_knowledge_tool():
     import shutil
     shutil.rmtree(cache_dir)
     
-    print("✅ Local knowledge tool working correctly")
+    logger.info("✅ Local knowledge tool working correctly")
 
 def test_error_categorization():
     """Test enhanced error categorization"""
-    print("\n=== Testing Error Categorization ===")
+    logger.info("\n=== Testing Error Categorization ===")
     
     handler = MetricAwareErrorHandler()
     
@@ -147,11 +147,11 @@ def test_error_categorization():
         actual_type = handler._categorize_error(error_msg)
         assert actual_type == expected_type, f"Expected {expected_type}, got {actual_type} for '{error_msg}'"
     
-    print("✅ Error categorization working correctly")
+    logger.info("✅ Error categorization working correctly")
 
 async def test_fallback_logic():
     """Test fallback tool logic"""
-    print("\n=== Testing Fallback Tool Logic ===")
+    logger.info("\n=== Testing Fallback Tool Logic ===")
     
     registry = UnifiedToolRegistry()
     
@@ -180,11 +180,11 @@ async def test_fallback_logic():
     adapted = orchestrator._adapt_params("calculator", "python_interpreter", {"expression": "2+2"})
     assert "result = 2+2" in adapted["code"]
     
-    print("✅ Fallback tool logic working correctly")
+    logger.info("✅ Fallback tool logic working correctly")
 
 async def test_async_cleanup():
     """Test async cleanup handlers"""
-    print("\n=== Testing Async Cleanup ===")
+    logger.info("\n=== Testing Async Cleanup ===")
     
     cleanup_handlers = []
     
@@ -211,14 +211,14 @@ async def test_async_cleanup():
                     result = await result
             assert result in ["cleaned", "cleaned_sync"]
         except Exception as e:
-            print(f"❌ Cleanup failed: {e}")
+            logger.info("❌ Cleanup failed: {}", extra={"e": e})
             return
     
-    print("✅ Async cleanup working correctly")
+    logger.info("✅ Async cleanup working correctly")
 
 async def main():
     """Run all tests"""
-    print("🧪 Testing Integration Hub Critical Fixes")
+    logger.info("🧪 Testing Integration Hub Critical Fixes")
     
     try:
         # Run tests
@@ -229,17 +229,17 @@ async def main():
         await test_fallback_logic()
         await test_async_cleanup()
         
-        print("\n🎉 All critical fixes are working correctly!")
-        print("\nSummary of implemented fixes:")
-        print("1. ✅ Async cleanup handlers - Properly handle async/sync cleanup functions")
-        print("2. ✅ Fallback tool logic - Intelligent tool fallback with parameter adaptation")
-        print("3. ✅ Enhanced local knowledge search - TF-IDF scoring with inverted index")
-        print("4. ✅ Improved error categorization - Detailed error pattern matching")
-        print("5. ✅ Tool call loop prevention - Track and prevent infinite loops")
-        print("6. ✅ Circuit breaker pattern - Automatic failure detection and recovery")
+        logger.info("\n🎉 All critical fixes are working correctly!")
+        logger.info("\nSummary of implemented fixes:")
+        logger.info("1. ✅ Async cleanup handlers - Properly handle async/sync cleanup functions")
+        logger.info("2. ✅ Fallback tool logic - Intelligent tool fallback with parameter adaptation")
+        logger.info("3. ✅ Enhanced local knowledge search - TF-IDF scoring with inverted index")
+        logger.info("4. ✅ Improved error categorization - Detailed error pattern matching")
+        logger.info("5. ✅ Tool call loop prevention - Track and prevent infinite loops")
+        logger.info("6. ✅ Circuit breaker pattern - Automatic failure detection and recovery")
         
     except Exception as e:
-        print(f"\n❌ Test failed: {e}")
+        logger.info("\n❌ Test failed: {}", extra={"e": e})
         import traceback
         traceback.print_exc()
         return 1

@@ -12,6 +12,10 @@ This script shows how to use the ParallelExecutor for:
 import asyncio
 import sys
 import os
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 # Add src to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -22,7 +26,7 @@ from src.infrastructure.monitoring.decorators import get_metrics_summary, reset_
 
 async def demo_parallel_tool_execution():
     """Demonstrate parallel tool execution"""
-    print("\n=== Parallel Tool Execution Demo ===")
+    logger.info("\n=== Parallel Tool Execution Demo ===")
     
     # Create parallel executor
     executor = ParallelExecutor(max_workers=5)
@@ -68,7 +72,7 @@ async def demo_parallel_tool_execution():
         {"text": "Hello world", "target_language": "Spanish"}
     ]
     
-    print("Executing 5 tools in parallel...")
+    logger.info("Executing 5 tools in parallel...")
     start_time = asyncio.get_event_loop().time()
     
     results = await executor.execute_tools_parallel(tools, inputs, timeout=10.0)
@@ -76,15 +80,15 @@ async def demo_parallel_tool_execution():
     end_time = asyncio.get_event_loop().time()
     total_time = end_time - start_time
     
-    print(f"Completed in {total_time:.2f} seconds")
-    print("Results:")
+    logger.info("Completed in {} seconds", extra={"total_time": total_time})
+    logger.info("Results:")
     
     for i, (success, result) in enumerate(results):
         tool_name = tools[i].__name__
         if success:
-            print(f"  ✓ {tool_name}: {result}")
+            logger.info("  ✓ {}: {}", extra={"tool_name": tool_name, "result": result})
         else:
-            print(f"  ✗ {tool_name}: Error - {result}")
+            logger.info("  ✗ {}: Error - {}", extra={"tool_name": tool_name, "result": result})
     
     # Cleanup
     executor.shutdown()
@@ -92,7 +96,7 @@ async def demo_parallel_tool_execution():
 
 async def demo_map_reduce():
     """Demonstrate map-reduce operations"""
-    print("\n=== Map-Reduce Demo ===")
+    logger.info("\n=== Map-Reduce Demo ===")
     
     executor = ParallelExecutor(max_workers=8)
     
@@ -106,7 +110,7 @@ async def demo_map_reduce():
     
     # Process a large dataset
     items = list(range(100))
-    print(f"Processing {len(items)} items with map-reduce...")
+    logger.info("Processing {} items with map-reduce...", extra={"len_items_": len(items)})
     
     start_time = asyncio.get_event_loop().time()
     
@@ -117,8 +121,8 @@ async def demo_map_reduce():
     end_time = asyncio.get_event_loop().time()
     total_time = end_time - start_time
     
-    print(f"Sum of squares: {final_result}")
-    print(f"Completed in {total_time:.2f} seconds")
+    logger.info("Sum of squares: {}", extra={"final_result": final_result})
+    logger.info("Completed in {} seconds", extra={"total_time": total_time})
     
     # Cleanup
     executor.shutdown()
@@ -126,7 +130,7 @@ async def demo_map_reduce():
 
 async def demo_parallel_agent_execution():
     """Demonstrate parallel agent execution"""
-    print("\n=== Parallel Agent Execution Demo ===")
+    logger.info("\n=== Parallel Agent Execution Demo ===")
     
     executor = ParallelExecutor(max_workers=3)
     
@@ -160,7 +164,7 @@ async def demo_parallel_agent_execution():
         {"description": "Synthesize findings"}
     ]
     
-    print("Executing 3 agents in parallel...")
+    logger.info("Executing 3 agents in parallel...")
     start_time = asyncio.get_event_loop().time()
     
     results = await executor.execute_agents_parallel(agents, tasks, max_concurrent=2)
@@ -168,14 +172,14 @@ async def demo_parallel_agent_execution():
     end_time = asyncio.get_event_loop().time()
     total_time = end_time - start_time
     
-    print(f"Completed in {total_time:.2f} seconds")
-    print("Results:")
+    logger.info("Completed in {} seconds", extra={"total_time": total_time})
+    logger.info("Results:")
     
     for agent_id, result in results:
         if "error" not in result:
-            print(f"  ✓ {agent_id}: {result['result']}")
+            logger.info("  ✓ {}: {}", extra={"agent_id": agent_id, "result__result_": result['result']})
         else:
-            print(f"  ✗ {agent_id}: Error - {result['error']}")
+            logger.info("  ✗ {}: Error - {}", extra={"agent_id": agent_id, "result__error_": result['error']})
     
     # Cleanup
     executor.shutdown()
@@ -183,7 +187,7 @@ async def demo_parallel_agent_execution():
 
 async def demo_performance_monitoring():
     """Demonstrate performance monitoring"""
-    print("\n=== Performance Monitoring Demo ===")
+    logger.info("\n=== Performance Monitoring Demo ===")
     
     # Reset metrics
     reset_metrics()
@@ -209,10 +213,10 @@ async def demo_performance_monitoring():
     # Get metrics summary
     summary = get_metrics_summary()
     
-    print("Performance Metrics Summary:")
+    logger.info("Performance Metrics Summary:")
     for key, value in summary.items():
         if key != "timestamp":
-            print(f"  {key}: {value}")
+            logger.info("  {}: {}", extra={"key": key, "value": value})
     
     # Cleanup
     executor.shutdown()
@@ -220,7 +224,7 @@ async def demo_performance_monitoring():
 
 async def demo_parallel_fsm_agent():
     """Demonstrate parallel FSM agent"""
-    print("\n=== Parallel FSM Agent Demo ===")
+    logger.info("\n=== Parallel FSM Agent Demo ===")
     
     # Mock tools for the FSM agent
     class MockTool:
@@ -257,7 +261,7 @@ async def demo_parallel_fsm_agent():
         {"tool_name": "analyze", "arguments": {"text": "This is a sample text for analysis."}}
     ]
     
-    print("Executing tool calls in parallel with FSM agent...")
+    logger.info("Executing tool calls in parallel with FSM agent...")
     start_time = asyncio.get_event_loop().time()
     
     results = await agent.execute_tools_parallel(tool_calls)
@@ -265,20 +269,20 @@ async def demo_parallel_fsm_agent():
     end_time = asyncio.get_event_loop().time()
     total_time = end_time - start_time
     
-    print(f"Completed in {total_time:.2f} seconds")
-    print("Results:")
+    logger.info("Completed in {} seconds", extra={"total_time": total_time})
+    logger.info("Results:")
     
     for result in results:
         tool_name = result["tool_name"]
         if result["success"]:
-            print(f"  ✓ {tool_name}: {result['result']}")
+            logger.info("  ✓ {}: {}", extra={"tool_name": tool_name, "result__result_": result['result']})
         else:
-            print(f"  ✗ {tool_name}: Error - {result['error']}")
+            logger.info("  ✗ {}: Error - {}", extra={"tool_name": tool_name, "result__error_": result['error']})
 
 
 async def main():
     """Run all demos"""
-    print("🚀 Parallel Execution Demo Suite")
+    logger.info("🚀 Parallel Execution Demo Suite")
     print("=" * 50)
     
     try:
@@ -288,10 +292,10 @@ async def main():
         await demo_performance_monitoring()
         await demo_parallel_fsm_agent()
         
-        print("\n✅ All demos completed successfully!")
+        logger.info("\n✅ All demos completed successfully!")
         
     except Exception as e:
-        print(f"\n❌ Demo failed: {e}")
+        logger.info("\n❌ Demo failed: {}", extra={"e": e})
         import traceback
         traceback.print_exc()
 

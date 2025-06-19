@@ -81,7 +81,7 @@ def run_crew_workflow(query: str, tools: Dict[str, Any]) -> Dict[str, Any]:
     try:
         result = crew.kickoff()
     except Exception as e:
-        logger.error(f"Crew execution failed: {e}")
+        logger.error("Crew execution failed: {}", extra={"e": e})
         return {"output": f"Crew error: {str(e)}", "intermediate_steps": []}
 
     return {

@@ -8,6 +8,7 @@ from enum import Enum
 from dataclasses import dataclass
 
 from src.utils.logging import get_logger
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 logger = get_logger(__name__)
 
@@ -28,7 +29,7 @@ class CircuitBreakerConfig:
 class CircuitBreaker:
     """Circuit breaker implementation with exponential backoff"""
     
-    def __init__(self, config: Optional[CircuitBreakerConfig] = None):
+    def __init__(self, config: Optional[CircuitBreakerConfig] = None) -> None:
         self.config = config or CircuitBreakerConfig()
         self.state = CircuitState.CLOSED
         self.failure_count = 0
@@ -55,7 +56,7 @@ class CircuitBreaker:
         
         return False
     
-    def record_success(self):
+    def record_success(self) -> Any:
         """Record a successful execution"""
         if self.state == CircuitState.HALF_OPEN:
             # Success in half-open state, close the circuit
@@ -67,7 +68,7 @@ class CircuitBreaker:
             # Reset failure count on success
             self.failure_count = 0
     
-    def record_failure(self, exception: Optional[Exception] = None):
+    def record_failure(self, exception: Optional[Exception] = None) -> Any:
         """Record a failed execution"""
         self.failure_count += 1
         self.last_failure_time = time.time()
@@ -80,7 +81,7 @@ class CircuitBreaker:
               self.failure_count >= self.config.failure_threshold):
             # Too many failures, open the circuit
             self.state = CircuitState.OPEN
-            logger.warning(f"Circuit breaker opened after {self.failure_count} failures")
+            logger.warning("Circuit breaker opened after {} failures", extra={"self_failure_count": self.failure_count})
     
     def call(self, func: Callable, *args, **kwargs) -> Any:
         """Execute function with circuit breaker protection"""
@@ -128,7 +129,7 @@ class CircuitBreaker:
             }
         }
     
-    def reset(self):
+    def reset(self) -> Any:
         """Reset circuit breaker to closed state"""
         self.state = CircuitState.CLOSED
         self.failure_count = 0

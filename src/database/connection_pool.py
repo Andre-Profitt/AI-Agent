@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import aiohttp
 from tenacity import (
+from typing import Optional, Dict, Any, List, Union, Tuple
     retry,
     stop_after_attempt,
     wait_exponential,
@@ -34,7 +35,7 @@ class ConnectionStats:
 class DatabaseConnection:
     """Wrapper for a database connection"""
     
-    def __init__(self, connection_id: str, pool):
+    def __init__(self, connection_id: str, pool: ConnectionPool) -> None:
         self.id = connection_id
         self.pool = pool
         self.created_at = datetime.now()
@@ -47,7 +48,7 @@ class DatabaseConnection:
         self.last_used = datetime.now()
         return await self.pool.execute_with_retry(self.connection, query, params)
     
-    def release(self):
+    def release(self) -> Any:
         """Release connection back to pool"""
         self.in_use = False
         self.pool.release_connection(self)
@@ -82,9 +83,9 @@ class DatabasePool:
         self._health_check_task = None
         self._closed = False
     
-    async def initialize(self):
+    async def initialize(self) -> Any:
         """Initialize the connection pool"""
-        logger.info(f"Initializing database pool with {self.pool_size} connections...")
+        logger.info("Initializing database pool with {} connections...", extra={"self_pool_size": self.pool_size})
         
         # Create initial connections
         for i in range(self.pool_size):
@@ -95,13 +96,13 @@ class DatabasePool:
                 self.stats.created += 1
                 self.stats.idle += 1
             except Exception as e:
-                logger.error(f"Failed to create connection {i}: {e}")
+                logger.error("Failed to create connection {}: {}", extra={"i": i, "e": e})
                 self.stats.failed += 1
         
         # Start health check task
         self._health_check_task = asyncio.create_task(self._health_check_loop())
         
-        logger.info(f"Pool initialized with {len(self.connections)} connections")
+        logger.info("Pool initialized with {} connections", extra={"len_self_connections_": len(self.connections)})
     
     async def _create_connection(self, connection_id: str) -> DatabaseConnection:
         """Create a new database connection"""
@@ -114,7 +115,7 @@ class DatabasePool:
         return conn
     
     @asynccontextmanager
-    async def acquire(self):
+    async def acquire(self) -> Any:
         """Acquire a connection from the pool"""
         start_time = time.time()
         connection = None
@@ -159,7 +160,7 @@ class DatabasePool:
         wait=wait_exponential(multiplier=1, min=4, max=10),
         retry=retry_if_exception_type((aiohttp.ClientError, asyncio.TimeoutError))
     )
-    async def execute_with_retry(self, connection, query: str, params: Optional[Dict] = None):
+    async def execute_with_retry(self, connection, query: str, params: Optional[Dict] = None) -> Any:
         """Execute query with retry logic"""
         try:
             # Execute the query
@@ -170,7 +171,7 @@ class DatabasePool:
             return result
             
         except Exception as e:
-            logger.error(f"Query execution failed: {e}")
+            logger.error("Query execution failed: {}", extra={"e": e})
             self.stats.last_error = str(e)
             self.stats.last_error_time = datetime.now()
             raise
@@ -180,7 +181,7 @@ class DatabasePool:
         async with self.acquire() as conn:
             return await conn.execute(query, params)
     
-    async def _health_check_loop(self):
+    async def _health_check_loop(self) -> Any:
         """Periodic health check of connections"""
         while not self._closed:
             try:
@@ -194,14 +195,14 @@ class DatabasePool:
                         # Simple health check query
                         await conn.execute("health_check", {})
                     except Exception as e:
-                        logger.warning(f"Health check failed for {conn.id}: {e}")
+                        logger.warning("Health check failed for {}: {}", extra={"conn_id": conn.id, "e": e})
                         # Mark connection for recreation
                         # In production, implement connection recreation logic
                 
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Health check loop error: {e}")
+                logger.error("Health check loop error: {}", extra={"e": e})
     
     def get_stats(self) -> Dict[str, Any]:
         """Get pool statistics"""
@@ -223,7 +224,7 @@ class DatabasePool:
             'max_overflow': self.max_overflow
         }
     
-    async def close(self):
+    async def close(self) -> None:
         """Close all connections in the pool"""
         logger.info("Closing database pool...")
         self._closed = True
@@ -238,6 +239,6 @@ class DatabasePool:
                 # Supabase client doesn't need explicit close
                 pass
             except Exception as e:
-                logger.error(f"Error closing connection {conn.id}: {e}")
+                logger.error("Error closing connection {}: {}", extra={"conn_id": conn.id, "e": e})
         
         logger.info("Database pool closed") 

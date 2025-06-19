@@ -135,7 +135,7 @@ class AgentMarketplace:
         self._tag_index: Dict[str, Set[UUID]] = {}
         self._author_index: Dict[str, Set[UUID]] = {}
         
-        self.logger.info(f"AgentMarketplace initialized with {self.storage_backend} backend")
+        self.logger.info("AgentMarketplace initialized with {} backend", extra={"self_storage_backend": self.storage_backend})
     
     async def create_listing(self, listing: AgentListing) -> AgentListing:
         """Create a new agent listing"""
@@ -160,11 +160,11 @@ class AgentMarketplace:
             # Update indices
             await self._update_indices(listing)
             
-            self.logger.info(f"Created listing {listing.id} for agent {listing.agent_id}")
+            self.logger.info("Created listing {} for agent {}", extra={"listing_id": listing.id, "listing_agent_id": listing.agent_id})
             return listing
             
         except Exception as e:
-            self.logger.error(f"Failed to create listing: {e}")
+            self.logger.error("Failed to create listing: {}", extra={"e": e})
             raise
     
     async def update_listing(self, listing_id: UUID, updates: Dict[str, Any]) -> AgentListing:
@@ -185,11 +185,11 @@ class AgentMarketplace:
             # Update indices
             await self._update_indices(listing)
             
-            self.logger.info(f"Updated listing {listing_id}")
+            self.logger.info("Updated listing {}", extra={"listing_id": listing_id})
             return listing
             
         except Exception as e:
-            self.logger.error(f"Failed to update listing {listing_id}: {e}")
+            self.logger.error("Failed to update listing {}: {}", extra={"listing_id": listing_id, "e": e})
             raise
     
     async def get_listing(self, listing_id: UUID) -> Optional[AgentListing]:
@@ -257,7 +257,7 @@ class AgentMarketplace:
             return results[offset:offset + limit]
             
         except Exception as e:
-            self.logger.error(f"Search failed: {e}")
+            self.logger.error("Search failed: {}", extra={"e": e})
             return []
     
     async def add_rating(self, rating: AgentRating) -> AgentRating:
@@ -277,11 +277,11 @@ class AgentMarketplace:
             # Update listing statistics
             await self._update_listing_stats(listing)
             
-            self.logger.info(f"Added rating {rating.id} for agent {rating.agent_id}")
+            self.logger.info("Added rating {} for agent {}", extra={"rating_id": rating.id, "rating_agent_id": rating.agent_id})
             return rating
             
         except Exception as e:
-            self.logger.error(f"Failed to add rating: {e}")
+            self.logger.error("Failed to add rating: {}", extra={"e": e})
             raise
     
     async def get_ratings(self, agent_id: UUID) -> List[AgentRating]:
@@ -304,11 +304,11 @@ class AgentMarketplace:
                 self._downloads[listing_id] = 0
             self._downloads[listing_id] += 1
             
-            self.logger.info(f"Agent {listing.agent_id} downloaded by user {user_id}")
+            self.logger.info("Agent {} downloaded by user {}", extra={"listing_agent_id": listing.agent_id, "user_id": user_id})
             return True
             
         except Exception as e:
-            self.logger.error(f"Failed to record download: {e}")
+            self.logger.error("Failed to record download: {}", extra={"e": e})
             return False
     
     async def add_to_favorites(self, user_id: UUID, listing_id: UUID) -> bool:
@@ -324,7 +324,7 @@ class AgentMarketplace:
             return True
             
         except Exception as e:
-            self.logger.error(f"Failed to add to favorites: {e}")
+            self.logger.error("Failed to add to favorites: {}", extra={"e": e})
             return False
     
     async def remove_from_favorites(self, user_id: UUID, listing_id: UUID) -> bool:
@@ -335,7 +335,7 @@ class AgentMarketplace:
             return True
             
         except Exception as e:
-            self.logger.error(f"Failed to remove from favorites: {e}")
+            self.logger.error("Failed to remove from favorites: {}", extra={"e": e})
             return False
     
     async def get_favorites(self, user_id: UUID) -> List[AgentListing]:
@@ -353,7 +353,7 @@ class AgentMarketplace:
             return favorites
             
         except Exception as e:
-            self.logger.error(f"Failed to get favorites: {e}")
+            self.logger.error("Failed to get favorites: {}", extra={"e": e})
             return []
     
     async def get_marketplace_stats(self) -> MarketplaceStats:
@@ -408,7 +408,7 @@ class AgentMarketplace:
             return stats
             
         except Exception as e:
-            self.logger.error(f"Failed to get marketplace stats: {e}")
+            self.logger.error("Failed to get marketplace stats: {}", extra={"e": e})
             return MarketplaceStats()
     
     async def _update_indices(self, listing: AgentListing):
@@ -432,7 +432,7 @@ class AgentMarketplace:
             self._author_index[listing.author].add(listing.id)
             
         except Exception as e:
-            self.logger.error(f"Failed to update indices: {e}")
+            self.logger.error("Failed to update indices: {}", extra={"e": e})
     
     async def _update_listing_stats(self, listing: AgentListing):
         """Update listing statistics from ratings"""
@@ -444,7 +444,7 @@ class AgentMarketplace:
                 listing.updated_at = datetime.utcnow()
             
         except Exception as e:
-            self.logger.error(f"Failed to update listing stats: {e}")
+            self.logger.error("Failed to update listing stats: {}", extra={"e": e})
     
     async def export_listings(self, format: str = "json") -> str:
         """Export all listings"""
@@ -457,7 +457,7 @@ class AgentMarketplace:
                 raise ValueError(f"Unsupported export format: {format}")
                 
         except Exception as e:
-            self.logger.error(f"Failed to export listings: {e}")
+            self.logger.error("Failed to export listings: {}", extra={"e": e})
             return ""
     
     async def import_listings(self, data: str, format: str = "json") -> int:
@@ -489,12 +489,12 @@ class AgentMarketplace:
                     imported_count += 1
                     
                 except Exception as e:
-                    self.logger.warning(f"Failed to import listing: {e}")
+                    self.logger.warning("Failed to import listing: {}", extra={"e": e})
                     continue
             
-            self.logger.info(f"Imported {imported_count} listings")
+            self.logger.info("Imported {} listings", extra={"imported_count": imported_count})
             return imported_count
             
         except Exception as e:
-            self.logger.error(f"Failed to import listings: {e}")
+            self.logger.error("Failed to import listings: {}", extra={"e": e})
             return 0 

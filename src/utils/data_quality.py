@@ -1,6 +1,7 @@
 from enum import Enum, auto
 from dataclasses import dataclass
 from typing import Any, Optional
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 class DataQualityLevel(Enum):
     LOW = auto()
@@ -22,7 +23,7 @@ class ValidatedQuery:
     quality_level: DataQualityLevel = DataQualityLevel.HIGH
 
 class DataQualityValidator:
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         pass
 
     def validate(self, data: Any) -> ValidationResult:

@@ -5,6 +5,7 @@ Base tool class for all AI Agent tools
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 from dataclasses import dataclass
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 @dataclass
 class ToolResult:
@@ -17,7 +18,7 @@ class ToolResult:
 class BaseTool(ABC):
     """Base class for all tools"""
     
-    def __init__(self, name: str, description: str, version: str = "1.0.0"):
+    def __init__(self, name: str, description: str, version: str = "1.0.0") -> None:
         self.name = name
         self.description = description
         self.version = version
@@ -51,23 +52,23 @@ class BaseTool(ABC):
         """Validate input parameters - override in subclasses"""
         return True
     
-    def __str__(self):
+    def __str__(self) -> Any:
         return f"{self.name} (v{self.version})"
     
-    def __repr__(self):
+    def __repr__(self) -> Any:
         return f"<{self.__class__.__name__}: {self.name}>"
 
-def tool(func):
+def tool(func) -> Any:
     """Decorator to create a tool from a function"""
     class FunctionTool(BaseTool):
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__(
                 name=func.__name__,
                 description=func.__doc__ or "No description available"
             )
             self._func = func
         
-        async def arun(self, **kwargs):
+        async def arun(self, **kwargs) -> Any:
             import inspect
             if inspect.iscoroutinefunction(self._func):
                 return await self._func(**kwargs)

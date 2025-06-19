@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from contextlib import asynccontextmanager, contextmanager
 import logging
 from prometheus_client import (
+from typing import Optional, Dict, Any, List, Union, Tuple
     Counter, Histogram, Gauge, Summary, 
     generate_latest, CONTENT_TYPE_LATEST,
     CollectorRegistry, multiprocess
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 class MetricsRegistry:
     """Central registry for all application metrics"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.registry = CollectorRegistry()
         self._metrics: Dict[str, Any] = {}
         self._lock = threading.Lock()
@@ -165,11 +166,11 @@ ERRORS_TOTAL = Counter(
 # Timing Decorators
 # =============================
 
-def time_function(metric_name: str, labels: Optional[Dict[str, str]] = None):
+def time_function(metric_name: str, labels: Optional[Dict[str, str]] = None) -> Any:
     """Decorator to time function execution and record metrics"""
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
-        def sync_wrapper(*args, **kwargs):
+        def sync_wrapper(*args, **kwargs) -> Any:
             start_time = time.time()
             try:
                 result = func(*args, **kwargs)
@@ -201,7 +202,7 @@ def time_function(metric_name: str, labels: Optional[Dict[str, str]] = None):
                 raise
                 
         @functools.wraps(func)
-        async def async_wrapper(*args, **kwargs):
+        async def async_wrapper(*args, **kwargs) -> Any:
             start_time = time.time()
             try:
                 result = await func(*args, **kwargs)
@@ -239,11 +240,11 @@ def time_function(metric_name: str, labels: Optional[Dict[str, str]] = None):
             
     return decorator
 
-def track_database_operation(operation: str, table: str):
+def track_database_operation(operation: str, table: str) -> Any:
     """Decorator to track database operations"""
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
-        def sync_wrapper(*args, **kwargs):
+        def sync_wrapper(*args, **kwargs) -> Any:
             start_time = time.time()
             try:
                 result = func(*args, **kwargs)
@@ -286,7 +287,7 @@ def track_database_operation(operation: str, table: str):
                 raise
                 
         @functools.wraps(func)
-        async def async_wrapper(*args, **kwargs):
+        async def async_wrapper(*args, **kwargs) -> Any:
             start_time = time.time()
             try:
                 result = await func(*args, **kwargs)
@@ -340,7 +341,7 @@ def track_database_operation(operation: str, table: str):
 # =============================
 
 @contextmanager
-def track_operation(operation_name: str, labels: Optional[Dict[str, str]] = None):
+def track_operation(operation_name: str, labels: Optional[Dict[str, str]] = None) -> Any:
     """Context manager for tracking operations"""
     start_time = time.time()
     try:
@@ -372,7 +373,7 @@ def track_operation(operation_name: str, labels: Optional[Dict[str, str]] = None
         raise
 
 @asynccontextmanager
-async def track_async_operation(operation_name: str, labels: Optional[Dict[str, str]] = None):
+async def track_async_operation(operation_name: str, labels: Optional[Dict[str, str]] = None) -> Any:
     """Async context manager for tracking operations"""
     start_time = time.time()
     try:
@@ -418,11 +419,11 @@ class PerformanceMetrics:
     error: Optional[Exception] = None
     metadata: Dict[str, Any] = None
     
-    def __post_init__(self):
+    def __post_init__(self) -> Any:
         if self.metadata is None:
             self.metadata = {}
             
-    def complete(self, success: bool = True, error: Optional[Exception] = None):
+    def complete(self, success: bool = True, error: Optional[Exception] = None) -> Any:
         """Complete the performance measurement"""
         self.end_time = time.time()
         self.duration = self.end_time - self.start_time
@@ -448,7 +449,7 @@ class PerformanceMetrics:
 class PerformanceTracker:
     """Tracks performance metrics across operations"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.metrics: Dict[str, PerformanceMetrics] = {}
         
     def start_operation(self, operation_name: str, metadata: Optional[Dict[str, Any]] = None) -> str:
@@ -491,12 +492,12 @@ import time
 class ResourceMonitor:
     """Monitors system resources"""
     
-    def __init__(self, interval: float = 30.0):
+    def __init__(self, interval: float = 30.0) -> None:
         self.interval = interval
         self.running = False
         self.monitor_thread = None
         
-    def start(self):
+    def start(self) -> None:
         """Start resource monitoring"""
         if not self.running:
             self.running = True
@@ -504,13 +505,13 @@ class ResourceMonitor:
             self.monitor_thread.daemon = True
             self.monitor_thread.start()
             
-    def stop(self):
+    def stop(self) -> None:
         """Stop resource monitoring"""
         self.running = False
         if self.monitor_thread:
             self.monitor_thread.join()
             
-    def _monitor_loop(self):
+    def _monitor_loop(self) -> Any:
         """Main monitoring loop"""
         while self.running:
             try:
@@ -532,7 +533,7 @@ class ResourceMonitor:
                 time.sleep(self.interval)
                 
             except Exception as e:
-                logger.error(f"Error in resource monitoring: {e}")
+                logger.error("Error in resource monitoring: {}", extra={"e": e})
                 time.sleep(self.interval)
 
 # Global resource monitor
@@ -542,7 +543,7 @@ resource_monitor = ResourceMonitor()
 # Metrics Endpoint
 # =============================
 
-def get_metrics_response():
+def get_metrics_response() -> Any:
     """Get metrics response for FastAPI endpoint"""
     return generate_latest(), CONTENT_TYPE_LATEST
 
@@ -550,46 +551,46 @@ def get_metrics_response():
 # Utility Functions
 # =============================
 
-def record_agent_registration(agent_type: str, status: str = 'success'):
+def record_agent_registration(agent_type: str, status: str = 'success') -> Any:
     """Record agent registration metric"""
     AGENT_REGISTRATIONS.labels(agent_type=agent_type, status=status).inc()
 
-def record_task_execution(agent_id: str, task_type: str, status: str = 'success'):
+def record_task_execution(agent_id: str, task_type: str, status: str = 'success') -> Any:
     """Record task execution metric"""
     AGENT_TASK_EXECUTIONS.labels(agent_id=agent_id, task_type=task_type, status=status).inc()
 
-def record_task_duration(agent_id: str, task_type: str, duration: float):
+def record_task_duration(agent_id: str, task_type: str, duration: float) -> Any:
     """Record task duration metric"""
     AGENT_TASK_DURATION.labels(agent_id=agent_id, task_type=task_type).observe(duration)
 
-def record_agent_availability(agent_id: str, status: str):
+def record_agent_availability(agent_id: str, status: str) -> Any:
     """Record agent availability metric"""
     AGENT_AVAILABILITY.labels(agent_id=agent_id, status=status).set(1 if status == 'available' else 0)
 
-def record_task_submission(task_type: str, priority: int):
+def record_task_submission(task_type: str, priority: int) -> Any:
     """Record task submission metric"""
     TASKS_SUBMITTED.labels(task_type=task_type, priority=str(priority)).inc()
 
-def record_task_completion(task_type: str, status: str):
+def record_task_completion(task_type: str, status: str) -> Any:
     """Record task completion metric"""
     TASKS_COMPLETED.labels(task_type=task_type, status=status).inc()
 
-def record_external_api_call(service: str, endpoint: str, status: str = 'success'):
+def record_external_api_call(service: str, endpoint: str, status: str = 'success') -> Any:
     """Record external API call metric"""
     EXTERNAL_API_CALLS.labels(service=service, endpoint=endpoint, status=status).inc()
 
-def record_error(error_type: str, component: str, severity: str = 'error'):
+def record_error(error_type: str, component: str, severity: str = 'error') -> Any:
     """Record error metric"""
     ERRORS_TOTAL.labels(error_type=error_type, component=component, severity=severity).inc()
 
-def update_resource_utilization(resource_type: str, agent_id: str, percentage: float):
+def update_resource_utilization(resource_type: str, agent_id: str, percentage: float) -> bool:
     """Update resource utilization metric"""
     RESOURCE_UTILIZATION.labels(resource_type=resource_type, agent_id=agent_id).set(percentage)
 
-def update_task_queue_size(priority: str, size: int):
+def update_task_queue_size(priority: str, size: int) -> bool:
     """Update task queue size metric"""
     TASK_QUEUE_SIZE.labels(priority=priority).set(size)
 
-def update_db_connections(database: str, count: int):
+def update_db_connections(database: str, count: int) -> bool:
     """Update database connections metric"""
     DB_CONNECTIONS.labels(database=database).set(count) 

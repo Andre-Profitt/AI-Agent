@@ -8,9 +8,10 @@ import asyncio
 
 from src.core.entities.user import User
 from src.core.interfaces.user_repository import UserRepository
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 class InMemoryUserRepository(UserRepository):
-    def __init__(self):
+    def __init__(self) -> None:
         self._users: Dict[UUID, User] = {}
         self._users_by_email: Dict[str, User] = {}
 

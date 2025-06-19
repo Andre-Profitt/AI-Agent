@@ -107,7 +107,7 @@ class AdvancedHybridAgent:
                 tools=self._initialize_tools()
             )
         except Exception as e:
-            logger.warning(f"FSM agent initialization failed: {e}")
+            logger.warning("FSM agent initialization failed: {}", extra={"e": e})
             self.fsm_agent = None
         
         # Initialize Optimized Chain of Thought system
@@ -135,7 +135,7 @@ class AdvancedHybridAgent:
         self.executor = ThreadPoolExecutor(max_workers=4)
         self.cache = {}
         
-        logger.info(f"Advanced Hybrid Agent '{name}' initialized successfully")
+        logger.info("Advanced Hybrid Agent '{}' initialized successfully", extra={"name": name})
     
     def _initialize_tools(self) -> List[BaseTool]:
         """Initialize tools for the agent"""
@@ -143,17 +143,17 @@ class AdvancedHybridAgent:
         try:
             tools.append(SemanticSearchTool())
         except Exception as e:
-            logger.warning(f"SemanticSearchTool not available: {e}")
+            logger.warning("SemanticSearchTool not available: {}", extra={"e": e})
         
         try:
             tools.append(PythonInterpreter())
         except Exception as e:
-            logger.warning(f"PythonInterpreter not available: {e}")
+            logger.warning("PythonInterpreter not available: {}", extra={"e": e})
         
         try:
             tools.append(WeatherTool())
         except Exception as e:
-            logger.warning(f"WeatherTool not available: {e}")
+            logger.warning("WeatherTool not available: {}", extra={"e": e})
         
         return tools
     
@@ -167,7 +167,7 @@ class AdvancedHybridAgent:
         
         # Analyze query complexity
         complexity_score, features = self.complexity_analyzer.analyze(query)
-        logger.info(f"Query complexity: {complexity_score:.2f}")
+        logger.info("Query complexity: {}", extra={"complexity_score": complexity_score})
         
         # Select optimal mode
         selected_mode = self.mode_selector.select_mode(
@@ -610,7 +610,7 @@ class EmergentBehaviorDetector:
 async def demo_hybrid_architecture():
     """Demonstrate the enhanced hybrid architecture with CoT integration"""
     
-    print("=== Advanced Hybrid AI Agent Architecture Demo ===\n")
+    logger.info("=== Advanced Hybrid AI Agent Architecture Demo ===\n")
     
     # Create hybrid agent
     agent = AdvancedHybridAgent(
@@ -635,42 +635,42 @@ async def demo_hybrid_architecture():
     ]
     
     for i, query in enumerate(test_queries, 1):
-        print(f"Query {i}: {query}")
-        print("-" * 60)
+        logger.info("Query {}: {}", extra={"i": i, "query": query})
+        logger.info("-" * 60)
         
         # Process query
         result = await agent.process_query(query)
         
-        print(f"Mode: {result.get('mode', 'unknown')}")
-        print(f"Confidence: {result.get('confidence', 0):.2f}")
-        print(f"Answer: {result.get('answer', 'No answer')[:100]}...")
+        logger.info("Mode: {}", extra={"result_get__mode____unknown__": result.get('mode', 'unknown')})
+        logger.info("Confidence: {}", extra={"result_get__confidence___0_": result.get('confidence', 0)})
+        logger.info("Answer: {}...", extra={"result_get__answer____No_answer___": result.get('answer', 'No answer')[})
         
         if 'reasoning_path' in result:
             path = result['reasoning_path']
-            print(f"CoT Steps: {len(path.steps)}")
-            print(f"Template: {path.template_used}")
+            logger.info("CoT Steps: {}", extra={"len_path_steps_": len(path.steps)})
+            logger.info("Template: {}", extra={"path_template_used": path.template_used})
         
         if 'emergent_insights' in result:
-            print(f"Emergent Insights: {result['emergent_insights']}")
+            logger.info("Emergent Insights: {}", extra={"result__emergent_insights_": result['emergent_insights']})
         
-        print("\n" + "="*80 + "\n")
+        logger.info("\n" + str("="*80 + "\n"))
     
     # Show performance report
-    print("=== Performance Report ===")
+    logger.info("=== Performance Report ===")
     report = agent.get_performance_report()
     for key, value in report.items():
         if isinstance(value, dict):
-            print(f"{key}:")
+            logger.info("{}:", extra={"key": key})
             for k, v in value.items():
-                print(f"  {k}: {v}")
+                logger.info("  {}: {}", extra={"k": k, "v": v})
         else:
-            print(f"{key}: {value}")
+            logger.info("{}: {}", extra={"key": key, "value": value})
     
     # Show reasoning history
-    print("\n=== Recent Reasoning History ===")
+    logger.info("\n=== Recent Reasoning History ===")
     history = agent.get_reasoning_history()
     for entry in history:
-        print(f"{entry['timestamp']:.2f}: {entry['mode']} - {entry['query'][:50]}... (conf: {entry['confidence']:.2f})")
+        logger.info("{}: {} - {}... (conf: {})", extra={"entry__timestamp_": entry['timestamp'], "entry__mode_": entry['mode'], "entry__query__": entry['query'][, "entry__confidence_": entry['confidence']})
 
 # Create a wrapper class for semantic search tool
 class SemanticSearchTool(BaseTool):

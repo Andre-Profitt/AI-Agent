@@ -32,7 +32,7 @@ async def check_integrations_health() -> Dict[str, Any]:
     }
     
     # Check Supabase
-    if integration_config.supabase.is_configured():
+    if await integration_config.supabase.is_configured_safe():
         try:
             from .database_enhanced import connection_pool
             if connection_pool and connection_pool._initialized:

@@ -10,6 +10,7 @@ from datetime import datetime
 from src.core.interfaces.agent_repository import AgentRepository
 from src.core.entities.agent import Agent, AgentType, AgentState
 from src.shared.exceptions import InfrastructureException
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 
 class InMemoryAgentRepository(AgentRepository):
@@ -20,7 +21,7 @@ class InMemoryAgentRepository(AgentRepository):
     for development and testing purposes.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         self._agents: Dict[UUID, Agent] = {}
         self.logger = logging.getLogger(__name__)
     
@@ -34,11 +35,11 @@ class InMemoryAgentRepository(AgentRepository):
             agent.updated_at = datetime.utcnow()
             self._agents[agent.id] = agent
             
-            self.logger.debug(f"Saved agent {agent.id} of type {agent.agent_type}")
+            self.logger.debug("Saved agent {} of type {}", extra={"agent_id": agent.id, "agent_agent_type": agent.agent_type})
             return agent
             
         except Exception as e:
-            self.logger.error(f"Failed to save agent: {str(e)}")
+            self.logger.error("Failed to save agent: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Failed to save agent: {str(e)}")
     
     async def find_by_id(self, agent_id: UUID) -> Optional[Agent]:
@@ -46,22 +47,22 @@ class InMemoryAgentRepository(AgentRepository):
         try:
             agent = self._agents.get(agent_id)
             if agent:
-                self.logger.debug(f"Found agent {agent_id}")
+                self.logger.debug("Found agent {}", extra={"agent_id": agent_id})
             return agent
             
         except Exception as e:
-            self.logger.error(f"Failed to find agent {agent_id}: {str(e)}")
+            self.logger.error("Failed to find agent {}: {}", extra={"agent_id": agent_id, "str_e_": str(e)})
             raise InfrastructureException(f"Failed to find agent {agent_id}: {str(e)}")
     
     async def find_by_type(self, agent_type: AgentType) -> List[Agent]:
         """Find all agents of a specific type."""
         try:
             agents = [agent for agent in self._agents.values() if agent.agent_type == agent_type]
-            self.logger.debug(f"Found {len(agents)} agents of type {agent_type}")
+            self.logger.debug("Found {} agents of type {}", extra={"len_agents_": len(agents), "agent_type": agent_type})
             return agents
             
         except Exception as e:
-            self.logger.error(f"Failed to find agents of type {agent_type}: {str(e)}")
+            self.logger.error("Failed to find agents of type {}: {}", extra={"agent_type": agent_type, "str_e_": str(e)})
             raise InfrastructureException(f"Failed to find agents of type {agent_type}: {str(e)}")
     
     async def find_available(self) -> List[Agent]:
@@ -71,35 +72,35 @@ class InMemoryAgentRepository(AgentRepository):
                 agent for agent in self._agents.values() 
                 if agent.state == AgentState.IDLE or agent.state == AgentState.READY
             ]
-            self.logger.debug(f"Found {len(available_agents)} available agents")
+            self.logger.debug("Found {} available agents", extra={"len_available_agents_": len(available_agents)})
             return available_agents
             
         except Exception as e:
-            self.logger.error(f"Failed to find available agents: {str(e)}")
+            self.logger.error("Failed to find available agents: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Failed to find available agents: {str(e)}")
     
     async def update_state(self, agent_id: UUID, state: AgentState) -> bool:
         """Update an agent's state."""
         try:
             if agent_id not in self._agents:
-                self.logger.warning(f"Agent {agent_id} not found for state update")
+                self.logger.warning("Agent {} not found for state update", extra={"agent_id": agent_id})
                 return False
             
             self._agents[agent_id].state = state
             self._agents[agent_id].updated_at = datetime.utcnow()
             
-            self.logger.debug(f"Updated agent {agent_id} state to {state}")
+            self.logger.debug("Updated agent {} state to {}", extra={"agent_id": agent_id, "state": state})
             return True
             
         except Exception as e:
-            self.logger.error(f"Failed to update agent {agent_id} state: {str(e)}")
+            self.logger.error("Failed to update agent {} state: {}", extra={"agent_id": agent_id, "str_e_": str(e)})
             raise InfrastructureException(f"Failed to update agent {agent_id} state: {str(e)}")
     
     async def update_performance_metrics(self, agent_id: UUID, metrics: Dict[str, Any]) -> bool:
         """Update an agent's performance metrics."""
         try:
             if agent_id not in self._agents:
-                self.logger.warning(f"Agent {agent_id} not found for metrics update")
+                self.logger.warning("Agent {} not found for metrics update", extra={"agent_id": agent_id})
                 return False
             
             agent = self._agents[agent_id]
@@ -109,26 +110,26 @@ class InMemoryAgentRepository(AgentRepository):
             agent.performance_metrics.update(metrics)
             agent.updated_at = datetime.utcnow()
             
-            self.logger.debug(f"Updated performance metrics for agent {agent_id}")
+            self.logger.debug("Updated performance metrics for agent {}", extra={"agent_id": agent_id})
             return True
             
         except Exception as e:
-            self.logger.error(f"Failed to update metrics for agent {agent_id}: {str(e)}")
+            self.logger.error("Failed to update metrics for agent {}: {}", extra={"agent_id": agent_id, "str_e_": str(e)})
             raise InfrastructureException(f"Failed to update metrics for agent {agent_id}: {str(e)}")
     
     async def delete(self, agent_id: UUID) -> bool:
         """Delete an agent from the repository."""
         try:
             if agent_id not in self._agents:
-                self.logger.warning(f"Agent {agent_id} not found for deletion")
+                self.logger.warning("Agent {} not found for deletion", extra={"agent_id": agent_id})
                 return False
             
             del self._agents[agent_id]
-            self.logger.debug(f"Deleted agent {agent_id}")
+            self.logger.debug("Deleted agent {}", extra={"agent_id": agent_id})
             return True
             
         except Exception as e:
-            self.logger.error(f"Failed to delete agent {agent_id}: {str(e)}")
+            self.logger.error("Failed to delete agent {}: {}", extra={"agent_id": agent_id, "str_e_": str(e)})
             raise InfrastructureException(f"Failed to delete agent {agent_id}: {str(e)}")
     
     async def get_statistics(self) -> Dict[str, Any]:
@@ -154,9 +155,9 @@ class InMemoryAgentRepository(AgentRepository):
                 "created_at": datetime.utcnow().isoformat()
             }
             
-            self.logger.debug(f"Generated statistics: {stats}")
+            self.logger.debug("Generated statistics: {}", extra={"stats": stats})
             return stats
             
         except Exception as e:
-            self.logger.error(f"Failed to get statistics: {str(e)}")
+            self.logger.error("Failed to get statistics: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Failed to get statistics: {str(e)}") 

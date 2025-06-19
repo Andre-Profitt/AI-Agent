@@ -3,6 +3,7 @@
 
 from enum import Enum, auto
 from dataclasses import dataclass
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 class LoopPreventionState(Enum):
     OK = auto()
@@ -25,15 +26,15 @@ class ToolExecutionResult:
     success: bool = True
 
 class StateValidator:
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         pass
-    def validate(self, *args, **kwargs):
+    def validate(self, *args, **kwargs) -> bool:
         return True
 
 class ResilientAPIClient:
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         pass
-    def request(self, *args, **kwargs):
+    def request(self, *args, **kwargs) -> Any:
         return None
 
 class PlanResponse:
@@ -42,32 +43,32 @@ class PlanResponse:
 class PlanStep:
     pass
 
-def calculate_state_hash(*args, **kwargs):
+def calculate_state_hash(*args, **kwargs) -> Any:
     return "dummy_hash"
 
-def check_for_stagnation(*args, **kwargs):
+def check_for_stagnation(*args, **kwargs) -> Any:
     return False
 
-def decrement_loop_counter(*args, **kwargs):
+def decrement_loop_counter(*args, **kwargs) -> Any:
     return None
 
-def categorize_tool_error(*args, **kwargs):
+def categorize_tool_error(*args, **kwargs) -> Any:
     return None
 
-def create_self_correction_prompt(*args, **kwargs):
+def create_self_correction_prompt(*args, **kwargs) -> Any:
     return "Self-correction prompt stub"
 
-def create_adaptive_error_handler(*args, **kwargs):
+def create_adaptive_error_handler(*args, **kwargs) -> Any:
     return None
 
 # Add any other stubs as needed for compatibility
 
-def circuit_breaker(*args, **kwargs):
-    def decorator(func):
+def circuit_breaker(*args, **kwargs) -> Any:
+    def decorator(func) -> Any:
         return func
     return decorator
 
-def retry_with_backoff(*args, **kwargs):
-    def decorator(func):
+def retry_with_backoff(*args, **kwargs) -> Any:
+    def decorator(func) -> Any:
         return func
     return decorator 

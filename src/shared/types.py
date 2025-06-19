@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from enum import Enum
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 
 class LogLevel(str, Enum):
@@ -123,7 +124,7 @@ class SystemConfig:
     # External service configurations
     external_apis: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     
-    def __post_init__(self):
+    def __post_init__(self) -> Any:
         """Validate configuration after initialization"""
         if self.environment not in ["development", "staging", "production"]:
             raise ValueError("Environment must be one of: development, staging, production")

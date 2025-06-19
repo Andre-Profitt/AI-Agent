@@ -484,7 +484,7 @@ class HybridAgent:
 async def demo_basic_hybrid_agent():
     """Demonstrate basic hybrid agent functionality"""
     print("\n" + "="*60)
-    print("DEMO 1: Basic Hybrid Agent")
+    logger.info("DEMO 1: Basic Hybrid Agent")
     print("="*60)
     
     # Create demo tools
@@ -519,20 +519,20 @@ async def demo_basic_hybrid_agent():
     ]
     
     for i, task in enumerate(tasks, 1):
-        print(f"\n--- Task {i}: {task['type']} ---")
-        print(f"Query: {task.get('query', 'State-based task')}")
+        logger.info("\n--- Task {}: {} ---", extra={"i": i, "task__type_": task['type']})
+        logger.info("Query: {}", extra={"task_get__query____State_based_task__": task.get('query', 'State-based task')})
         
         result = await agent.execute_task(task)
-        print(f"Mode used: {agent.current_mode}")
-        print(f"Result: {result}")
+        logger.info("Mode used: {}", extra={"agent_current_mode": agent.current_mode})
+        logger.info("Result: {}", extra={"result": result})
         
         # Show performance metrics
-        print(f"Performance by mode: {agent.mode_performance}")
+        logger.info("Performance by mode: {}", extra={"agent_mode_performance": agent.mode_performance})
 
 async def demo_fsm_learning():
     """Demonstrate FSM learning capabilities"""
     print("\n" + "="*60)
-    print("DEMO 2: FSM Learning")
+    logger.info("DEMO 2: FSM Learning")
     print("="*60)
     
     # Create a probabilistic FSM
@@ -577,13 +577,13 @@ async def demo_fsm_learning():
     # Set initial state
     fsm.set_initial_state("idle")
     
-    print("Running FSM with learning...")
-    print("Initial state:", fsm.current_state.name)
+    logger.info("Running FSM with learning...")
+    logger.info("Initial state:", extra={"data": fsm.current_state.name})
     
     # Run FSM for several steps
     for step in range(10):
         if fsm.step():
-            print(f"Step {step + 1}: {fsm.current_state.name} (energy: {fsm.current_state.data.get('energy', 0)})")
+            logger.info("Step {}: {} (energy: {})", extra={"step___1": step + 1, "fsm_current_state_name": fsm.current_state.name, "fsm_current_state_data_get__energy___0_": fsm.current_state.data.get('energy', 0)})
             
             # Simulate state changes
             if fsm.current_state.name == "working":
@@ -595,15 +595,15 @@ async def demo_fsm_learning():
             elif fsm.current_state.name == "idle":
                 fsm.current_state.data["energy"] = min(100, fsm.current_state.data.get("energy", 0) + 10)
         else:
-            print(f"Step {step + 1}: No valid transitions")
+            logger.info("Step {}: No valid transitions", extra={"step___1": step + 1})
             break
     
-    print(f"\nLearned transition probabilities: {fsm.learned_transitions}")
+    logger.info("\nLearned transition probabilities: {}", extra={"fsm_learned_transitions": fsm.learned_transitions})
 
 async def demo_chain_of_thought():
     """Demonstrate Chain of Thought reasoning"""
     print("\n" + "="*60)
-    print("DEMO 3: Chain of Thought Reasoning")
+    logger.info("DEMO 3: Chain of Thought Reasoning")
     print("="*60)
     
     # Create CoT components
@@ -620,26 +620,26 @@ async def demo_chain_of_thought():
     ]
     
     for query in queries:
-        print(f"\n--- Query: {query} ---")
+        logger.info("\n--- Query: {} ---", extra={"query": query})
         
         # Analyze complexity
         complexity = complexity_analyzer.analyze(query)
-        print(f"Complexity score: {complexity:.3f}")
+        logger.info("Complexity score: {}", extra={"complexity": complexity})
         
         # Select template
         template = template_library.select_template(query)
-        print(f"Selected template: {template}")
+        logger.info("Selected template: {}", extra={"template": template})
         
         # Execute reasoning
         steps = cot.reason(query)
-        print(f"Reasoning steps: {len(steps)}")
+        logger.info("Reasoning steps: {}", extra={"len_steps_": len(steps)})
         
         for i, step in enumerate(steps[:3]):  # Show first 3 steps
-            print(f"  Step {i+1}: {step.thought[:80]}... (confidence: {step.confidence:.2f})")
+            logger.info("  Step {}: {}... (confidence: {})", extra={"i_1": i+1, "step_thought_": step.thought[, "step_confidence": step.confidence})
 
 async def main():
     """Run all demonstrations"""
-    print("Advanced AI Agent Architecture - Simplified Demonstration")
+    logger.info("Advanced AI Agent Architecture - Simplified Demonstration")
     print("=" * 60)
     
     try:
@@ -649,12 +649,12 @@ async def main():
         await demo_chain_of_thought()
         
         print("\n" + "="*60)
-        print("All demonstrations completed successfully!")
+        logger.info("All demonstrations completed successfully!")
         print("="*60)
         
     except Exception as e:
         logger.error(f"Error in demonstration: {str(e)}")
-        print(f"Error: {str(e)}")
+        logger.info("Error: {}", extra={"str_e_": str(e)})
 
 if __name__ == "__main__":
     asyncio.run(main()) 

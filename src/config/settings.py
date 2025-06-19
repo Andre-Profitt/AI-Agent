@@ -6,6 +6,7 @@ import os
 from typing import Optional
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 @dataclass
 class LoggingConfig:
@@ -39,7 +40,7 @@ class MonitoringConfig:
 class Settings:
     """Main application settings"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         # Environment detection
         self.environment = self._detect_environment()
         

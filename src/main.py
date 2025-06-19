@@ -7,6 +7,9 @@ import logging
 import sys
 from pathlib import Path
 from typing import Optional
+from typing import Optional, Dict, Any, List, Union, Tuple
+from src.shared.types.di_types import (
+    ConfigurationService, DatabaseClient, CacheClient, LoggingService
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -34,7 +37,7 @@ class AIAgentApplication:
     and interface management.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.container = None
         self.config: Optional[SystemConfig] = None
         self.logger: Optional[logging.Logger] = None
@@ -64,7 +67,7 @@ class AIAgentApplication:
             self.logger.info("AI Agent application initialized successfully")
             
         except Exception as e:
-            print(f"Failed to initialize application: {str(e)}")
+            logger.info("Failed to initialize application: {}", extra={"str_e_": str(e)})
             sys.exit(1)
     
     async def _initialize_configuration(self) -> None:
@@ -157,7 +160,7 @@ class AIAgentApplication:
         if not self.web_interface:
             raise RuntimeError("Web interface not initialized")
         
-        self.logger.info(f"Starting web interface on {self.config.api_host}:{self.config.api_port}")
+        self.logger.info("Starting web interface on {}:{}", extra={"self_config_api_host": self.config.api_host, "self_config_api_port": self.config.api_port})
         await self.web_interface.run()
     
     async def run_cli(self) -> None:
@@ -185,7 +188,7 @@ class AIAgentApplication:
         self.logger.info("Application shutdown complete")
 
 
-async def main():
+async def main() -> Any:
     """Main entry point."""
     import argparse
     

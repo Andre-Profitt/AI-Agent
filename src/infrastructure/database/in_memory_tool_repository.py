@@ -8,9 +8,10 @@ import asyncio
 
 from src.core.entities.tool import Tool, ToolType
 from src.core.interfaces.tool_repository import ToolRepository
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 class InMemoryToolRepository(ToolRepository):
-    def __init__(self):
+    def __init__(self) -> None:
         self._tools: Dict[UUID, Tool] = {}
         self._tools_by_name: Dict[str, Tool] = {}
 

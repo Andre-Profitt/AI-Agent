@@ -50,7 +50,7 @@ class ToolRegistry:
         try:
             # Validate tool
             if not self._validate_tool(tool):
-                logger.error(f"Tool validation failed: {tool}")
+                logger.error("Tool validation failed: {}", extra={"tool": tool})
                 return False
             
             # Extract tool info
@@ -58,7 +58,7 @@ class ToolRegistry:
             
             # Check for duplicates
             if tool_name in self._tools:
-                logger.warning(f"Tool {tool_name} already registered, updating...")
+                logger.warning("Tool {} already registered, updating...", extra={"tool_name": tool_name})
             
             # Register tool
             self._tools[tool_name] = tool
@@ -87,11 +87,11 @@ class ToolRegistry:
             if tool_name not in self._categories[category]:
                 self._categories[category].append(tool_name)
             
-            logger.info(f"Registered tool: {tool_name} in category: {category}")
+            logger.info("Registered tool: {} in category: {}", extra={"tool_name": tool_name, "category": category})
             return True
             
         except Exception as e:
-            logger.error(f"Failed to register tool: {e}", exc_info=True)
+            logger.error("Failed to register tool: {}", exc_info=True)
             return False
     
     def _validate_tool(self, tool: Any) -> bool:
@@ -142,7 +142,7 @@ class ToolRegistry:
                     if modname.startswith('_'):
                         continue
                     
-                    full_module_name = f"{module_path}.{modname}"
+                    full_module_name = f"{}.{}"
                     
                     try:
                         # Import the module
@@ -160,10 +160,10 @@ class ToolRegistry:
                                 self.register(obj, category=category)
                     
                     except Exception as e:
-                        logger.warning(f"Failed to import {full_module_name}: {e}")
+                        logger.warning("Failed to import {}: {}", extra={"e": e, "module_path": module_path, "modname": modname, "full_module_name": full_module_name, "e": e})
             
             except Exception as e:
-                logger.error(f"Failed to discover tools in {module_path}: {e}")
+                logger.error("Failed to discover tools in {}: {}", extra={"module_path": module_path, "e": e})
     
     def _looks_like_tool(self, obj: Any) -> bool:
         """Check if object looks like a tool"""

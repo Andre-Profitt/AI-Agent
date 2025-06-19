@@ -9,13 +9,14 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 logger = logging.getLogger(__name__)
 
 class LocalKnowledgeTool:
     """Local fallback knowledge tool when vector store is unavailable"""
     
-    def __init__(self, cache_dir: str = "./knowledge_cache"):
+    def __init__(self, cache_dir: str = "./knowledge_cache") -> None:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.local_docs = {}
@@ -23,18 +24,18 @@ class LocalKnowledgeTool:
         self._load_local_docs()
         self._build_index()
     
-    def _load_local_docs(self):
+    def _load_local_docs(self) -> Any:
         """Load documents from local cache"""
         try:
             for file_path in self.cache_dir.glob("*.json"):
                 with open(file_path, 'r') as f:
                     doc_data = json.load(f)
                     self.local_docs[doc_data["id"]] = doc_data
-            logger.info(f"Loaded {len(self.local_docs)} local documents")
+            logger.info("Loaded {} local documents", extra={"len_self_local_docs_": len(self.local_docs)})
         except Exception as e:
-            logger.warning(f"Failed to load local docs: {e}")
+            logger.warning("Failed to load local docs: {}", extra={"e": e})
     
-    def _build_index(self):
+    def _build_index(self) -> Any:
         """Build inverted index for better search"""
         for doc_id, doc_data in self.local_docs.items():
             text = doc_data.get("text", "").lower()

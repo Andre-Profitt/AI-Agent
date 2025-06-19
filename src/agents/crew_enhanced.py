@@ -6,17 +6,18 @@ import logging
 import asyncio
 from .database_enhanced import vector_store
 from .langchain_enhanced import enhanced_agent
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 logger = logging.getLogger(__name__)
 
 class GAIACrewOrchestrator:
     """Enhanced CrewAI orchestration for GAIA tasks"""
     
-    def __init__(self, tools: List[BaseTool]):
+    def __init__(self, tools: List[BaseTool]) -> None:
         self.tools = {tool.name: tool for tool in tools}
         self.agents = self._create_specialized_agents()
         
-    def _get_model(self, model_type: str):
+    def _get_model(self, model_type: str) -> Any:
         """Get appropriate model for different agent types"""
         # TODO: Implement model selection based on type
         # For now, return a default model
@@ -77,7 +78,7 @@ class GAIACrewOrchestrator:
             )
         }
     
-    def _create_dummy_tool(self, name: str):
+    def _create_dummy_tool(self, name: str) -> Any:
         """Create dummy tool for missing dependencies"""
         @tool
         def dummy_tool(query: str) -> str:
@@ -171,7 +172,7 @@ class GAIATaskFactory:
 class EnhancedCrewExecutor:
     """Enhanced crew execution with monitoring and optimization"""
     
-    def __init__(self, orchestrator: GAIACrewOrchestrator):
+    def __init__(self, orchestrator: GAIACrewOrchestrator) -> None:
         self.orchestrator = orchestrator
         self.execution_history = []
         
@@ -211,7 +212,7 @@ class EnhancedCrewExecutor:
             }
             
         except Exception as e:
-            logger.error(f"Crew execution failed: {e}")
+            logger.error("Crew execution failed: {}", extra={"e": e})
             # FIXED: Proper error propagation instead of swallowing
             raise RuntimeError(f"CrewAI execution failed: {e}")
     
@@ -239,20 +240,20 @@ def initialize_crew_enhanced(tools: List[BaseTool]) -> EnhancedCrewExecutor:
         logger.info("Enhanced CrewAI initialized successfully")
         return executor
     except Exception as e:
-        logger.error(f"Failed to initialize CrewAI: {e}")
+        logger.error("Failed to initialize CrewAI: {}", extra={"e": e})
         raise
 
 class EnhancedKnowledgeBase:
     """Enhanced knowledge base for GAIA tasks"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.index = None
         self.query_engine = None
 
 class MultiModalGAIAIndex:
     """Multi-modal index for GAIA content"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.text_index = None
         self.image_index = None
         self.table_index = None
@@ -260,13 +261,13 @@ class MultiModalGAIAIndex:
 class IncrementalKnowledgeBase:
     """Incremental knowledge base updates"""
     
-    def __init__(self, storage_path: str = "./knowledge_cache"):
+    def __init__(self, storage_path: str = "./knowledge_cache") -> None:
         self.storage_path = storage_path
         self.index = None
 
 class GAIAQueryEngine:
     """Specialized query engine for GAIA tasks"""
     
-    def __init__(self, index):
+    def __init__(self, index: Any) -> None:
         self.index = index
         self.query_engine = None 

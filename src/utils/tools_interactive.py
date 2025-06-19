@@ -10,21 +10,22 @@ import json
 
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 
 # Global state for managing interactive sessions
 class InteractiveState:
     """Manages state for interactive tool calls"""
-    def __init__(self):
+    def __init__(self) -> None:
         self.pending_clarifications: Dict[str, Dict] = {}
         self.clarification_callback: Optional[Callable] = None
         self.user_responses: Dict[str, str] = {}
     
-    def set_clarification_callback(self, callback: Callable):
+    def set_clarification_callback(self, callback: Callable) -> Any:
         """Set the callback function for handling clarifications"""
         self.clarification_callback = callback
     
-    def add_pending_clarification(self, question_id: str, question: str, context: Dict):
+    def add_pending_clarification(self, question_id: str, question: str, context: Dict) -> Any:
         """Add a pending clarification request"""
         self.pending_clarifications[question_id] = {
             "question": question,
@@ -36,7 +37,7 @@ class InteractiveState:
         """Get user response for a clarification"""
         return self.user_responses.get(question_id)
     
-    def set_user_response(self, question_id: str, response: str):
+    def set_user_response(self, question_id: str, response: str) -> Any:
         """Set user response for a clarification"""
         self.user_responses[question_id] = response
         # Clean up pending clarification
@@ -131,7 +132,7 @@ def collect_user_feedback(feedback_type: str, content: str, related_to: Optional
         # Log the feedback
         import logging
         logger = logging.getLogger(__name__)
-        logger.info(f"User feedback collected: {feedback_data}")
+        logger.info("User feedback collected: {}", extra={"feedback_data": feedback_data})
         
         return f"Thank you for your {feedback_type} feedback. It has been recorded."
         
@@ -204,7 +205,7 @@ def get_interactive_tools() -> List[StructuredTool]:
     return [clarification_tool, feedback_tool, confirmation_tool]
 
 
-def set_clarification_callback(callback: Callable):
+def set_clarification_callback(callback: Callable) -> Any:
     """
     Set the callback function for handling clarifications in the UI.
     
@@ -224,7 +225,7 @@ def get_pending_clarifications() -> Dict[str, Dict]:
     return interactive_state.pending_clarifications.copy()
 
 
-def clear_pending_clarifications():
+def clear_pending_clarifications() -> Any:
     """Clear all pending clarifications."""
     interactive_state.pending_clarifications.clear()
     interactive_state.user_responses.clear()
@@ -233,7 +234,7 @@ def clear_pending_clarifications():
 class ToolsInteractive:
     """Interactive tools class for importing"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.tools = get_interactive_tools()
         self.state = interactive_state
     
@@ -248,7 +249,7 @@ class ToolsInteractive:
                 return tool
         return None
     
-    def set_clarification_callback(self, callback: Callable):
+    def set_clarification_callback(self, callback: Callable) -> Any:
         """Set the clarification callback"""
         self.state.set_clarification_callback(callback)
     

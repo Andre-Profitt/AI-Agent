@@ -74,7 +74,7 @@ try:
     logger.info("Production tools loaded successfully")
 except ImportError as e:
     PRODUCTION_TOOLS_AVAILABLE = False
-    logger.warning(f"Production tools not available: {e}")
+    logger.warning("Production tools not available: {}", extra={"e": e})
 
 # --- GAIA Mock Data ---
 
@@ -123,7 +123,7 @@ def gaia_video_analyzer(video_url: str) -> str:
         str: JSON string containing video metadata and transcript
     """
     try:
-        logger.info(f"GAIA video analyzer called with URL: {video_url}")
+        logger.info("GAIA video analyzer called with URL: {}", extra={"video_url": video_url})
         
         # Check if this is a googleusercontent URL
         if "googleusercontent.com" not in video_url:
@@ -153,7 +153,7 @@ def gaia_video_analyzer(video_url: str) -> str:
             }, indent=2)
             
     except Exception as e:
-        logger.error(f"Error in GAIA video analyzer: {e}")
+        logger.error("Error in GAIA video analyzer: {}", extra={"e": e})
         return json.dumps({"error": f"Failed to analyze video: {str(e)}"})
 
 @tool
@@ -170,7 +170,7 @@ def chess_logic_tool(fen_string: str, analysis_time_seconds: float = 2.0) -> str
         str: The best move in algebraic notation or an error message
     """
     try:
-        logger.info(f"Chess logic tool called with FEN: {fen_string}")
+        logger.info("Chess logic tool called with FEN: {}", extra={"fen_string": fen_string})
         
         # For GAIA benchmark, we'll use a simple pattern matching approach
         # Real implementation would use python-chess and Stockfish
@@ -196,7 +196,7 @@ def chess_logic_tool(fen_string: str, analysis_time_seconds: float = 2.0) -> str
             return "Error: Invalid position - missing kings"
             
     except Exception as e:
-        logger.error(f"Error in chess logic tool: {e}")
+        logger.error("Error in chess logic tool: {}", extra={"e": e})
         return f"Error analyzing chess position: {str(e)}"
 
 @tool  
@@ -220,7 +220,7 @@ def web_researcher(
         str: Search results formatted based on search type
     """
     try:
-        logger.info(f"Enhanced web researcher called: query='{query}', date_range={date_range}, type={search_type}")
+        logger.info("Enhanced web researcher called: query='{}', date_range={}, type={}", extra={"query": query, "date_range": date_range, "search_type": search_type})
         
         # Build enhanced query with filters
         enhanced_query = query
@@ -261,7 +261,7 @@ def web_researcher(
         return tavily_search_backoff(enhanced_query)
         
     except Exception as e:
-        logger.error(f"Error in enhanced web researcher: {e}")
+        logger.error("Error in enhanced web researcher: {}", extra={"e": e})
         return f"Error searching web: {str(e)}"
 
 @tool
@@ -277,7 +277,7 @@ def abstract_reasoning_tool(puzzle_text: str) -> str:
         str: The solution to the puzzle with step-by-step reasoning
     """
     try:
-        logger.info(f"Abstract reasoning tool called with puzzle: {puzzle_text[:100]}...")
+        logger.info("Abstract reasoning tool called with puzzle: {}...", extra={"puzzle_text_": puzzle_text[})
         
         if not GROQ_AVAILABLE:
             return "Abstract reasoning requires ChatGroq - install langchain-groq"
@@ -335,7 +335,7 @@ Step 1 - Understanding the puzzle:
             return f"Reasoning:\n{reasoning}"
             
     except Exception as e:
-        logger.error(f"Error in abstract reasoning tool: {e}")
+        logger.error("Error in abstract reasoning tool: {}", extra={"e": e})
         return f"Error solving puzzle: {str(e)}"
 
 class ImageAnalyzerEnhancedInput(BaseModel):
@@ -442,7 +442,7 @@ def image_analyzer_enhanced(filename: str, task: str = "describe") -> str:
         str: Analysis result
     """
     try:
-        logger.info(f"Enhanced image analyzer called: {filename}, task: {task}")
+        logger.info("Enhanced image analyzer called: {}, task: {}", extra={"filename": filename, "task": task})
         
         # This would integrate with a vision model like GPT-4V or Claude Vision
         # For now, return a placeholder
@@ -456,7 +456,7 @@ def image_analyzer_enhanced(filename: str, task: str = "describe") -> str:
             return "General image description would be generated here."
             
     except Exception as e:
-        logger.error(f"Error in enhanced image analyzer: {e}")
+        logger.error("Error in enhanced image analyzer: {}", extra={"e": e})
         return f"Error analyzing image: {str(e)}"
 
 from src.config import config

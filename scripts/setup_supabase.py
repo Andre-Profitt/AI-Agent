@@ -9,6 +9,10 @@ import sys
 from typing import Optional
 from dotenv import load_dotenv
 import json
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 # Load environment variables
 load_dotenv()
@@ -18,8 +22,8 @@ try:
     from src.database import get_supabase_client
     from src.database_extended import ExtendedDatabase
 except ImportError as e:
-    print(f"Error importing required modules: {e}")
-    print("Please install required packages: pip install supabase python-dotenv")
+    logger.info("Error importing required modules: {}", extra={"e": e})
+    logger.info("Please install required packages: pip install supabase python-dotenv")
     sys.exit(1)
 
 
@@ -41,10 +45,10 @@ def test_connection() -> Optional[Client]:
         client = get_supabase_client()
         # Try a simple query to test connection
         result = client.table("knowledge_base").select("count", count="exact").execute()
-        print("✅ Successfully connected to Supabase!")
+        logger.info("✅ Successfully connected to Supabase!")
         return client
     except Exception as e:
-        print(f"❌ Failed to connect to Supabase: {e}")
+        logger.info("❌ Failed to connect to Supabase: {}", extra={"e": e})
         return None
 
 
@@ -80,10 +84,10 @@ def check_extensions(client: Client) -> dict[str, bool]:
     """Check if required PostgreSQL extensions are enabled."""
     # Note: This requires direct SQL access which Supabase client doesn't provide
     # You'll need to check these manually in the Supabase SQL Editor
-    print("\n⚠️  Please verify these extensions are enabled in your Supabase SQL Editor:")
-    print("  - pgvector (for semantic search)")
-    print("  - uuid-ossp (for UUID generation)")
-    print("\nRun this SQL to check: SELECT * FROM pg_extension;")
+    logger.info("\n⚠️  Please verify these extensions are enabled in your Supabase SQL Editor:")
+    logger.info("  - pgvector (for semantic search)")
+    logger.info("  - uuid-ossp (for UUID generation)")
+    logger.info("\nRun this SQL to check: SELECT * FROM pg_extension;")
     
     return {"pgvector": "unknown", "uuid-ossp": "unknown"}
 
@@ -100,10 +104,10 @@ def create_sample_data(client: Client) -> bool:
             "average_latency_ms": 150.5
         }).execute()
         
-        print("✅ Sample data created successfully!")
+        logger.info("✅ Sample data created successfully!")
         return True
     except Exception as e:
-        print(f"❌ Failed to create sample data: {e}")
+        logger.info("❌ Failed to create sample data: {}", extra={"e": e})
         return False
 
 
@@ -130,96 +134,96 @@ CREWAI_API_KEY=your-crewai-api-key
     with open(".env.template", "w") as f:
         f.write(template)
     
-    print("✅ Created .env.template file")
+    logger.info("✅ Created .env.template file")
 
 
 def main():
     """Main setup function."""
-    print("🚀 Supabase Setup Script for AI Agent")
+    logger.info("🚀 Supabase Setup Script for AI Agent")
     print("=" * 50)
     
     # Step 1: Check environment variables
-    print("\n1. Checking environment variables...")
+    logger.info("\n1. Checking environment variables...")
     env_ok, missing_vars = check_environment_variables()
     
     if not env_ok:
-        print(f"❌ Missing environment variables: {', '.join(missing_vars)}")
-        print("\nPlease create a .env file with the following variables:")
+        logger.info("❌ Missing environment variables: {}", extra={"_____join_missing_vars_": ', '.join(missing_vars)})
+        logger.info("\nPlease create a .env file with the following variables:")
         for var in missing_vars:
-            print(f"  {var}=your-value-here")
+            logger.info("  {}=your-value-here", extra={"var": var})
         
         generate_env_template()
-        print("\nRefer to .env.template for a complete example.")
+        logger.info("\nRefer to .env.template for a complete example.")
         return
     
-    print("✅ All required environment variables are set")
+    logger.info("✅ All required environment variables are set")
     
     # Step 2: Test connection
-    print("\n2. Testing Supabase connection...")
+    logger.info("\n2. Testing Supabase connection...")
     client = test_connection()
     
     if not client:
-        print("\n❌ Could not connect to Supabase.")
-        print("Please check your SUPABASE_URL and SUPABASE_KEY.")
+        logger.info("\n❌ Could not connect to Supabase.")
+        logger.info("Please check your SUPABASE_URL and SUPABASE_KEY.")
         return
     
     # Step 3: Check tables
-    print("\n3. Checking database tables...")
+    logger.info("\n3. Checking database tables...")
     table_status = check_tables(client)
     
     missing_tables = [table for table, exists in table_status.items() if not exists]
     existing_tables = [table for table, exists in table_status.items() if exists]
     
     if existing_tables:
-        print(f"\n✅ Found {len(existing_tables)} existing tables:")
+        logger.info("\n✅ Found {} existing tables:", extra={"len_existing_tables_": len(existing_tables)})
         for table in existing_tables:
-            print(f"  - {table}")
+            logger.info("  - {}", extra={"table": table})
     
     if missing_tables:
-        print(f"\n⚠️  Missing {len(missing_tables)} tables:")
+        logger.info("\n⚠️  Missing {} tables:", extra={"len_missing_tables_": len(missing_tables)})
         for table in missing_tables:
-            print(f"  - {table}")
-        print("\nPlease run the SQL commands from SUPABASE_SQL_SETUP.md in your Supabase SQL Editor.")
+            logger.info("  - {}", extra={"table": table})
+        logger.info("\nPlease run the SQL commands from SUPABASE_SQL_SETUP.md in your Supabase SQL Editor.")
     
     # Step 4: Check extensions
-    print("\n4. Checking PostgreSQL extensions...")
+    logger.info("\n4. Checking PostgreSQL extensions...")
     check_extensions(client)
     
     # Step 5: Extended database setup
-    print("\n5. Setting up extended database features...")
+    logger.info("\n5. Setting up extended database features...")
     try:
         ext_db = ExtendedDatabase()
         if ext_db.client:
-            print("✅ Extended database initialized")
+            logger.info("✅ Extended database initialized")
             
             # Test tool metrics
             metrics = ext_db.get_tool_metrics()
-            print(f"  - Found {len(metrics)} tool metrics")
+            logger.info("  - Found {} tool metrics", extra={"len_metrics_": len(metrics)})
         else:
-            print("⚠️  Extended database features not available (missing credentials)")
+            logger.info("⚠️  Extended database features not available (missing credentials)")
     except Exception as e:
-        print(f"❌ Error with extended database: {e}")
+        logger.info("❌ Error with extended database: {}", extra={"e": e})
     
     # Step 6: Summary
     print("\n" + "=" * 50)
-    print("📊 Setup Summary:")
+    logger.info("📊 Setup Summary:")
     
     if not missing_tables:
-        print("✅ All tables are properly set up!")
-        print("\n🎉 Your Supabase database is ready for the AI Agent!")
+        logger.info("✅ All tables are properly set up!")
+        logger.info("\n🎉 Your Supabase database is ready for the AI Agent!")
         
         # Optional: Create sample data
         response = input("\nWould you like to create sample data for testing? (y/n): ")
         if response.lower() == 'y':
             create_sample_data(client)
     else:
-        print(f"⚠️  {len(missing_tables)} tables need to be created.")
-        print("\nNext steps:")
-        print("1. Open your Supabase project SQL Editor")
-        print("2. Run the SQL commands from SUPABASE_SQL_SETUP.md")
-        print("3. Re-run this script to verify setup")
+        logger.info("⚠️  {} tables need to be created.", extra={"len_missing_tables_": len(missing_tables)})
+        logger.info("\nNext steps:")
+        logger.info("1. Open your Supabase project SQL Editor")
+        logger.info("2. Run the SQL commands from SUPABASE_SQL_SETUP.md")
+        logger.info("3. Re-run this script to verify setup")
     
-    print("\n📚 For complete setup instructions, see SUPABASE_SQL_SETUP.md")
+    logger.info("\n📚 For complete setup instructions, see SUPABASE_SQL_SETUP.md")
 
 
 if __name__ == "__main__":

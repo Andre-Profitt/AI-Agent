@@ -94,7 +94,7 @@ class ExecuteToolUseCase:
             
         except Exception as e:
             execution_time = time.time() - start_time
-            self.logger.error(f"Tool execution failed: {str(e)}")
+            self.logger.error("Tool execution failed: {}", extra={"str_e_": str(e)})
             
             await self.logging_service.log_error(
                 "tool_execution_failed",
@@ -138,7 +138,7 @@ class ExecuteToolUseCase:
             return await self.execute_tool(tool.id, parameters, context)
             
         except Exception as e:
-            self.logger.error(f"Failed to execute tool by name '{tool_name}': {str(e)}")
+            self.logger.error("Failed to execute tool by name '{}': {}", extra={"tool_name": tool_name, "str_e_": str(e)})
             return {"success": False, "error": str(e)}
     
     async def validate_tool_parameters(
@@ -173,7 +173,7 @@ class ExecuteToolUseCase:
             }
             
         except Exception as e:
-            self.logger.error(f"Parameter validation failed: {str(e)}")
+            self.logger.error("Parameter validation failed: {}", extra={"str_e_": str(e)})
             return {"success": False, "error": str(e)}
     
     async def get_tool_info(self, tool_id: UUID) -> Dict[str, Any]:
@@ -206,7 +206,7 @@ class ExecuteToolUseCase:
             }
             
         except Exception as e:
-            self.logger.error(f"Failed to get tool info {tool_id}: {str(e)}")
+            self.logger.error("Failed to get tool info {}: {}", extra={"tool_id": tool_id, "str_e_": str(e)})
             return {"success": False, "error": str(e)}
     
     async def list_available_tools(self, tool_type: Optional[ToolType] = None) -> Dict[str, Any]:
@@ -242,7 +242,7 @@ class ExecuteToolUseCase:
             }
             
         except Exception as e:
-            self.logger.error(f"Failed to list tools: {str(e)}")
+            self.logger.error("Failed to list tools: {}", extra={"str_e_": str(e)})
             return {"success": False, "error": str(e)}
     
     async def get_tool_statistics(self) -> Dict[str, Any]:
@@ -257,5 +257,5 @@ class ExecuteToolUseCase:
             return {"success": True, "statistics": stats}
             
         except Exception as e:
-            self.logger.error(f"Failed to get tool statistics: {str(e)}")
+            self.logger.error("Failed to get tool statistics: {}", extra={"str_e_": str(e)})
             return {"success": False, "error": str(e)} 

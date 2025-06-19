@@ -4,6 +4,10 @@ import aiohttp
 import time
 import statistics
 from typing import List, Dict
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class PerformanceTester:
     def __init__(self, base_url: str, token: str):
@@ -65,22 +69,22 @@ class PerformanceTester:
                 latencies.append(latency)
                 
                 if response.status != 200:
-                    print(f"Task submission failed: {await response.text()}")
+                    logger.info("Task submission failed: {}", extra={"await_response_text__": await response.text()})
         
         return latencies
     
     async def run_load_test(self, agent_count: int, task_count: int, 
                           concurrent_tasks: int = 10):
         '''Run a load test'''
-        print(f"Starting load test with {agent_count} agents and {task_count} tasks")
+        logger.info("Starting load test with {} agents and {} tasks", extra={"agent_count": agent_count, "task_count": task_count})
         
         # Register agents
-        print("Registering agents...")
+        logger.info("Registering agents...")
         agent_ids = await self.register_test_agents(agent_count)
-        print(f"Registered {len(agent_ids)} agents")
+        logger.info("Registered {} agents", extra={"len_agent_ids_": len(agent_ids)})
         
         # Submit tasks with concurrency control
-        print(f"Submitting {task_count} tasks...")
+        logger.info("Submitting {} tasks...", extra={"task_count": task_count})
         
         semaphore = asyncio.Semaphore(concurrent_tasks)
         
@@ -100,12 +104,12 @@ class PerformanceTester:
         p95_latency = statistics.quantiles(all_latencies, n=20)[18]  # 95th percentile
         p99_latency = statistics.quantiles(all_latencies, n=100)[98]  # 99th percentile
         
-        print(f"\nPerformance Results:")
-        print(f"Total requests: {len(all_latencies)}")
-        print(f"Average latency: {avg_latency:.3f}s")
-        print(f"P50 latency: {p50_latency:.3f}s")
-        print(f"P95 latency: {p95_latency:.3f}s")
-        print(f"P99 latency: {p99_latency:.3f}s")
+        logger.info("\nPerformance Results:")
+        logger.info("Total requests: {}", extra={"len_all_latencies_": len(all_latencies)})
+        logger.info("Average latency: {}s", extra={"avg_latency": avg_latency})
+        logger.info("P50 latency: {}s", extra={"p50_latency": p50_latency})
+        logger.info("P95 latency: {}s", extra={"p95_latency": p95_latency})
+        logger.info("P99 latency: {}s", extra={"p99_latency": p99_latency})
         
         return {
             "total_requests": len(all_latencies),
@@ -126,9 +130,9 @@ async def main():
     ]
     
     for agent_count, task_count, concurrent in scenarios:
-        print(f"\n{'='*50}")
+        logger.info("\n{}", extra={"____50": '='*50})
         results = await tester.run_load_test(agent_count, task_count, concurrent)
-        print(f"{'='*50}\n")
+        logger.info("{}\n", extra={"____50": '='*50})
 
 if __name__ == "__main__":
     asyncio.run(main()) 

@@ -12,6 +12,7 @@ from enum import Enum
 
 from src.unified_architecture.core import IUnifiedAgent, AgentCapability, AgentMetadata
 from src.infrastructure.agents.concrete_agents import (
+from typing import Optional, Dict, Any, List, Union, Tuple
     FSMReactAgentImpl, NextGenAgentImpl, CrewAgentImpl, SpecializedAgentImpl,
     AgentConfig
 )
@@ -30,7 +31,7 @@ class AgentFactory:
     Factory for creating different types of agents
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
         self._agent_registry: Dict[str, Type[IUnifiedAgent]] = {
             AgentType.FSM_REACT: FSMReactAgentImpl,
@@ -40,10 +41,10 @@ class AgentFactory:
         }
         self._created_agents: Dict[str, IUnifiedAgent] = {}
     
-    def register_agent_type(self, agent_type: str, agent_class: Type[IUnifiedAgent]):
+    def register_agent_type(self, agent_type: str, agent_class: Type[IUnifiedAgent]) -> Any:
         """Register a new agent type"""
         self._agent_registry[agent_type] = agent_class
-        self.logger.info(f"Registered agent type: {agent_type}")
+        self.logger.info("Registered agent type: {}", extra={"agent_type": agent_type})
     
     def get_available_agent_types(self) -> List[str]:
         """Get list of available agent types"""
@@ -91,11 +92,11 @@ class AgentFactory:
             agent_id = str(agent.agent_id)
             self._created_agents[agent_id] = agent
             
-            self.logger.info(f"Created {agent_type} agent: {agent_id}")
+            self.logger.info("Created {} agent: {}", extra={"agent_type": agent_type, "agent_id": agent_id})
             return agent
             
         except Exception as e:
-            self.logger.error(f"Failed to create {agent_type} agent: {e}")
+            self.logger.error("Failed to create {} agent: {}", extra={"agent_type": agent_type, "e": e})
             raise
     
     async def create_agent_for_capabilities(
@@ -134,7 +135,7 @@ class AgentFactory:
         # Find best matching agent type
         best_agent_type = max(agent_scores.items(), key=lambda x: x[1])[0]
         
-        self.logger.info(f"Selected {best_agent_type} for capabilities: {required_capabilities}")
+        self.logger.info("Selected {} for capabilities: {}", extra={"best_agent_type": best_agent_type, "required_capabilities": required_capabilities})
         
         # Create the best matching agent
         return await self.create_agent(best_agent_type, config, **kwargs)
@@ -163,7 +164,7 @@ class AgentFactory:
             agent = await self.create_agent(agent_type, config, **agent_kwargs)
             agents.append(agent)
         
-        self.logger.info(f"Created agent team with {len(agents)} agents")
+        self.logger.info("Created agent team with {} agents", extra={"len_agents_": len(agents)})
         return agents
     
     def get_agent(self, agent_id: str) -> Optional[IUnifiedAgent]:
@@ -194,14 +195,14 @@ class AgentFactory:
                 await agent.shutdown()
             
             del self._created_agents[agent_id]
-            self.logger.info(f"Destroyed agent: {agent_id}")
+            self.logger.info("Destroyed agent: {}", extra={"agent_id": agent_id})
             return True
             
         except Exception as e:
-            self.logger.error(f"Failed to destroy agent {agent_id}: {e}")
+            self.logger.error("Failed to destroy agent {}: {}", extra={"agent_id": agent_id, "e": e})
             return False
     
-    async def destroy_all_agents(self):
+    async def destroy_all_agents(self) -> Any:
         """Destroy all created agents"""
         agent_ids = list(self._created_agents.keys())
         

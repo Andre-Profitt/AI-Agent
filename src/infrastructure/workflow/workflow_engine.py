@@ -134,7 +134,7 @@ class WorkflowEngine:
         """Register a new workflow definition"""
         async with self._lock:
             self.workflows[workflow.workflow_id] = workflow
-            logger.info(f"Registered workflow: {workflow.name} ({workflow.workflow_id})")
+            logger.info("Registered workflow: {} ({})", extra={"workflow_name": workflow.name, "workflow_workflow_id": workflow.workflow_id})
             return True
             
     async def unregister_workflow(self, workflow_id: str) -> bool:
@@ -142,7 +142,7 @@ class WorkflowEngine:
         async with self._lock:
             if workflow_id in self.workflows:
                 del self.workflows[workflow_id]
-                logger.info(f"Unregistered workflow: {workflow_id}")
+                logger.info("Unregistered workflow: {}", extra={"workflow_id": workflow_id})
                 return True
             return False
             
@@ -198,13 +198,13 @@ class WorkflowEngine:
             execution.status = WorkflowStatus.COMPLETED
             execution.end_time = datetime.now()
             
-            logger.info(f"Workflow execution completed with circuit breaker protection: {execution_id}")
+            logger.info("Workflow execution completed with circuit breaker protection: {}", extra={"execution_id": execution_id})
             
         except Exception as e:
             execution.status = WorkflowStatus.FAILED
             execution.error_message = str(e)
             execution.end_time = datetime.now()
-            logger.error(f"Workflow execution failed: {execution_id}, error: {e}")
+            logger.error("Workflow execution failed: {}, error: {}", extra={"execution_id": execution_id, "e": e})
             
         return execution
         
@@ -236,7 +236,7 @@ class WorkflowEngine:
         """Create a node function for a workflow step"""
         async def step_node(state: WorkflowState) -> WorkflowState:
             try:
-                logger.info(f"Executing step: {step.name} ({step.step_id})")
+                logger.info("Executing step: {} ({})", extra={"step_name": step.name, "step_step_id": step.step_id})
                 
                 # Update current step
                 state.current_step = step.step_id
@@ -264,7 +264,7 @@ class WorkflowEngine:
                 }
                 
             except Exception as e:
-                logger.error(f"Step execution failed: {step.step_id}, error: {e}")
+                logger.error("Step execution failed: {}, error: {}", extra={"step_step_id": step.step_id, "e": e})
                 
                 # Handle retries
                 retry_count = state.retry_count.get(step.step_id, 0)
@@ -339,7 +339,7 @@ class WorkflowEngine:
             result = await tool.ainvoke(step_input)
             return {'output': result, 'tool_name': tool_name, 'success': True}
         except Exception as e:
-            logger.error(f"Tool execution failed: {tool_name}, error: {e}")
+            logger.error("Tool execution failed: {}, error: {}", extra={"tool_name": tool_name, "e": e})
             return {'output': None, 'tool_name': tool_name, 'success': False, 'error': str(e)}
         
     async def _execute_custom_step(self, step: WorkflowStep, step_input: Dict[str, Any]) -> Dict[str, Any]:
@@ -589,7 +589,7 @@ class AgentOrchestrator:
         """Register an FSM agent for orchestration"""
         self.fsm_agents[agent_id] = agent
         await self.workflow_engine.register_agent(agent_id, agent)
-        logger.info(f"Registered FSM agent: {agent_id}")
+        logger.info("Registered FSM agent: {}", extra={"agent_id": agent_id})
     
     async def create_workflow_from_fsm(self, workflow_id: str, fsm_agent: FSMReActAgent,
                                      workflow_steps: List[Dict[str, Any]]) -> str:
@@ -633,7 +633,7 @@ class AgentOrchestrator:
             'steps': workflow_steps
         }
         
-        logger.info(f"Created FSM workflow: {workflow_id}")
+        logger.info("Created FSM workflow: {}", extra={"workflow_id": workflow_id})
         return workflow_id
     
     @circuit_breaker("orchestrator_execution", CircuitBreakerConfig(failure_threshold=3, recovery_timeout=120))
@@ -670,7 +670,7 @@ class AgentOrchestrator:
             }
             
         except Exception as e:
-            logger.error(f"FSM workflow execution failed: {e}")
+            logger.error("FSM workflow execution failed: {}", extra={"e": e})
             return {
                 'fsm_result': None,
                 'workflow_results': [],

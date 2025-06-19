@@ -12,13 +12,14 @@ import prometheus_client
 from prometheus_client import Counter, Histogram, Gauge, Info
 
 from src.utils.logging import get_logger
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 logger = get_logger(__name__)
 
 class MetricsCollector:
     """Collect and expose metrics for monitoring"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         # Request metrics
         self.request_counter = Counter(
             'ai_agent_requests_total',
@@ -83,7 +84,7 @@ class MetricsCollector:
         self._tasks = []
         self._running = False
     
-    async def start(self):
+    async def start(self) -> None:
         """Start metrics collection"""
         self._running = True
         
@@ -96,7 +97,7 @@ class MetricsCollector:
             asyncio.create_task(self._collect_system_metrics())
         )
     
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop metrics collection"""
         self._running = False
         
@@ -106,7 +107,7 @@ class MetricsCollector:
         
         await asyncio.gather(*self._tasks, return_exceptions=True)
     
-    async def _collect_system_metrics(self):
+    async def _collect_system_metrics(self) -> Any:
         """Collect system metrics periodically"""
         while self._running:
             try:
@@ -123,42 +124,42 @@ class MetricsCollector:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Error collecting system metrics: {e}")
+                logger.error("Error collecting system metrics: {}", extra={"e": e})
     
-    def track_request(self, endpoint: str, status: str = "processing"):
+    def track_request(self, endpoint: str, status: str = "processing") -> Any:
         """Track an incoming request"""
         self.request_counter.labels(endpoint=endpoint, status=status).inc()
     
-    def track_request_duration(self, endpoint: str, duration: float):
+    def track_request_duration(self, endpoint: str, duration: float) -> Any:
         """Track request duration"""
         self.request_duration.labels(endpoint=endpoint).observe(duration)
     
-    def track_success(self, endpoint: str):
+    def track_success(self, endpoint: str) -> Any:
         """Track successful request"""
         self.request_counter.labels(endpoint=endpoint, status="success").inc()
     
-    def track_error(self, component: str, error_type: str):
+    def track_error(self, component: str, error_type: str) -> Any:
         """Track an error"""
         self.error_counter.labels(
             error_type=error_type,
             component=component
         ).inc()
     
-    def track_tool_usage(self, tool_name: str, status: str, duration: float):
+    def track_tool_usage(self, tool_name: str, status: str, duration: float) -> Any:
         """Track tool usage"""
         self.tool_usage.labels(tool_name=tool_name, status=status).inc()
         
         if status == "success":
             self.tool_duration.labels(tool_name=tool_name).observe(duration)
     
-    def update_circuit_breaker(self, component: str, state: str):
+    def update_circuit_breaker(self, component: str, state: str) -> bool:
         """Update circuit breaker state"""
         state_map = {"closed": 0, "open": 1, "half-open": 2}
         self.circuit_breaker_state.labels(component=component).set(
             state_map.get(state, -1)
         )
     
-    def track_metric(self, name: str, value: float, labels: Optional[Dict] = None):
+    def track_metric(self, name: str, value: float, labels: Optional[Dict] = None) -> Any:
         """Track a custom metric"""
         key = f"{name}:{str(labels)}" if labels else name
         self.custom_metrics[name][key] = value

@@ -9,6 +9,11 @@ from dataclasses import dataclass
 import json
 
 from pydantic import BaseModel, Field
+import logging
+from typing import Optional, Dict, Any, List, Union, Tuple
+
+logger = logging.getLogger(__name__)
+
 
 
 class MetaCognitiveScore(BaseModel):
@@ -70,7 +75,7 @@ class MetaCognition:
         ]
     }
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize meta-cognition module"""
         self.domain_patterns = self._compile_domain_patterns()
     
@@ -246,7 +251,7 @@ class MetaCognition:
 class MetaCognitiveRouter:
     """Routes decisions based on meta-cognitive assessment"""
     
-    def __init__(self, meta_cognition: MetaCognition, confidence_threshold: float = 0.7):
+    def __init__(self, meta_cognition: MetaCognition, confidence_threshold: float = 0.7) -> None:
         self.meta_cognition = meta_cognition
         self.confidence_threshold = confidence_threshold
     
@@ -283,9 +288,9 @@ if __name__ == "__main__":
     
     for query in test_queries:
         should_use, score = router.should_enter_tool_loop(query, available_tools)
-        print(f"\nQuery: {query}")
-        print(f"Confidence: {score.confidence:.2f}")
-        print(f"Should use tools: {should_use}")
-        print(f"Reasoning: {score.reasoning}")
+        logger.info("\nQuery: {}", extra={"query": query})
+        logger.info("Confidence: {}", extra={"score_confidence": score.confidence})
+        logger.info("Should use tools: {}", extra={"should_use": should_use})
+        logger.info("Reasoning: {}", extra={"score_reasoning": score.reasoning})
         if score.recommended_tools:
-            print(f"Recommended tools: {', '.join(score.recommended_tools)}") 
+            logger.info("Recommended tools: {}", extra={"_____join_score_recommended_tools_": ', '.join(score.recommended_tools)}) 

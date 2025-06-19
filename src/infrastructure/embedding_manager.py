@@ -39,7 +39,7 @@ class EmbeddingManager:
         # Initialize the appropriate backend
         self._initialize_backend()
         
-        logger.info(f"Embedding manager initialized with {backend} backend using {model_name}")
+        logger.info("Embedding manager initialized with {} backend using {}", extra={"backend": backend, "model_name": model_name})
     
     def _initialize_backend(self):
         """Initialize the embedding backend"""
@@ -47,9 +47,9 @@ class EmbeddingManager:
             try:
                 self.model = SentenceTransformer(self.model_name)
                 self.dimension = self.model.get_sentence_embedding_dimension()
-                logger.info(f"Initialized SentenceTransformer with dimension {self.dimension}")
+                logger.info("Initialized SentenceTransformer with dimension {}", extra={"self_dimension": self.dimension})
             except Exception as e:
-                logger.error(f"Failed to initialize SentenceTransformer: {e}")
+                logger.error("Failed to initialize SentenceTransformer: {}", extra={"e": e})
                 self._fallback_initialization()
         
         elif self.backend == "openai" and OPENAI_AVAILABLE:
@@ -62,7 +62,7 @@ class EmbeddingManager:
                 self.dimension = 1536  # OpenAI ada-002 dimension
                 logger.info("Initialized OpenAI embedding backend")
             except Exception as e:
-                logger.error(f"Failed to initialize OpenAI backend: {e}")
+                logger.error("Failed to initialize OpenAI backend: {}", extra={"e": e})
                 self._fallback_initialization()
         
         else:
@@ -92,7 +92,7 @@ class EmbeddingManager:
                 return self._fallback_embed(text)
                 
         except Exception as e:
-            logger.error(f"Embedding failed for text: {text[:100]}... Error: {e}")
+            logger.error("Embedding failed for text: {}... Error: {}", extra={"text_": text[, "e": e})
             return [0.0] * self.dimension
     
     def _openai_embed(self, text: str) -> List[float]:
@@ -104,7 +104,7 @@ class EmbeddingManager:
             )
             return response['data'][0]['embedding']
         except Exception as e:
-            logger.error(f"OpenAI embedding failed: {e}")
+            logger.error("OpenAI embedding failed: {}", extra={"e": e})
             return [0.0] * self.dimension
     
     def _fallback_embed(self, text: str) -> List[float]:
@@ -145,7 +145,7 @@ class EmbeddingManager:
                 return [self._fallback_embed(text) for text in texts]
                 
         except Exception as e:
-            logger.error(f"Batch embedding failed: {e}")
+            logger.error("Batch embedding failed: {}", extra={"e": e})
             return [[0.0] * self.dimension for _ in texts]
     
     def _openai_embed_batch(self, texts: List[str]) -> List[List[float]]:
@@ -157,7 +157,7 @@ class EmbeddingManager:
             )
             return [item['embedding'] for item in response['data']]
         except Exception as e:
-            logger.error(f"OpenAI batch embedding failed: {e}")
+            logger.error("OpenAI batch embedding failed: {}", extra={"e": e})
             return [[0.0] * self.dimension for _ in texts]
     
     def similarity(self, embedding1: List[float], embedding2: List[float]) -> float:
@@ -178,7 +178,7 @@ class EmbeddingManager:
             return float(similarity)
             
         except Exception as e:
-            logger.error(f"Similarity calculation failed: {e}")
+            logger.error("Similarity calculation failed: {}", extra={"e": e})
             return 0.0
     
     def get_dimension(self) -> int:

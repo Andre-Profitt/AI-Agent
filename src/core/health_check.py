@@ -9,6 +9,7 @@ from enum import Enum
 import aiohttp
 
 from src.utils.logging import get_logger
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 logger = get_logger(__name__)
 
@@ -72,7 +73,7 @@ class HealthCheck:
 class HealthChecker:
     """System-wide health checker"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.checks: Dict[str, HealthCheck] = {}
         self._check_task: Optional[asyncio.Task] = None
         self._running = False
@@ -84,7 +85,7 @@ class HealthChecker:
         check_fn: Callable,
         critical: bool = True,
         timeout: float = 5.0
-    ):
+    ) -> Any:
         """Register a health check"""
         self.checks[name] = HealthCheck(
             name=name,
@@ -92,9 +93,9 @@ class HealthChecker:
             critical=critical,
             timeout=timeout
         )
-        logger.info(f"Registered health check: {name}")
+        logger.info("Registered health check: {}", extra={"name": name})
     
-    async def start(self, db_manager=None, integration_hub=None):
+    async def start(self, db_manager=None, integration_hub=None) -> None:
         """Start health check system"""
         self._running = True
         
@@ -134,7 +135,7 @@ class HealthChecker:
         
         logger.info("Health check system started")
     
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop health check system"""
         self._running = False
         
@@ -147,7 +148,7 @@ class HealthChecker:
         
         logger.info("Health check system stopped")
     
-    async def _run_checks(self):
+    async def _run_checks(self) -> Any:
         """Run health checks periodically"""
         while self._running:
             try:
@@ -156,7 +157,7 @@ class HealthChecker:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Error in health check loop: {e}")
+                logger.error("Error in health check loop: {}", extra={"e": e})
     
     async def check_all(self) -> Dict[str, Any]:
         """Run all health checks"""
@@ -243,11 +244,11 @@ class HealthChecker:
         # Fail if less than 10% free
         return memory.percent < 90
     
-    async def _start_http_server(self):
+    async def _start_http_server(self) -> Any:
         """Start HTTP server for health checks"""
         app = aiohttp.web.Application()
         
-        async def health_handler(request):
+        async def health_handler(request) -> Any:
             """Health check endpoint"""
             status = await self.get_status()
             
@@ -261,7 +262,7 @@ class HealthChecker:
             
             return aiohttp.web.json_response(status, status=http_status)
         
-        async def ready_handler(request):
+        async def ready_handler(request) -> Any:
             """Readiness check endpoint"""
             # Simple check if system is ready
             ready = all(

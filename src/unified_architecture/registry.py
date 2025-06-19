@@ -54,7 +54,7 @@ class AgentRegistry:
                 
                 # Check if agent already exists
                 if metadata.agent_id in self.registry:
-                    logger.warning(f"Agent {metadata.agent_id} already registered, updating metadata")
+                    logger.warning("Agent {} already registered, updating metadata", extra={"metadata_agent_id": metadata.agent_id})
                     # Update existing registration
                     old_metadata = self.registry[metadata.agent_id]
                     
@@ -88,12 +88,12 @@ class AgentRegistry:
                 
                 self.stats["active_agents"] = len(self.registry)
                 
-                logger.info(f"Registered agent {metadata.name} ({metadata.agent_id}) "
-                           f"with capabilities: {[cap.name for cap in metadata.capabilities]}")
+                logger.info("Registered agent {} ({}) "
+                           f"with capabilities: {}", extra={"metadata_name": metadata.name, "metadata_agent_id": metadata.agent_id, "_cap_name_for_cap_in_metadata_capabilities": [cap.name for cap in metadata.capabilities]})
                 return True
                 
             except Exception as e:
-                logger.error(f"Error registering agent {metadata.agent_id}: {e}")
+                logger.error("Error registering agent {}: {}", extra={"metadata_agent_id": metadata.agent_id, "e": e})
                 return False
     
     async def unregister(self, agent_id: str) -> bool:
@@ -101,7 +101,7 @@ class AgentRegistry:
         async with self.registry_lock:
             try:
                 if agent_id not in self.registry:
-                    logger.warning(f"Agent {agent_id} not found in registry")
+                    logger.warning("Agent {} not found in registry", extra={"agent_id": agent_id})
                     return False
                 
                 metadata = self.registry[agent_id]
@@ -125,11 +125,11 @@ class AgentRegistry:
                 
                 self.stats["active_agents"] = len(self.registry)
                 
-                logger.info(f"Unregistered agent {agent_id}")
+                logger.info("Unregistered agent {}", extra={"agent_id": agent_id})
                 return True
                 
             except Exception as e:
-                logger.error(f"Error unregistering agent {agent_id}: {e}")
+                logger.error("Error unregistering agent {}: {}", extra={"agent_id": agent_id, "e": e})
                 return False
     
     async def discover(self, 
@@ -203,7 +203,7 @@ class AgentRegistry:
                 # Update heartbeat
                 self.agent_heartbeats[agent_id] = time.time()
                 
-                logger.debug(f"Updated status for agent {agent_id}: {status.name}")
+                logger.debug("Updated status for agent {}: {}", extra={"agent_id": agent_id, "status_name": status.name})
     
     async def update_heartbeat(self, agent_id: str):
         """Update agent heartbeat"""
@@ -265,7 +265,7 @@ class AgentRegistry:
             # Clear cache
             self.discovery_cache.clear()
             
-            logger.debug(f"Updated metadata for agent {agent_id}")
+            logger.debug("Updated metadata for agent {}", extra={"agent_id": agent_id})
             return True
     
     async def check_agent_health(self) -> Dict[str, Any]:
@@ -371,11 +371,11 @@ class AgentRegistry:
                 # Import stats
                 self.stats.update(data.get("stats", {}))
                 
-                logger.info(f"Imported registry with {len(self.registry)} agents")
+                logger.info("Imported registry with {} agents", extra={"len_self_registry_": len(self.registry)})
                 return True
                 
         except Exception as e:
-            logger.error(f"Error importing registry: {e}")
+            logger.error("Error importing registry: {}", extra={"e": e})
             return False
     
     async def cleanup_offline_agents(self, max_offline_time: float = 3600) -> int:
@@ -392,6 +392,6 @@ class AgentRegistry:
                 await self.unregister(agent_id)
         
         if agents_to_remove:
-            logger.info(f"Cleaned up {len(agents_to_remove)} offline agents")
+            logger.info("Cleaned up {} offline agents", extra={"len_agents_to_remove_": len(agents_to_remove)})
         
         return len(agents_to_remove) 

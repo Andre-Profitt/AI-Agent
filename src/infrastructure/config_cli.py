@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from typing import Dict, Any
 import logging
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 try:
     from .config.integrations import integration_config
@@ -21,12 +22,12 @@ except ImportError:
         logging.warning("Could not import integration_config - using defaults")
 
 @click.group()
-def cli():
+def cli() -> Any:
     """Integration configuration management"""
     pass
 
 @cli.command()
-def validate():
+def validate() -> bool:
     """Validate current configuration"""
     is_valid, issues = integration_config.validate()
     if is_valid:
@@ -37,7 +38,7 @@ def validate():
             click.echo(f"  - {issue}")
 
 @cli.command()
-def show():
+def show() -> Any:
     """Show current configuration (without sensitive data)"""
     config_dict = integration_config.to_dict()
     click.echo("Current Configuration:")
@@ -45,7 +46,7 @@ def show():
 
 @cli.command()
 @click.argument('file_path')
-def save(file_path):
+def save(file_path) -> bool:
     """Save configuration to file"""
     if integration_config.save_to_file(file_path):
         click.echo(f"✅ Configuration saved to {file_path}")
@@ -54,7 +55,7 @@ def save(file_path):
 
 @cli.command()
 @click.argument('file_path')
-def load(file_path):
+def load(file_path) -> Any:
     """Load configuration from file"""
     if integration_config.load_from_file(file_path):
         click.echo(f"✅ Configuration loaded from {file_path}")
@@ -62,7 +63,7 @@ def load(file_path):
         click.echo("❌ Failed to load configuration")
 
 @cli.command()
-def env():
+def env() -> Any:
     """Show environment variables for configuration"""
     click.echo("Environment Variables for Configuration:")
     click.echo("=" * 50)
@@ -96,7 +97,7 @@ def env():
 @click.option('--section', help='Configuration section to update')
 @click.option('--key', help='Configuration key to update')
 @click.option('--value', help='New value')
-def update(section, key, value):
+def update(section, key, value) -> bool:
     """Update configuration values"""
     if not all([section, key, value]):
         click.echo("❌ Please provide section, key, and value")
@@ -109,12 +110,12 @@ def update(section, key, value):
         click.echo("❌ Failed to update configuration")
 
 @cli.command()
-def test():
+def test() -> Any:
     """Test all integrations"""
     click.echo("Testing integrations...")
     
     # Test Supabase
-    if integration_config.supabase.is_configured():
+    if await integration_config.supabase.is_configured_safe():
         click.echo("✅ Supabase configured")
     else:
         click.echo("⚠️ Supabase not configured")

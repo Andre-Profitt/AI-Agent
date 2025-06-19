@@ -15,6 +15,7 @@ from contextlib import asynccontextmanager
 
 import aioredis
 from fastapi import (
+from typing import Optional, Dict, Any, List, Union, Tuple
     APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, 
     Query, WebSocket, WebSocketDisconnect, WebSocketException, status
 )
@@ -183,11 +184,11 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(secur
 
 # WebSocket connection manager
 class ConnectionManager:
-    def __init__(self):
+    def __init__(self) -> None:
         self.active_connections: List[WebSocket] = []
         self.connection_metadata: Dict[WebSocket, Dict[str, Any]] = {}
 
-    async def connect(self, websocket: WebSocket, client_id: str):
+    async def connect(self, websocket: WebSocket, client_id: str) -> Any:
         await websocket.accept()
         self.active_connections.append(websocket)
         self.connection_metadata[websocket] = {
@@ -195,30 +196,30 @@ class ConnectionManager:
             "connected_at": datetime.utcnow(),
             "subscriptions": set()
         }
-        logger.info(f"WebSocket client {client_id} connected")
+        logger.info("WebSocket client {} connected", extra={"client_id": client_id})
 
-    def disconnect(self, websocket: WebSocket):
+    def disconnect(self, websocket: WebSocket) -> Any:
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
             client_id = self.connection_metadata.get(websocket, {}).get("client_id", "unknown")
             del self.connection_metadata[websocket]
-            logger.info(f"WebSocket client {client_id} disconnected")
+            logger.info("WebSocket client {} disconnected", extra={"client_id": client_id})
 
-    async def send_personal_message(self, message: str, websocket: WebSocket):
+    async def send_personal_message(self, message: str, websocket: WebSocket) -> Any:
         try:
             await websocket.send_text(message)
         except Exception as e:
-            logger.error(f"Error sending message to WebSocket: {e}")
+            logger.error("Error sending message to WebSocket: {}", extra={"e": e})
             self.disconnect(websocket)
 
-    async def broadcast(self, message: str, exclude: Optional[WebSocket] = None):
+    async def broadcast(self, message: str, exclude: Optional[WebSocket] = None) -> Any:
         disconnected = []
         for connection in self.active_connections:
             if connection != exclude:
                 try:
                     await connection.send_text(message)
                 except Exception as e:
-                    logger.error(f"Error broadcasting message: {e}")
+                    logger.error("Error broadcasting message: {}", extra={"e": e})
                     disconnected.append(connection)
         
         # Clean up disconnected connections
@@ -244,7 +245,7 @@ manager = ConnectionManager()
 router = APIRouter(prefix="/api/v1")
 
 @router.get("/health", response_model=SystemHealthResponse)
-async def health_check():
+async def health_check() -> Any:
     """System health check endpoint"""
     try:
         components = {
@@ -266,14 +267,14 @@ async def health_check():
             timestamp=datetime.utcnow()
         )
     except Exception as e:
-        logger.error(f"Health check failed: {e}")
+        logger.error("Health check failed: {}", extra={"e": e})
         raise HTTPException(status_code=503, detail="Health check failed")
 
 # Global variables
 agent_factory = None
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> Any:
     """Application lifespan manager with proper platform initialization"""
     global platform, redis_client, agent_factory
     
@@ -288,7 +289,7 @@ async def lifespan(app: FastAPI):
         await redis_client.ping()
         logger.info("Redis connection established")
     except Exception as e:
-        logger.warning(f"Redis connection failed: {e}")
+        logger.warning("Redis connection failed: {}", extra={"e": e})
         redis_client = None
     
     # Initialize platform with configuration
@@ -324,7 +325,7 @@ async def lifespan(app: FastAPI):
         logger.info("Multi-Agent Platform initialized successfully")
         
     except Exception as e:
-        logger.error(f"Failed to initialize platform: {e}")
+        logger.error("Failed to initialize platform: {}", extra={"e": e})
         raise
     
     yield
@@ -347,7 +348,7 @@ async def lifespan(app: FastAPI):
             logger.info("Redis connection closed")
             
     except Exception as e:
-        logger.error(f"Error during shutdown: {e}")
+        logger.error("Error during shutdown: {}", extra={"e": e})
 
 # Agent Management
 @router.post("/agents", response_model=AgentResponse)
@@ -387,7 +388,7 @@ async def register_agent(
             last_heartbeat=None
         )
     except Exception as e:
-        logger.error(f"Agent registration failed: {e}")
+        logger.error("Agent registration failed: {}", extra={"e": e})
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/agents", response_model=List[AgentResponse])
@@ -421,7 +422,7 @@ async def list_agents(
             for agent in agents
         ]
     except Exception as e:
-        logger.error(f"Failed to list agents: {e}")
+        logger.error("Failed to list agents: {}", extra={"e": e})
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/agents/{agent_id}", response_model=AgentResponse)
@@ -449,7 +450,7 @@ async def get_agent(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get agent {agent_id}: {e}")
+        logger.error("Failed to get agent {}: {}", extra={"agent_id": agent_id, "e": e})
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/agents/{agent_id}")
@@ -477,7 +478,7 @@ async def deregister_agent(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to deregister agent {agent_id}: {e}")
+        logger.error("Failed to deregister agent {}: {}", extra={"agent_id": agent_id, "e": e})
         raise HTTPException(status_code=500, detail=str(e))
 
 # Task Management
@@ -525,7 +526,7 @@ async def submit_task(
             completed_at=task.completed_at
         )
     except Exception as e:
-        logger.error(f"Task submission failed: {e}")
+        logger.error("Task submission failed: {}", extra={"e": e})
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/tasks", response_model=List[TaskResponse])
@@ -563,7 +564,7 @@ async def list_tasks(
             for task in tasks
         ]
     except Exception as e:
-        logger.error(f"Failed to list tasks: {e}")
+        logger.error("Failed to list tasks: {}", extra={"e": e})
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/tasks/{task_id}", response_model=TaskResponse)
@@ -595,7 +596,7 @@ async def get_task(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get task {task_id}: {e}")
+        logger.error("Failed to get task {}: {}", extra={"task_id": task_id, "e": e})
         raise HTTPException(status_code=500, detail=str(e))
 
 # Resource Management
@@ -627,7 +628,7 @@ async def register_resource(
             created_at=datetime.utcnow()
         )
     except Exception as e:
-        logger.error(f"Resource registration failed: {e}")
+        logger.error("Resource registration failed: {}", extra={"e": e})
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/resources", response_model=List[ResourceResponse])
@@ -656,7 +657,7 @@ async def list_resources(
             for resource in resources
         ]
     except Exception as e:
-        logger.error(f"Failed to list resources: {e}")
+        logger.error("Failed to list resources: {}", extra={"e": e})
         raise HTTPException(status_code=500, detail=str(e))
 
 # Conflict Management
@@ -706,7 +707,7 @@ async def report_conflict(
             resolved_at=conflict.resolved_at
         )
     except Exception as e:
-        logger.error(f"Conflict reporting failed: {e}")
+        logger.error("Conflict reporting failed: {}", extra={"e": e})
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/conflicts", response_model=List[ConflictResponse])
@@ -742,7 +743,7 @@ async def list_conflicts(
             for conflict in conflicts
         ]
     except Exception as e:
-        logger.error(f"Failed to list conflicts: {e}")
+        logger.error("Failed to list conflicts: {}", extra={"e": e})
         raise HTTPException(status_code=500, detail=str(e))
 
 # Workflow Management
@@ -771,7 +772,7 @@ async def create_workflow(
             "status": "created"
         }
     except Exception as e:
-        logger.error(f"Workflow creation failed: {e}")
+        logger.error("Workflow creation failed: {}", extra={"e": e})
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/workflows/{workflow_id}/execute", response_model=Dict[str, Any])
@@ -798,7 +799,7 @@ async def execute_workflow(
             "status": execution.status
         }
     except Exception as e:
-        logger.error(f"Workflow execution failed: {e}")
+        logger.error("Workflow execution failed: {}", extra={"e": e})
         raise HTTPException(status_code=400, detail=str(e))
 
 # Performance Monitoring
@@ -826,12 +827,12 @@ async def get_performance_metrics(
         
         return metrics
     except Exception as e:
-        logger.error(f"Failed to get performance metrics: {e}")
+        logger.error("Failed to get performance metrics: {}", extra={"e": e})
         raise HTTPException(status_code=500, detail=str(e))
 
 # WebSocket endpoint for real-time updates
 @router.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: str):
+async def websocket_endpoint(websocket: WebSocket, client_id: str) -> Any:
     """WebSocket endpoint for real-time monitoring"""
     await manager.connect(websocket, client_id)
     
@@ -870,7 +871,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
     except Exception as e:
-        logger.error(f"WebSocket error: {e}")
+        logger.error("WebSocket error: {}", extra={"e": e})
         manager.disconnect(websocket)
 
 # Dashboard endpoints
@@ -908,7 +909,7 @@ async def get_dashboard_summary(
             "websocket_connections": manager.get_connection_info()["active_connections"]
         }
     except Exception as e:
-        logger.error(f"Failed to get dashboard summary: {e}")
+        logger.error("Failed to get dashboard summary: {}", extra={"e": e})
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/dashboard/activity")
@@ -952,12 +953,12 @@ async def get_dashboard_activity(
         return activities[:limit]
     
     except Exception as e:
-        logger.error(f"Failed to get dashboard activity: {e}")
+        logger.error("Failed to get dashboard activity: {}", extra={"e": e})
         raise HTTPException(status_code=500, detail=str(e))
 
 # Application lifecycle
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> Any:
     """Application lifespan manager"""
     global platform, redis_client
     
@@ -967,7 +968,7 @@ async def lifespan(app: FastAPI):
         await redis_client.ping()
         logger.info("Redis connection established")
     except Exception as e:
-        logger.warning(f"Redis connection failed: {e}")
+        logger.warning("Redis connection failed: {}", extra={"e": e})
         redis_client = None
     
     # Initialize platform with proper configuration
@@ -993,7 +994,7 @@ async def lifespan(app: FastAPI):
         logger.info("Multi-Agent Platform initialized and started successfully")
         
     except Exception as e:
-        logger.error(f"Failed to initialize platform: {e}")
+        logger.error("Failed to initialize platform: {}", extra={"e": e})
         raise
     
     yield
@@ -1007,7 +1008,7 @@ async def lifespan(app: FastAPI):
         await redis_client.close()
         logger.info("Redis connection closed")
 
-async def _register_default_agents(platform: MultiAgentPlatform):
+async def _register_default_agents(platform: MultiAgentPlatform) -> Any:
     """Register default agents with the platform"""
     try:
         # Create and register FSM React Agent
@@ -1034,12 +1035,12 @@ async def _register_default_agents(platform: MultiAgentPlatform):
             specialized_agent = SpecializedAgentImpl(domain)
             await specialized_agent.initialize()
             await platform.register_agent(specialized_agent, specialized_agent.metadata)
-            logger.info(f"Specialized {domain} Agent registered")
+            logger.info("Specialized {} Agent registered", extra={"domain": domain})
         
-        logger.info(f"Total agents registered: {len(platform.agents)}")
+        logger.info("Total agents registered: {}", extra={"len_platform_agents_": len(platform.agents)})
         
     except Exception as e:
-        logger.error(f"Failed to register default agents: {e}")
+        logger.error("Failed to register default agents: {}", extra={"e": e})
         raise
 
 # Create FastAPI application
@@ -1064,7 +1065,7 @@ app.include_router(router)
 
 # Root endpoint
 @app.get("/")
-async def root():
+async def root() -> Any:
     """Root endpoint with API information"""
     return {
         "message": "Multi-Agent Platform API Server",

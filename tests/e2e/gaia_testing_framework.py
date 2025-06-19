@@ -13,6 +13,10 @@ import os
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 # Add src to path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
@@ -202,11 +206,11 @@ class GAIATestSuite:
         Returns comprehensive analysis and recommendations.
         """
         if verbose:
-            print("🚀 GAIA Testing Framework - Advanced Agent Evaluation")
+            logger.info("🚀 GAIA Testing Framework - Advanced Agent Evaluation")
             print("=" * 70)
-            print(f"📊 Questions: {len(self.questions)}")
-            print(f"📂 Categories: {len(set(q.category for q in self.questions))}")
-            print(f"🎯 Difficulty Levels: {len(set(q.difficulty for q in self.questions))}")
+            logger.info("📊 Questions: {}", extra={"len_self_questions_": len(self.questions)})
+            logger.info("📂 Categories: {}", extra={"len_set_q_category_for_q_in_self_questions__": len(set(q.category for q in self.questions))})
+            logger.info("🎯 Difficulty Levels: {}", extra={"len_set_q_difficulty_for_q_in_self_questions__": len(set(q.difficulty for q in self.questions))})
             print("=" * 70)
         
         # Initialise CSV log
@@ -217,8 +221,8 @@ class GAIATestSuite:
         
         for i, question in enumerate(self.questions, 1):
             if verbose:
-                print(f"\n🔍 Test {i}/{len(self.questions)}: {question.id}")
-                print(f"   Question: {question.question[:80]}{'...' if len(question.question) > 80 else ''}")
+                logger.info("\n🔍 Test {}/{}: {}", extra={"i": i, "len_self_questions_": len(self.questions), "question_id": question.id})
+                logger.info("   Question: {}{}", extra={"question_question_": question.question[, "______if_len_question_question____80_else___": '...' if len(question.question) > 80 else ''})
             
             result = self._test_single_question(agent, question, verbose)
 
@@ -232,8 +236,8 @@ class GAIATestSuite:
             
             if verbose:
                 status = "✅ PASS" if result.correct else "❌ FAIL"
-                print(f"   {status} | Expected: '{question.expected_answer}' | Got: '{result.agent_answer}'")
-                print(f"   ⏱️  Time: {result.execution_time:.1f}s | 🧠 Steps: {result.reasoning_steps} | 📈 Confidence: {result.confidence:.0%}")
+                logger.info("   {} | Expected: '{}' | Got: '{}'", extra={"status": status, "question_expected_answer": question.expected_answer, "result_agent_answer": result.agent_answer})
+                logger.info("   ⏱️  Time: {}s | 🧠 Steps: {} | 📈 Confidence: {}", extra={"result_execution_time": result.execution_time, "result_reasoning_steps": result.reasoning_steps, "result_confidence": result.confidence})
         
         total_time = time.time() - start_time
         analysis = self._analyze_comprehensive_results(results, total_time, verbose)
@@ -564,40 +568,40 @@ class GAIATestSuite:
     def _print_comprehensive_analysis(self, analysis: Dict[str, Any]):
         """Print detailed analysis with actionable insights."""
         print("\n" + "=" * 70)
-        print("📊 COMPREHENSIVE GAIA EVALUATION RESULTS")
+        logger.info("📊 COMPREHENSIVE GAIA EVALUATION RESULTS")
         print("=" * 70)
         
         # Overall Performance
         accuracy = analysis.get("overall_accuracy", 0)
-        print(f"🎯 Overall Accuracy: {accuracy:.1%} ({analysis.get('correct_answers', 0)}/{analysis.get('total_questions', 0)})")
-        print(f"⏱️  Average Time: {analysis.get('avg_execution_time', 0):.1f}s")
-        print(f"🧠 Average Reasoning Steps: {analysis.get('avg_reasoning_steps', 0):.1f}")
-        print(f"📈 Average Confidence: {analysis.get('avg_confidence', 0):.1%}")
-        print(f"✅ Average Validation Score: {analysis.get('avg_validation_score', 0):.1%}")
+        logger.info("🎯 Overall Accuracy: {} ({}/{})", extra={"accuracy": accuracy, "analysis_get__correct_answers___0_": analysis.get('correct_answers', 0), "analysis_get__total_questions___0_": analysis.get('total_questions', 0)})
+        logger.info("⏱️  Average Time: {}s", extra={"analysis_get__avg_execution_time___0_": analysis.get('avg_execution_time', 0)})
+        logger.info("🧠 Average Reasoning Steps: {}", extra={"analysis_get__avg_reasoning_steps___0_": analysis.get('avg_reasoning_steps', 0)})
+        logger.info("📈 Average Confidence: {}", extra={"analysis_get__avg_confidence___0_": analysis.get('avg_confidence', 0)})
+        logger.info("✅ Average Validation Score: {}", extra={"analysis_get__avg_validation_score___0_": analysis.get('avg_validation_score', 0)})
         
         # Category Performance
-        print(f"\n📋 Category Performance:")
+        logger.info("\n📋 Category Performance:")
         for category, stats in analysis.get("category_performance", {}).items():
             print(f"   {category.replace('_', ' ').title()}: {stats['accuracy']:.1%} "
                   f"(⏱️ {stats['avg_time']:.1f}s, 📈 {stats['avg_confidence']:.1%})")
         
         # Difficulty Analysis
-        print(f"\n🎚️  Difficulty Analysis:")
+        logger.info("\n🎚️  Difficulty Analysis:")
         for difficulty, accuracy in analysis.get("difficulty_performance", {}).items():
-            print(f"   {difficulty.title()}: {accuracy:.1%}")
+            logger.info("   {}: {}", extra={"difficulty_title__": difficulty.title(), "accuracy": accuracy})
         
         # Tool Usage
-        print(f"\n🛠️  Tool Usage (Top 5):")
+        logger.info("\n🛠️  Tool Usage (Top 5):")
         tool_usage = analysis.get("tool_usage", {})
         for tool, count in sorted(tool_usage.items(), key=lambda x: x[1], reverse=True)[:5]:
-            print(f"   {tool}: {count} times")
+            logger.info("   {}: {} times", extra={"tool": tool, "count": count})
         
         # Error Analysis
         error_analysis = analysis.get("error_analysis", {})
         if error_analysis:
-            print(f"\n🚨 Error Analysis:")
+            logger.info("\n🚨 Error Analysis:")
             for error_type, count in sorted(error_analysis.items(), key=lambda x: x[1], reverse=True)[:3]:
-                print(f"   {error_type}: {count} occurrences")
+                logger.info("   {}: {} occurrences", extra={"error_type": error_type, "count": count})
         
         print("=" * 70)
     
@@ -765,26 +769,26 @@ class GAIATestSuite:
 
 def main():
     """Main function for standalone testing."""
-    print("🧪 GAIA Testing Framework")
-    print("Advanced evaluation system for ReAct agents")
+    logger.info("🧪 GAIA Testing Framework")
+    logger.info("Advanced evaluation system for ReAct agents")
     print("=" * 50)
     
     # Initialize test suite
     test_suite = GAIATestSuite()
     
-    print(f"✅ Test suite initialized with {len(test_suite.questions)} questions")
-    print(f"📂 Categories: {len(set(q.category for q in test_suite.questions))}")
-    print(f"🎯 Difficulty levels: {len(set(q.difficulty for q in test_suite.questions))}")
+    logger.info("✅ Test suite initialized with {} questions", extra={"len_test_suite_questions_": len(test_suite.questions)})
+    logger.info("📂 Categories: {}", extra={"len_set_q_category_for_q_in_test_suite_questions__": len(set(q.category for q in test_suite.questions))})
+    logger.info("🎯 Difficulty levels: {}", extra={"len_set_q_difficulty_for_q_in_test_suite_questions__": len(set(q.difficulty for q in test_suite.questions))})
     
     # Show sample questions
-    print("\n🔍 Sample Test Questions:")
+    logger.info("\n🔍 Sample Test Questions:")
     for i, question in enumerate(test_suite.questions[:3]):
-        print(f"\n{i+1}. [{question.category}] {question.question}")
-        print(f"   Expected: {question.expected_answer}")
-        print(f"   Tools: {', '.join(question.requires_tools)}")
+        logger.info("\n{}. [{}] {}", extra={"i_1": i+1, "question_category": question.category, "question_question": question.question})
+        logger.info("   Expected: {}", extra={"question_expected_answer": question.expected_answer})
+        logger.info("   Tools: {}", extra={"_____join_question_requires_tools_": ', '.join(question.requires_tools)})
     
-    print("\n✅ Framework ready for agent testing!")
-    print("Usage: test_suite.test_agent_performance(your_agent)")
+    logger.info("\n✅ Framework ready for agent testing!")
+    logger.info("Usage: test_suite.test_agent_performance(your_agent)")
 
 if __name__ == "__main__":
     main() 

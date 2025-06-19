@@ -65,7 +65,7 @@ class OrchestrationEngine:
             
             # Check if agent already registered
             if metadata.agent_id in self.agents:
-                logger.warning(f"Agent {metadata.agent_id} already registered")
+                logger.warning("Agent {} already registered", extra={"metadata_agent_id": metadata.agent_id})
                 return False
             
             # Store agent and metadata
@@ -81,7 +81,7 @@ class OrchestrationEngine:
             
             success = await agent.initialize(config)
             if not success:
-                logger.error(f"Failed to initialize agent {metadata.agent_id}")
+                logger.error("Failed to initialize agent {}", extra={"metadata_agent_id": metadata.agent_id})
                 return False
             
             # Update status
@@ -96,12 +96,12 @@ class OrchestrationEngine:
                 "last_activity": datetime.utcnow()
             }
             
-            logger.info(f"Registered agent: {metadata.name} ({metadata.agent_id}) "
-                       f"with capabilities: {[cap.name for cap in metadata.capabilities]}")
+            logger.info("Registered agent: {} ({}) "
+                       f"with capabilities: {}", extra={"metadata_name": metadata.name, "metadata_agent_id": metadata.agent_id, "_cap_name_for_cap_in_metadata_capabilities": [cap.name for cap in metadata.capabilities]})
             return True
             
         except Exception as e:
-            logger.error(f"Error registering agent {metadata.agent_id}: {e}")
+            logger.error("Error registering agent {}: {}", extra={"metadata_agent_id": metadata.agent_id, "e": e})
             return False
     
     async def unregister_agent(self, agent_id: str) -> bool:
@@ -124,11 +124,11 @@ class OrchestrationEngine:
             if agent_id in self.stats["agent_utilization"]:
                 del self.stats["agent_utilization"][agent_id]
             
-            logger.info(f"Unregistered agent: {agent_id}")
+            logger.info("Unregistered agent: {}", extra={"agent_id": agent_id})
             return True
             
         except Exception as e:
-            logger.error(f"Error unregistering agent {agent_id}: {e}")
+            logger.error("Error unregistering agent {}: {}", extra={"agent_id": agent_id, "e": e})
             return False
     
     async def select_agent(self, task: UnifiedTask) -> Optional[str]:
@@ -155,7 +155,7 @@ class OrchestrationEngine:
                 # Validate task
                 is_valid, error = await agent.validate_task(task)
                 if not is_valid:
-                    logger.debug(f"Agent {agent_id} cannot handle task {task.task_id}: {error}")
+                    logger.debug("Agent {} cannot handle task {}: {}", extra={"agent_id": agent_id, "task_task_id": task.task_id, "error": error})
                     continue
                 
                 # Calculate suitability score
@@ -163,20 +163,20 @@ class OrchestrationEngine:
                 eligible_agents.append((score, agent_id))
             
             if not eligible_agents:
-                logger.warning(f"No eligible agents found for task {task.task_id}")
+                logger.warning("No eligible agents found for task {}", extra={"task_task_id": task.task_id})
                 return None
             
             # Select agent with highest score
             eligible_agents.sort(reverse=True)
             selected_agent_id = eligible_agents[0][1]
             
-            logger.debug(f"Selected agent {selected_agent_id} for task {task.task_id} "
-                        f"(score: {eligible_agents[0][0]:.3f})")
+            logger.debug("Selected agent {} for task {} "
+                        f"(score: {})", extra={"selected_agent_id": selected_agent_id, "task_task_id": task.task_id, "eligible_agents_0_0": eligible_agents[0][0]})
             
             return selected_agent_id
             
         except Exception as e:
-            logger.error(f"Error selecting agent for task {task.task_id}: {e}")
+            logger.error("Error selecting agent for task {}: {}", extra={"task_task_id": task.task_id, "e": e})
             return None
     
     async def _calculate_agent_score(self, metadata: AgentMetadata, 
@@ -281,7 +281,7 @@ class OrchestrationEngine:
             return result
             
         except asyncio.TimeoutError:
-            logger.error(f"Task {task.task_id} timed out after {timeout}s")
+            logger.error("Task {} timed out after {}s", extra={"task_task_id": task.task_id, "timeout": timeout})
             return TaskResult(
                 task_id=task.task_id,
                 success=False,
@@ -292,7 +292,7 @@ class OrchestrationEngine:
             )
             
         except Exception as e:
-            logger.error(f"Error executing task {task.task_id}: {e}")
+            logger.error("Error executing task {}: {}", extra={"task_task_id": task.task_id, "e": e})
             return TaskResult(
                 task_id=task.task_id,
                 success=False,
@@ -362,7 +362,7 @@ class OrchestrationEngine:
             results = {}
             execution_order = list(nx.topological_sort(dep_graph))
             
-            logger.info(f"Executing complex task {task.task_id} with {len(subtasks)} subtasks")
+            logger.info("Executing complex task {} with {} subtasks", extra={"task_task_id": task.task_id, "len_subtasks_": len(subtasks)})
             
             for subtask_id in execution_order:
                 subtask = next(t for t in subtasks if t.task_id == subtask_id)
@@ -380,12 +380,12 @@ class OrchestrationEngine:
                 # Check if we should continue
                 if not result.success and subtask.max_retries > 0:
                     # Retry logic could be implemented here
-                    logger.warning(f"Subtask {subtask_id} failed, retries available: {subtask.max_retries}")
+                    logger.warning("Subtask {} failed, retries available: {}", extra={"subtask_id": subtask_id, "subtask_max_retries": subtask.max_retries})
             
             return list(results.values())
             
         except Exception as e:
-            logger.error(f"Error orchestrating complex task {task.task_id}: {e}")
+            logger.error("Error orchestrating complex task {}: {}", extra={"task_task_id": task.task_id, "e": e})
             return []
     
     def _build_dependency_graph(self, tasks: List[UnifiedTask]) -> nx.DiGraph:

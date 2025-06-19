@@ -6,13 +6,16 @@ the application to provide meaningful error handling and debugging.
 """
 
 from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 
 class AIAgentException(Exception):
     """Base exception for all AI Agent system exceptions."""
     
-    def __init__(self, message: str, error_code: Optional[str] = None, 
-                 details: Optional[Dict[str, Any]] = None):
+    def __init__(self, ,
+
+    
+            message: str        error_code: Optional[str] = None        details: Optional[Dict[str        Any]]: Optional[Any] = None) -> None:
         super().__init__(message)
         self.message = message
         self.error_code = error_code
@@ -27,16 +30,20 @@ class AIAgentException(Exception):
 class DomainException(AIAgentException):
     """Exception raised for domain/business logic errors."""
     
-    def __init__(self, message: str, error_code: Optional[str] = None, 
-                 details: Optional[Dict[str, Any]] = None):
+    def __init__(self, ,
+
+    
+            message: str        error_code: Optional[str] = None        details: Optional[Dict[str        Any]]: Optional[Any] = None) -> None:
         super().__init__(message, error_code or "DOMAIN_ERROR", details)
 
 
 class ValidationException(AIAgentException):
     """Exception raised for validation errors."""
     
-    def __init__(self, message: str, field: Optional[str] = None, 
-                 value: Optional[Any] = None, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, ,
+
+    
+            message: str        field: Optional[str] = None        value: Optional[Any] = None        details: Optional[Dict[str        Any]]: Optional[Any] = None) -> None:
         super().__init__(message, "VALIDATION_ERROR", details)
         self.field = field
         self.value = value
@@ -45,8 +52,10 @@ class ValidationException(AIAgentException):
 class InfrastructureException(AIAgentException):
     """Exception raised for infrastructure/technical errors."""
     
-    def __init__(self, message: str, component: Optional[str] = None, 
-                 details: Optional[Dict[str, Any]] = None):
+    def __init__(self, ,
+
+    
+            message: str        component: Optional[str] = None        details: Optional[Dict[str        Any]]: Optional[Any] = None) -> None:
         super().__init__(message, "INFRASTRUCTURE_ERROR", details)
         self.component = component
 
@@ -54,8 +63,10 @@ class InfrastructureException(AIAgentException):
 class ApplicationException(AIAgentException):
     """Exception raised for application layer errors."""
     
-    def __init__(self, message: str, use_case: Optional[str] = None, 
-                 details: Optional[Dict[str, Any]] = None):
+    def __init__(self, ,
+
+    
+            message: str        use_case: Optional[str] = None        details: Optional[Dict[str        Any]]: Optional[Any] = None) -> None:
         super().__init__(message, "APPLICATION_ERROR", details)
         self.use_case = use_case
 
@@ -63,8 +74,10 @@ class ApplicationException(AIAgentException):
 class ConfigurationException(AIAgentException):
     """Exception raised for configuration errors."""
     
-    def __init__(self, message: str, config_key: Optional[str] = None, 
-                 details: Optional[Dict[str, Any]] = None):
+    def __init__(self, ,
+
+    
+            message: str        config_key: Optional[str] = None        details: Optional[Dict[str        Any]]: Optional[Any] = None) -> None:
         super().__init__(message, "CONFIGURATION_ERROR", details)
         self.config_key = config_key
 
@@ -72,8 +85,10 @@ class ConfigurationException(AIAgentException):
 class AgentException(AIAgentException):
     """Exception raised for agent-related errors."""
     
-    def __init__(self, message: str, agent_id: Optional[str] = None, 
-                 agent_type: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, ,
+
+    
+            message: str        agent_id: Optional[str] = None        agent_type: Optional[str] = None        details: Optional[Dict[str        Any]]: Optional[Any] = None) -> None:
         super().__init__(message, "AGENT_ERROR", details)
         self.agent_id = agent_id
         self.agent_type = agent_type
@@ -82,8 +97,10 @@ class AgentException(AIAgentException):
 class TaskException(AIAgentException):
     """Exception raised for task-related errors."""
     
-    def __init__(self, message: str, task_id: Optional[str] = None, 
-                 task_type: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, ,
+
+    
+            message: str        task_id: Optional[str] = None        task_type: Optional[str] = None        details: Optional[Dict[str        Any]]: Optional[Any] = None) -> None:
         super().__init__(message, "TASK_ERROR", details)
         self.task_id = task_id
         self.task_type = task_type
@@ -92,8 +109,10 @@ class TaskException(AIAgentException):
 class ToolException(AIAgentException):
     """Exception raised for tool-related errors."""
     
-    def __init__(self, message: str, tool_name: Optional[str] = None, 
-                 tool_type: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, ,
+
+    
+            message: str        tool_name: Optional[str] = None        tool_type: Optional[str] = None        details: Optional[Dict[str        Any]]: Optional[Any] = None) -> None:
         super().__init__(message, "TOOL_ERROR", details)
         self.tool_name = tool_name
         self.tool_type = tool_type
@@ -102,8 +121,10 @@ class ToolException(AIAgentException):
 class CommunicationException(AIAgentException):
     """Exception raised for communication/API errors."""
     
-    def __init__(self, message: str, endpoint: Optional[str] = None, 
-                 status_code: Optional[int] = None, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, ,
+
+    
+            message: str        endpoint: Optional[str] = None        status_code: Optional[int] = None        details: Optional[Dict[str        Any]]: Optional[Any] = None) -> None:
         super().__init__(message, "COMMUNICATION_ERROR", details)
         self.endpoint = endpoint
         self.status_code = status_code
@@ -112,8 +133,10 @@ class CommunicationException(AIAgentException):
 class ResourceException(AIAgentException):
     """Exception raised for resource-related errors."""
     
-    def __init__(self, message: str, resource_type: Optional[str] = None, 
-                 resource_id: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, ,
+
+    
+            message: str        resource_type: Optional[str] = None        resource_id: Optional[str] = None        details: Optional[Dict[str        Any]]: Optional[Any] = None) -> None:
         super().__init__(message, "RESOURCE_ERROR", details)
         self.resource_type = resource_type
         self.resource_id = resource_id
@@ -122,8 +145,10 @@ class ResourceException(AIAgentException):
 class TimeoutException(AIAgentException):
     """Exception raised for timeout errors."""
     
-    def __init__(self, message: str, timeout_duration: Optional[float] = None, 
-                 operation: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, ,
+
+    
+            message: str        timeout_duration: Optional[float] = None        operation: Optional[str] = None        details: Optional[Dict[str        Any]]: Optional[Any] = None) -> None:
         super().__init__(message, "TIMEOUT_ERROR", details)
         self.timeout_duration = timeout_duration
         self.operation = operation
@@ -132,8 +157,10 @@ class TimeoutException(AIAgentException):
 class RateLimitException(AIAgentException):
     """Exception raised for rate limiting errors."""
     
-    def __init__(self, message: str, rate_limit: Optional[int] = None, 
-                 retry_after: Optional[float] = None, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, ,
+
+    
+            message: str        rate_limit: Optional[int] = None        retry_after: Optional[float] = None        details: Optional[Dict[str        Any]]: Optional[Any] = None) -> None:
         super().__init__(message, "RATE_LIMIT_ERROR", details)
         self.rate_limit = rate_limit
         self.retry_after = retry_after
@@ -142,8 +169,10 @@ class RateLimitException(AIAgentException):
 class AuthenticationException(AIAgentException):
     """Exception raised for authentication errors."""
     
-    def __init__(self, message: str, auth_method: Optional[str] = None, 
-                 details: Optional[Dict[str, Any]] = None):
+    def __init__(self, ,
+
+    
+            message: str        auth_method: Optional[str] = None        details: Optional[Dict[str        Any]]: Optional[Any] = None) -> None:
         super().__init__(message, "AUTHENTICATION_ERROR", details)
         self.auth_method = auth_method
 
@@ -151,8 +180,10 @@ class AuthenticationException(AIAgentException):
 class AuthorizationException(AIAgentException):
     """Exception raised for authorization errors."""
     
-    def __init__(self, message: str, required_permissions: Optional[list] = None, 
-                 details: Optional[Dict[str, Any]] = None):
+    def __init__(self, ,
+
+    
+            message: str        required_permissions: Optional[list] = None        details: Optional[Dict[str        Any]]: Optional[Any] = None) -> None:
         super().__init__(message, "AUTHORIZATION_ERROR", details)
         self.required_permissions = required_permissions
 
@@ -160,8 +191,10 @@ class AuthorizationException(AIAgentException):
 class DataException(AIAgentException):
     """Exception raised for data-related errors."""
     
-    def __init__(self, message: str, data_type: Optional[str] = None, 
-                 data_source: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, ,
+
+    
+            message: str        data_type: Optional[str] = None        data_source: Optional[str] = None        details: Optional[Dict[str        Any]]: Optional[Any] = None) -> None:
         super().__init__(message, "DATA_ERROR", details)
         self.data_type = data_type
         self.data_source = data_source
@@ -170,8 +203,10 @@ class DataException(AIAgentException):
 class StateException(AIAgentException):
     """Exception raised for state management errors."""
     
-    def __init__(self, message: str, current_state: Optional[str] = None, 
-                 expected_state: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, ,
+
+    
+            message: str        current_state: Optional[str] = None        expected_state: Optional[str] = None        details: Optional[Dict[str        Any]]: Optional[Any] = None) -> None:
         super().__init__(message, "STATE_ERROR", details)
         self.current_state = current_state
         self.expected_state = expected_state

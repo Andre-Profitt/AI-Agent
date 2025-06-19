@@ -10,6 +10,10 @@ import requests
 import re
 from typing import List, Tuple, Dict
 import json
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def parse_requirements(requirements_text: str) -> List[Tuple[str, str]]:
     """Parse requirements.txt content and extract package names and versions."""
@@ -102,7 +106,7 @@ def verify_requirements(requirements_text: str) -> Dict[str, any]:
         "errors": []
     }
     
-    print(f"Checking {len(packages)} packages...")
+    logger.info("Checking {} packages...", extra={"len_packages_": len(packages)})
     print("-" * 70)
     
     for package_name, version in packages:
@@ -110,7 +114,7 @@ def verify_requirements(requirements_text: str) -> Dict[str, any]:
         
         if result["exists"]:
             results["valid"] += 1
-            print(f"✅ {package_name}=={version}")
+            logger.info("✅ {}=={}", extra={"package_name": package_name, "version": version})
         else:
             results["invalid"] += 1
             error_info = {
@@ -121,11 +125,11 @@ def verify_requirements(requirements_text: str) -> Dict[str, any]:
             }
             results["errors"].append(error_info)
             
-            print(f"❌ {package_name}=={version}")
-            print(f"   Error: {result['error']}")
+            logger.info("❌ {}=={}", extra={"package_name": package_name, "version": version})
+            logger.info("   Error: {}", extra={"result__error_": result['error']})
             if result["available_versions"]:
-                print(f"   Available versions: {', '.join(result['available_versions'][:5])}")
-            print()
+                logger.info("   Available versions: {}", extra={"_____join_result__available_versions__": ', '.join(result['available_versions'][})
+            logger.info("")
     
     return results
 
@@ -135,7 +139,7 @@ def suggest_fixes(errors: List[Dict]) -> None:
         return
         
     print("\n" + "=" * 70)
-    print("SUGGESTED FIXES:")
+    logger.info("SUGGESTED FIXES:")
     print("=" * 70)
     
     for error in errors:
@@ -143,22 +147,22 @@ def suggest_fixes(errors: List[Dict]) -> None:
         requested_version = error["version"]
         available = error["available_versions"]
         
-        print(f"\n{package}=={requested_version}")
+        logger.info("\n{}=={}", extra={"package": package, "requested_version": requested_version})
         
         if available:
             # Find the closest available version
             if requested_version.replace('==', '') in [v.split('rc')[0].split('b')[0].split('a')[0] for v in available]:
                 # Pre-release version might exist
-                print(f"  → Try: {package}=={available[0]}")
+                logger.info("  → Try: {}=={}", extra={"package": package, "available_0": available[0]})
             else:
                 # Suggest the latest stable version
                 stable_versions = [v for v in available if not any(x in v for x in ['rc', 'a', 'b', 'dev'])]
                 if stable_versions:
-                    print(f"  → Try: {package}=={stable_versions[0]}")
+                    logger.info("  → Try: {}=={}", extra={"package": package, "stable_versions_0": stable_versions[0]})
                 else:
-                    print(f"  → Try: {package}=={available[0]}")
+                    logger.info("  → Try: {}=={}", extra={"package": package, "available_0": available[0]})
         else:
-            print(f"  → Package might not exist. Check the package name.")
+            logger.info("  → Package might not exist. Check the package name.")
 
 def main():
     """Main function to verify requirements file."""
@@ -169,31 +173,31 @@ def main():
             with open(filename, 'r') as f:
                 requirements_text = f.read()
         except FileNotFoundError:
-            print(f"Error: File '{filename}' not found")
+            logger.info("Error: File '{}' not found", extra={"filename": filename})
             sys.exit(1)
     else:
         # Read from stdin or use the example
-        print("Paste your requirements.txt content (press Ctrl+D when done):")
+        logger.info("Paste your requirements.txt content (press Ctrl+D when done):")
         try:
             requirements_text = sys.stdin.read()
         except KeyboardInterrupt:
-            print("\nCancelled")
+            logger.info("\nCancelled")
             sys.exit(0)
     
     results = verify_requirements(requirements_text)
     
     print("\n" + "=" * 70)
-    print("SUMMARY:")
+    logger.info("SUMMARY:")
     print("=" * 70)
-    print(f"Total packages: {results['total']}")
-    print(f"Valid packages: {results['valid']} ✅")
-    print(f"Invalid packages: {results['invalid']} ❌")
+    logger.info("Total packages: {}", extra={"results__total_": results['total']})
+    logger.info("Valid packages: {} ✅", extra={"results__valid_": results['valid']})
+    logger.info("Invalid packages: {} ❌", extra={"results__invalid_": results['invalid']})
     
     if results["errors"]:
         suggest_fixes(results["errors"])
         sys.exit(1)
     else:
-        print("\nAll packages and versions are valid! 🎉")
+        logger.info("\nAll packages and versions are valid! 🎉")
         sys.exit(0)
 
 if __name__ == "__main__":

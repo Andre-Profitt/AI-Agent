@@ -11,13 +11,14 @@ from uuid import uuid4
 from src.database.connection_pool import DatabasePool
 from src.utils.logging import get_logger
 from src.services.circuit_breaker import CircuitBreaker
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 logger = get_logger(__name__)
 
 class SupabaseManager:
     """Enhanced Supabase manager with connection pooling and monitoring"""
     
-    def __init__(self, url: str, key: str, pool_size: int = 10, max_retries: int = 3):
+    def __init__(self, url: str, key: str, pool_size: int = 10, max_retries: int = 3) -> None:
         self.pool = DatabasePool(
             url=url,
             key=key,
@@ -45,7 +46,7 @@ class SupabaseManager:
         self.cache = {}
         self.cache_ttl = 300  # 5 minutes
     
-    async def initialize(self):
+    async def initialize(self) -> Any:
         """Initialize the database manager"""
         await self.pool.initialize()
         
@@ -54,19 +55,19 @@ class SupabaseManager:
         
         logger.info("SupabaseManager initialized successfully")
     
-    async def _verify_tables(self):
+    async def _verify_tables(self) -> Any:
         """Verify all required tables exist"""
         for name, table in self.tables.items():
             try:
                 # Try to query the table
                 async with self.pool.acquire() as conn:
                     result = await conn.connection.table(table).select("count").limit(1).execute()
-                logger.info(f"Table '{table}' verified")
+                logger.info("Table '{}' verified", extra={"table": table})
             except Exception as e:
-                logger.error(f"Table '{table}' verification failed: {e}")
+                logger.error("Table '{}' verification failed: {}", extra={"table": table, "e": e})
                 # In production, you might want to create the table here
     
-    async def test_connection(self):
+    async def test_connection(self) -> Any:
         """Test database connectivity"""
         try:
             async with self.pool.acquire() as conn:
@@ -75,7 +76,7 @@ class SupabaseManager:
                 logger.info("Database connection test successful")
                 return True
         except Exception as e:
-            logger.error(f"Database connection test failed: {e}")
+            logger.error("Database connection test failed: {}", extra={"e": e})
             return False
     
     async def log_message(self, session_id: str, message: str, history: List) -> Optional[str]:
@@ -83,7 +84,7 @@ class SupabaseManager:
         table = self.tables['messages']
         
         if not self.circuit_breakers[table].can_execute():
-            logger.warning(f"Circuit breaker open for table {table}")
+            logger.warning("Circuit breaker open for table {}", extra={"table": table})
             return None
         
         try:
@@ -104,11 +105,11 @@ class SupabaseManager:
             return message_id
             
         except Exception as e:
-            logger.error(f"Failed to log message: {e}")
+            logger.error("Failed to log message: {}", extra={"e": e})
             self.circuit_breakers[table].record_failure()
             return None
     
-    async def log_trajectory(self, session_id: str, trajectory_data: Dict[str, Any]):
+    async def log_trajectory(self, session_id: str, trajectory_data: Dict[str, Any]) -> Any:
         """Log agent trajectory for analysis"""
         table = self.tables['trajectories']
         
@@ -128,10 +129,10 @@ class SupabaseManager:
             self.circuit_breakers[table].record_success()
             
         except Exception as e:
-            logger.error(f"Failed to log trajectory: {e}")
+            logger.error("Failed to log trajectory: {}", extra={"e": e})
             self.circuit_breakers[table].record_failure()
     
-    async def update_tool_metrics(self, tool_name: str, success: bool, duration: float):
+    async def update_tool_metrics(self, tool_name: str, success: bool, duration: float) -> bool:
         """Update tool reliability metrics"""
         table = self.tables['tools']
         
@@ -174,7 +175,7 @@ class SupabaseManager:
                     await conn.connection.table(table).insert(insert_data).execute()
                     
         except Exception as e:
-            logger.error(f"Failed to update tool metrics: {e}")
+            logger.error("Failed to update tool metrics: {}", extra={"e": e})
     
     async def get_tool_reliability(self, tool_name: str) -> Optional[Dict[str, Any]]:
         """Get tool reliability metrics with caching"""
@@ -197,11 +198,11 @@ class SupabaseManager:
                     return data
                     
         except Exception as e:
-            logger.error(f"Failed to get tool reliability: {e}")
+            logger.error("Failed to get tool reliability: {}", extra={"e": e})
         
         return None
     
-    async def log_error(self, error_type: str, error_message: str, context: Dict[str, Any]):
+    async def log_error(self, error_type: str, error_message: str, context: Dict[str, Any]) -> Any:
         """Log errors for analysis"""
         table = self.tables['errors']
         
@@ -218,9 +219,9 @@ class SupabaseManager:
                 await conn.connection.table(table).insert(data).execute()
                 
         except Exception as e:
-            logger.error(f"Failed to log error: {e}")
+            logger.error("Failed to log error: {}", extra={"e": e})
     
-    async def log_metric(self, session_id: str, metric_type: str, value: float):
+    async def log_metric(self, session_id: str, metric_type: str, value: float) -> Any:
         """Log performance metrics"""
         table = self.tables['metrics']
         
@@ -237,7 +238,7 @@ class SupabaseManager:
                 await conn.connection.table(table).insert(data).execute()
                 
         except Exception as e:
-            logger.error(f"Failed to log metric: {e}")
+            logger.error("Failed to log metric: {}", extra={"e": e})
     
     async def get_session_history(self, session_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Get recent session history"""
@@ -253,10 +254,10 @@ class SupabaseManager:
                 return result.data if result.data else []
                 
         except Exception as e:
-            logger.error(f"Failed to get session history: {e}")
+            logger.error("Failed to get session history: {}", extra={"e": e})
             return []
     
-    async def save_performance_stats(self, stats: Dict[str, Any]):
+    async def save_performance_stats(self, stats: Dict[str, Any]) -> bool:
         """Save performance statistics"""
         try:
             async with self.pool.acquire() as conn:
@@ -267,12 +268,12 @@ class SupabaseManager:
                         duration=tool_stats['total_duration'] / max(tool_stats['calls'], 1)
                     )
         except Exception as e:
-            logger.error(f"Failed to save performance stats: {e}")
+            logger.error("Failed to save performance stats: {}", extra={"e": e})
     
     def get_pool_stats(self) -> Dict[str, Any]:
         """Get connection pool statistics"""
         return self.pool.get_stats()
     
-    async def close(self):
+    async def close(self) -> None:
         """Close database connections"""
         await self.pool.close() 

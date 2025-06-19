@@ -43,7 +43,7 @@ def async_metrics(func: Callable) -> Callable:
             execution_time = time.time() - start_time
             
             # Record success metrics
-            logger.debug(f"Function {function_name} completed successfully in {execution_time:.3f}s")
+            logger.debug("Function {} completed successfully in {}s", extra={"function_name": function_name, "execution_time": execution_time})
             
             return result
             
@@ -52,7 +52,7 @@ def async_metrics(func: Callable) -> Callable:
             
             # Record error metrics
             record_error(type(e).__name__, function_name, "error")
-            logger.error(f"Function {function_name} failed after {execution_time:.3f}s: {e}")
+            logger.error("Function {} failed after {}s: {}", extra={"function_name": function_name, "execution_time": execution_time, "e": e})
             
             raise
     
@@ -92,7 +92,7 @@ def agent_metrics(agent_name: str) -> Callable:
                 record_task_execution(agent_name, task_type, "success")
                 record_task_duration(agent_name, task_type, execution_time)
                 
-                logger.debug(f"Agent {agent_name} completed {task_type} task in {execution_time:.3f}s")
+                logger.debug("Agent {} completed {} task in {}s", extra={"agent_name": agent_name, "task_type": task_type, "execution_time": execution_time})
                 
                 return result
                 
@@ -103,7 +103,7 @@ def agent_metrics(agent_name: str) -> Callable:
                 record_task_execution(agent_name, task_type, "error")
                 record_error(type(e).__name__, agent_name, "agent_error")
                 
-                logger.error(f"Agent {agent_name} failed {task_type} task after {execution_time:.3f}s: {e}")
+                logger.error("Agent {} failed {} task after {}s: {}", extra={"agent_name": agent_name, "task_type": task_type, "execution_time": execution_time, "e": e})
                 
                 raise
         
@@ -137,7 +137,7 @@ def tool_metrics(tool_name: str) -> Callable:
                 record_task_execution(tool_name, "tool_execution", "success")
                 record_task_duration(tool_name, "tool_execution", execution_time)
                 
-                logger.debug(f"Tool {tool_name} executed successfully in {execution_time:.3f}s")
+                logger.debug("Tool {} executed successfully in {}s", extra={"tool_name": tool_name, "execution_time": execution_time})
                 
                 return result
                 
@@ -148,7 +148,7 @@ def tool_metrics(tool_name: str) -> Callable:
                 record_task_execution(tool_name, "tool_execution", "error")
                 record_error(type(e).__name__, tool_name, "tool_error")
                 
-                logger.error(f"Tool {tool_name} failed after {execution_time:.3f}s: {e}")
+                logger.error("Tool {} failed after {}s: {}", extra={"tool_name": tool_name, "execution_time": execution_time, "e": e})
                 
                 raise
         
@@ -183,9 +183,9 @@ def performance_metrics(operation_name: str) -> Callable:
                 
                 # Log performance information
                 if execution_time > 1.0:  # Log slow operations
-                    logger.warning(f"Slow operation {operation_name}: {execution_time:.3f}s")
+                    logger.warning("Slow operation {}: {}s", extra={"operation_name": operation_name, "execution_time": execution_time})
                 else:
-                    logger.debug(f"Operation {operation_name} completed in {execution_time:.3f}s")
+                    logger.debug("Operation {} completed in {}s", extra={"operation_name": operation_name, "execution_time": execution_time})
                 
                 return result
                 
@@ -195,7 +195,7 @@ def performance_metrics(operation_name: str) -> Callable:
                 # Record error metrics
                 record_error(type(e).__name__, operation_name, "performance_error")
                 
-                logger.error(f"Performance operation {operation_name} failed after {execution_time:.3f}s: {e}")
+                logger.error("Performance operation {} failed after {}s: {}", extra={"operation_name": operation_name, "execution_time": execution_time, "e": e})
                 
                 raise
         
@@ -228,7 +228,7 @@ async def metrics_context(operation_name: str, **labels):
         record_task_execution(operation_name, "context", "success")
         record_task_duration(operation_name, "context", execution_time)
         
-        logger.debug(f"Context {operation_name} completed successfully in {execution_time:.3f}s")
+        logger.debug("Context {} completed successfully in {}s", extra={"operation_name": operation_name, "execution_time": execution_time})
         
     except Exception as e:
         execution_time = time.time() - start_time
@@ -237,7 +237,7 @@ async def metrics_context(operation_name: str, **labels):
         record_task_execution(operation_name, "context", "error")
         record_error(type(e).__name__, operation_name, "context_error")
         
-        logger.error(f"Context {operation_name} failed after {execution_time:.3f}s: {e}")
+        logger.error("Context {} failed after {}s: {}", extra={"operation_name": operation_name, "execution_time": execution_time, "e": e})
         
         raise
 
@@ -274,7 +274,7 @@ def error_tracking(func: Callable) -> Callable:
             
             record_error(type(e).__name__, function_name, "function_error")
             
-            logger.error(f"Error in {function_name}: {e}", extra={"error_context": error_context})
+            logger.error("Error in {}: {}", extra={})
             
             raise
     
@@ -321,7 +321,7 @@ def throughput_metrics(operation_name: str) -> Callable:
                 # Record throughput metrics
                 throughput = operation_count / (current_time - last_reset_time + 1)
                 
-                logger.debug(f"Operation {operation_name} throughput: {throughput:.2f} ops/sec")
+                logger.debug("Operation {} throughput: {} ops/sec", extra={})
                 
                 return result
                 
@@ -329,9 +329,9 @@ def throughput_metrics(operation_name: str) -> Callable:
                 execution_time = time.time() - start_time
                 
                 # Record error in throughput context
-                record_error(type(e).__name__, operation_name, "throughput_error")
+                record_error(type(e).__name__, operation_name, "throughput_error", extra={"_function_name_": "function_name"})
                 
-                logger.error(f"Throughput operation {operation_name} failed: {e}")
+                logger.error("Throughput operation {} failed: {}", extra={"operation_name": operation_name, "e": e})
                 
                 raise
         
@@ -376,9 +376,9 @@ def resource_metrics(func: Callable) -> Callable:
             memory_delta = final_memory - initial_memory
             cpu_delta = final_cpu - initial_cpu
             
-            logger.debug(f"Resource usage for {func.__name__}: "
-                        f"Memory: {memory_delta:+.2f}MB, CPU: {cpu_delta:+.2f}%, "
-                        f"Time: {execution_time:.3f}s")
+            logger.debug("Resource usage for {}: "
+                        f"Memory: {}MB, CPU: {}%, "
+                        f"Time: {}s", extra={"func___name__": func.__name__, "memory_delta": memory_delta, "cpu_delta": cpu_delta, "execution_time": execution_time})
             
             return result
             
@@ -388,7 +388,7 @@ def resource_metrics(func: Callable) -> Callable:
             # Record error with resource context
             record_error(type(e).__name__, func.__name__, "resource_error")
             
-            logger.error(f"Resource operation {func.__name__} failed after {execution_time:.3f}s: {e}")
+            logger.error("Resource operation {} failed after {}s: {}", extra={"func___name__": func.__name__, "execution_time": execution_time, "e": e})
             
             raise
     

@@ -7,13 +7,17 @@ Verifies that the CoT system works correctly with the hybrid architecture
 import asyncio
 import sys
 import os
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 # Add the src directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 def test_cot_standalone():
     """Test the CoT system in standalone mode"""
-    print("🧪 Testing Optimized Chain of Thought (Standalone)")
+    logger.info("🧪 Testing Optimized Chain of Thought (Standalone)")
     print("-" * 50)
     
     try:
@@ -24,22 +28,22 @@ def test_cot_standalone():
         # Test complexity analyzer
         analyzer = ComplexityAnalyzer()
         complexity, features = analyzer.analyze("What is machine learning?")
-        print(f"✅ Complexity Analysis: {complexity:.3f}")
-        print(f"   Features: {list(features.keys())}")
+        logger.info("✅ Complexity Analysis: {}", extra={"complexity": complexity})
+        logger.info("   Features: {}", extra={"list_features_keys___": list(features.keys())})
         
         # Test CoT system
         cot = OptimizedChainOfThought("test_cot")
-        print(f"✅ CoT System initialized")
+        logger.info("✅ CoT System initialized")
         
         return True
         
     except Exception as e:
-        print(f"❌ CoT Standalone Test Failed: {e}")
+        logger.info("❌ CoT Standalone Test Failed: {}", extra={"e": e})
         return False
 
 async def test_cot_integration():
     """Test CoT integration with hybrid architecture"""
-    print("\n🔗 Testing CoT Integration with Hybrid Architecture")
+    logger.info("\n🔗 Testing CoT Integration with Hybrid Architecture")
     print("-" * 50)
     
     try:
@@ -53,33 +57,33 @@ async def test_cot_integration():
                 'fsm': {'max_steps': 5}
             }
         )
-        print(f"✅ Hybrid Agent initialized")
+        logger.info("✅ Hybrid Agent initialized")
         
         # Test CoT mode specifically
         test_query = "Explain the concept of artificial intelligence step by step"
         result = await agent.process_query(test_query)
         
-        print(f"✅ Query processed successfully")
-        print(f"   Mode: {result.get('mode')}")
-        print(f"   Confidence: {result.get('confidence', 0):.3f}")
+        logger.info("✅ Query processed successfully")
+        logger.info("   Mode: {}", extra={"result_get__mode__": result.get('mode')})
+        logger.info("   Confidence: {}", extra={"result_get__confidence___0_": result.get('confidence', 0)})
         
         if 'reasoning_path' in result:
             path = result['reasoning_path']
-            print(f"   CoT Steps: {len(path.steps)}")
-            print(f"   Template: {path.template_used}")
-            print(f"   Final Answer: {path.final_answer[:100]}...")
+            logger.info("   CoT Steps: {}", extra={"len_path_steps_": len(path.steps)})
+            logger.info("   Template: {}", extra={"path_template_used": path.template_used})
+            logger.info("   Final Answer: {}...", extra={"path_final_answer_": path.final_answer[})
         
         return True
         
     except Exception as e:
-        print(f"❌ CoT Integration Test Failed: {e}")
+        logger.info("❌ CoT Integration Test Failed: {}", extra={"e": e})
         import traceback
         traceback.print_exc()
         return False
 
 async def test_performance_tracking():
     """Test performance tracking capabilities"""
-    print("\n📊 Testing Performance Tracking")
+    logger.info("\n📊 Testing Performance Tracking")
     print("-" * 50)
     
     try:
@@ -100,20 +104,20 @@ async def test_performance_tracking():
         # Get performance report
         report = agent.get_performance_report()
         
-        print(f"✅ Performance tracking working")
-        print(f"   Total queries: {report['total_queries']}")
-        print(f"   Average confidence: {report['average_confidence']:.3f}")
-        print(f"   Mode usage: {report['mode_usage']}")
+        logger.info("✅ Performance tracking working")
+        logger.info("   Total queries: {}", extra={"report__total_queries_": report['total_queries']})
+        logger.info("   Average confidence: {}", extra={"report__average_confidence_": report['average_confidence']})
+        logger.info("   Mode usage: {}", extra={"report__mode_usage_": report['mode_usage']})
         
         return True
         
     except Exception as e:
-        print(f"❌ Performance Tracking Test Failed: {e}")
+        logger.info("❌ Performance Tracking Test Failed: {}", extra={"e": e})
         return False
 
 async def test_caching():
     """Test caching functionality"""
-    print("\n💾 Testing Caching System")
+    logger.info("\n💾 Testing Caching System")
     print("-" * 50)
     
     try:
@@ -128,24 +132,24 @@ async def test_caching():
         # Same query again (should use cache)
         result2 = await cot.reason(query)
         
-        print(f"✅ Caching system working")
-        print(f"   First run confidence: {result1.total_confidence:.3f}")
-        print(f"   Cached run confidence: {result2.total_confidence:.3f}")
+        logger.info("✅ Caching system working")
+        logger.info("   First run confidence: {}", extra={"result1_total_confidence": result1.total_confidence})
+        logger.info("   Cached run confidence: {}", extra={"result2_total_confidence": result2.total_confidence})
         
         # Check cache stats
         stats = cot.reasoning_cache.get_stats()
-        print(f"   Cache size: {stats['size']}")
-        print(f"   Hit rate: {stats['hit_rate']:.3f}")
+        logger.info("   Cache size: {}", extra={"stats__size_": stats['size']})
+        logger.info("   Hit rate: {}", extra={"stats__hit_rate_": stats['hit_rate']})
         
         return True
         
     except Exception as e:
-        print(f"❌ Caching Test Failed: {e}")
+        logger.info("❌ Caching Test Failed: {}", extra={"e": e})
         return False
 
 async def test_template_system():
     """Test template selection and usage"""
-    print("\n📋 Testing Template System")
+    logger.info("\n📋 Testing Template System")
     print("-" * 50)
     
     try:
@@ -166,21 +170,21 @@ async def test_template_system():
             complexity, features = analyzer.analyze(query)
             template = library.select_template(query, features)
             
-            print(f"   Query: {query[:30]}...")
-            print(f"   Selected: {template.name}")
-            print(f"   Expected: {expected_type}")
-            print(f"   Match: {'✅' if template.name == expected_type else '❌'}")
-            print()
+            logger.info("   Query: {}...", extra={"query_": query[})
+            logger.info("   Selected: {}", extra={"template_name": template.name})
+            logger.info("   Expected: {}", extra={"expected_type": expected_type})
+            logger.info("   Match: {}", extra={"____if_template_name____expected_type_else____": '✅' if template.name == expected_type else '❌'})
+            logger.info("")
         
         return True
         
     except Exception as e:
-        print(f"❌ Template System Test Failed: {e}")
+        logger.info("❌ Template System Test Failed: {}", extra={"e": e})
         return False
 
 async def main():
     """Run all tests"""
-    print("🚀 Optimized Chain of Thought Integration Tests")
+    logger.info("🚀 Optimized Chain of Thought Integration Tests")
     print("=" * 60)
     
     tests = [
@@ -194,7 +198,7 @@ async def main():
     results = []
     
     for test_name, test_func in tests:
-        print(f"\n🧪 Running {test_name} Test...")
+        logger.info("\n🧪 Running {} Test...", extra={"test_name": test_name})
         try:
             if asyncio.iscoroutinefunction(test_func):
                 result = await test_func()
@@ -202,12 +206,12 @@ async def main():
                 result = test_func()
             results.append((test_name, result))
         except Exception as e:
-            print(f"❌ {test_name} Test Failed: {e}")
+            logger.info("❌ {} Test Failed: {}", extra={"test_name": test_name, "e": e})
             results.append((test_name, False))
     
     # Summary
     print("\n" + "=" * 60)
-    print("📋 Test Results Summary")
+    logger.info("📋 Test Results Summary")
     print("=" * 60)
     
     passed = 0
@@ -215,16 +219,16 @@ async def main():
     
     for test_name, result in results:
         status = "✅ PASSED" if result else "❌ FAILED"
-        print(f"{test_name}: {status}")
+        logger.info("{}: {}", extra={"test_name": test_name, "status": status})
         if result:
             passed += 1
     
-    print(f"\nOverall: {passed}/{total} tests passed")
+    logger.info("\nOverall: {}/{} tests passed", extra={"passed": passed, "total": total})
     
     if passed == total:
-        print("🎉 All tests passed! CoT integration is working correctly.")
+        logger.info("🎉 All tests passed! CoT integration is working correctly.")
     else:
-        print("⚠️  Some tests failed. Please check the implementation.")
+        logger.info("⚠️  Some tests failed. Please check the implementation.")
     
     return passed == total
 
@@ -233,10 +237,10 @@ if __name__ == "__main__":
         success = asyncio.run(main())
         sys.exit(0 if success else 1)
     except KeyboardInterrupt:
-        print("\n\n⏹️  Tests interrupted by user")
+        logger.info("\n\n⏹️  Tests interrupted by user")
         sys.exit(1)
     except Exception as e:
-        print(f"\n❌ Test suite failed: {e}")
+        logger.info("\n❌ Test suite failed: {}", extra={"e": e})
         import traceback
         traceback.print_exc()
         sys.exit(1) 

@@ -53,7 +53,7 @@ class MultiAgentSystem:
             for tool in tools:
                 self.unified_registry.register(tool)
             
-            logger.info(f"Multi-agent system registered {len(tools)} tools with unified registry")
+            logger.info("Multi-agent system registered {} tools with unified registry", extra={"len_tools_": len(tools)})
             
         except ImportError:
             logger.warning("Unified tool registry not available, using local tools")
@@ -135,7 +135,7 @@ class MultiAgentSystem:
                 verbose=config["verbose"]
             )
             
-            logger.info(f"Created {role} agent with {len(agent_tools)} tools")
+            logger.info("Created {} agent with {} tools", extra={"role": role, "len_agent_tools_": len(agent_tools)})
         
         return agents
     
@@ -158,7 +158,7 @@ class MultiAgentSystem:
                         role_tools.append(tool)
             
             if role_tools:
-                logger.info(f"Found {len(role_tools)} reliable tools for {role}")
+                logger.info("Found {} reliable tools for {}", extra={"len_role_tools_": len(role_tools), "role": role})
                 return role_tools
         
         # Fallback to tool introspection
@@ -175,11 +175,11 @@ class MultiAgentSystem:
                             suitable_tools.append(tool)
                 
                 if suitable_tools:
-                    logger.info(f"Found {len(suitable_tools)} suitable tools for {role} via introspection")
+                    logger.info("Found {} suitable tools for {} via introspection", extra={"len_suitable_tools_": len(suitable_tools), "role": role})
                     return suitable_tools
                     
             except Exception as e:
-                logger.warning(f"Tool introspection failed for {role}: {e}")
+                logger.warning("Tool introspection failed for {}: {}", extra={"role": role, "e": e})
         
         # Final fallback: return tools that match category names
         fallback_tools = []
@@ -188,7 +188,7 @@ class MultiAgentSystem:
                 if any(category in tool.name.lower() for category in tool_categories):
                     fallback_tools.append(tool)
         
-        logger.info(f"Using {len(fallback_tools)} fallback tools for {role}")
+        logger.info("Using {} fallback tools for {}", extra={"len_fallback_tools_": len(fallback_tools), "role": role})
         return fallback_tools
     
     def _filter_by_reliability(self, tools: List[BaseTool]) -> List[BaseTool]:
@@ -312,7 +312,7 @@ class MultiAgentSystem:
             logger.debug("Tool metrics would be updated here")
             
         except Exception as e:
-            logger.warning(f"Failed to update tool metrics: {e}")
+            logger.warning("Failed to update tool metrics: {}", extra={"e": e})
             
     def get_state(self) -> AgentState:
         """Get the current state of the multi-agent system"""

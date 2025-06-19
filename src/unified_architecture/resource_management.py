@@ -115,9 +115,9 @@ class ResourceManager:
                     total_gpu_memory += info.total
                 
                 resources[ResourceType.GPU] = total_gpu_memory / (1024 * 1024)  # Convert to MB
-                logger.info(f"Detected {device_count} GPU(s) with {resources[ResourceType.GPU]:.0f}MB total memory")
+                logger.info("Detected {} GPU(s) with {}MB total memory", extra={"device_count": device_count, "resources_ResourceType_GPU": resources[ResourceType.GPU]})
             except Exception as e:
-                logger.warning(f"Failed to initialize GPU monitoring: {e}")
+                logger.warning("Failed to initialize GPU monitoring: {}", extra={"e": e})
         
         return resources
     
@@ -144,17 +144,17 @@ class ResourceManager:
                 self.stats["total_allocations"] += 1
                 self.stats["active_allocations"] += 1
                 
-                logger.info(f"Allocated resources to agent {agent_id}: "
-                           f"CPU={allocation.cpu_cores}, "
-                           f"Memory={allocation.memory_mb}MB")
+                logger.info("Allocated resources to agent {}: "
+                           f"CPU={}, "
+                           f"Memory={}MB", extra={"agent_id": agent_id, "allocation_cpu_cores": allocation.cpu_cores, "allocation_memory_mb": allocation.memory_mb})
                 return True
             else:
                 self.stats["failed_allocations"] += 1
-                logger.warning(f"Insufficient resources for agent {agent_id}")
+                logger.warning("Insufficient resources for agent {}", extra={"agent_id": agent_id})
                 return False
                 
         except Exception as e:
-            logger.error(f"Error allocating resources for agent {agent_id}: {e}")
+            logger.error("Error allocating resources for agent {}: {}", extra={"agent_id": agent_id, "e": e})
             self.stats["failed_allocations"] += 1
             return False
     
@@ -167,15 +167,15 @@ class ResourceManager:
         
         # Check if adding this allocation would exceed limits
         if total_cpu + allocation.cpu_cores > self.resource_limits[ResourceType.CPU]:
-            logger.debug(f"CPU limit exceeded: {total_cpu + allocation.cpu_cores} > {self.resource_limits[ResourceType.CPU]}")
+            logger.debug("CPU limit exceeded: {} > {}", extra={"total_cpu___allocation_cpu_cores": total_cpu + allocation.cpu_cores, "self_resource_limits_ResourceType_CPU": self.resource_limits[ResourceType.CPU]})
             return False
         
         if total_memory + allocation.memory_mb > self.resource_limits[ResourceType.MEMORY]:
-            logger.debug(f"Memory limit exceeded: {total_memory + allocation.memory_mb} > {self.resource_limits[ResourceType.MEMORY]}")
+            logger.debug("Memory limit exceeded: {} > {}", extra={"total_memory___allocation_memory_mb": total_memory + allocation.memory_mb, "self_resource_limits_ResourceType_MEMORY": self.resource_limits[ResourceType.MEMORY]})
             return False
         
         if allocation.gpu_memory_mb and total_gpu + allocation.gpu_memory_mb > self.resource_limits[ResourceType.GPU]:
-            logger.debug(f"GPU memory limit exceeded: {total_gpu + allocation.gpu_memory_mb} > {self.resource_limits[ResourceType.GPU]}")
+            logger.debug("GPU memory limit exceeded: {} > {}", extra={"total_gpu___allocation_gpu_memory_mb": total_gpu + allocation.gpu_memory_mb, "self_resource_limits_ResourceType_GPU": self.resource_limits[ResourceType.GPU]})
             return False
         
         return True
@@ -202,7 +202,7 @@ class ResourceManager:
         if agent_id in self.resource_usage:
             del self.resource_usage[agent_id]
             
-        logger.info(f"Released resources for agent {agent_id}")
+        logger.info("Released resources for agent {}", extra={"agent_id": agent_id})
     
     def get_resource_utilization(self) -> Dict[ResourceType, float]:
         """Get current resource utilization percentages"""
@@ -240,7 +240,7 @@ class ResourceManager:
                 "gpu_memory_mb": usage.get(ResourceType.GPU, 0)
             }
         except Exception as e:
-            logger.error(f"Error getting resource usage for agent {agent_id}: {e}")
+            logger.error("Error getting resource usage for agent {}: {}", extra={"agent_id": agent_id, "e": e})
             return None
     
     async def optimize_allocations(self) -> List[Dict[str, Any]]:
@@ -253,7 +253,7 @@ class ResourceManager:
         # Check for over-utilization
         for resource_type, util_percent in utilization.items():
             if util_percent > self.optimization_threshold * 100:
-                logger.warning(f"High {resource_type.name} utilization: {util_percent:.1f}%")
+                logger.warning("High {} utilization: {}%", extra={"resource_type_name": resource_type.name, "util_percent": util_percent})
                 
                 # Find agents that could be optimized
                 for agent_id, allocation in self.allocations.items():
@@ -331,11 +331,11 @@ class ResourceManager:
             
             self.stats["optimizations_performed"] += 1
             
-            logger.info(f"Applied optimization for agent {agent_id}: {action}")
+            logger.info("Applied optimization for agent {}: {}", extra={"agent_id": agent_id, "action": action})
             return True
             
         except Exception as e:
-            logger.error(f"Error applying optimization for agent {agent_id}: {e}")
+            logger.error("Error applying optimization for agent {}: {}", extra={"agent_id": agent_id, "e": e})
             return False
     
     def get_allocation_stats(self) -> Dict[str, Any]:
@@ -363,7 +363,7 @@ class ResourceManager:
             await self.release_resources(agent_id)
         
         if expired_agents:
-            logger.info(f"Cleaned up {len(expired_agents)} expired resource allocations")
+            logger.info("Cleaned up {} expired resource allocations", extra={"len_expired_agents_": len(expired_agents)})
 
 class ResourceScheduler:
     """Schedules tasks based on resource availability"""
@@ -387,7 +387,7 @@ class ResourceScheduler:
         self.task_queue.append((-priority, task))  # Negative for max-heap behavior
         self.task_queue.sort(key=lambda x: x[0])  # Sort by priority
         
-        logger.debug(f"Scheduled task {task.get('id', 'unknown')} with priority {priority}")
+        logger.debug("Scheduled task {} with priority {}", extra={"task_get__id____unknown__": task.get('id', 'unknown'), "priority": priority})
     
     def get_next_task(self, available_resources: Dict[ResourceType, float]) -> Optional[Dict[str, Any]]:
         """Get the next task that can run with available resources"""
@@ -416,7 +416,7 @@ class ResourceScheduler:
                 if required_amount > available_amount:
                     return False
             except KeyError:
-                logger.warning(f"Unknown resource type: {resource_type}")
+                logger.warning("Unknown resource type: {}", extra={"resource_type": resource_type})
                 return False
         
         return True

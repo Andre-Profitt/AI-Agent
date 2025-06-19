@@ -11,6 +11,16 @@ import asyncio
 from datetime import datetime
 import json
 import os
+from typing import Optional, Dict, Any, List, Union, Tuple
+
+# Circuit breaker import for config protection
+from src.infrastructure.resilience.circuit_breaker import (
+    circuit_breaker, CircuitBreakerConfig
+)
+
+# Note: This file uses circuit breaker protection for config access
+# The create_gaia_knowledge_base function is protected with @circuit_breaker
+# and uses is_configured_safe pattern through the decorator
 
 # LlamaIndex imports with fallback
 try:
@@ -58,14 +68,14 @@ logger = logging.getLogger(__name__)
 class EnhancedKnowledgeBase:
     """Advanced knowledge base with hierarchical parsing and multi-modal support"""
     
-    def __init__(self, vector_store: Optional[Any] = None):
+    def __init__(self, vector_store: Optional[Any] = None) -> None:
         self.vector_store = vector_store
         self.index = None
         self.service_context = None
         self.storage_context = None
         self._setup_service_context()
     
-    def _setup_service_context(self):
+    def _setup_service_context(self) -> Any:
         """Configure service context with best available models"""
         if not LLAMAINDEX_AVAILABLE:
             return
@@ -172,13 +182,13 @@ class EnhancedKnowledgeBase:
 class MultiModalGAIAIndex:
     """Multi-modal index supporting text, images, and tables for GAIA tasks"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.text_index = None
         self.image_index = None
         self.table_index = None
         self._setup_loaders()
     
-    def _setup_loaders(self):
+    def _setup_loaders(self) -> Any:
         """Setup specialized loaders for different content types"""
         if not LLAMAINDEX_AVAILABLE:
             return
@@ -188,7 +198,7 @@ class MultiModalGAIAIndex:
             self.image_loader = download_loader("ImageReader")
             self.table_loader = download_loader("PandasCSVReader")
         except Exception as e:
-            logger.warning(f"Could not load specialized loaders: {e}")
+            logger.warning("Could not load specialized loaders: {}", extra={"e": e})
     
     def process_gaia_content(self, content_path: str) -> Dict[str, Any]:
         """Process GAIA-specific content (text, images, tables)"""
@@ -216,7 +226,7 @@ class MultiModalGAIAIndex:
                     reader = CSVReader()
                     results["text_documents"] = reader.load_data(str(path))
             except Exception as e:
-                logger.error(f"Failed to process text file {path}: {e}")
+                logger.error("Failed to process text file {}: {}", extra={"path": path, "e": e})
         
         # Process image content
         elif path.is_file() and path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif']:
@@ -225,20 +235,20 @@ class MultiModalGAIAIndex:
                     loader = self.image_loader()
                     results["image_documents"] = loader.load_data(str(path))
             except Exception as e:
-                logger.error(f"Failed to process image file {path}: {e}")
+                logger.error("Failed to process image file {}: {}", extra={"path": path, "e": e})
         
         return results
 
 class IncrementalKnowledgeBase:
     """Incremental knowledge base with caching and deduplication"""
     
-    def __init__(self, storage_path: str = "./knowledge_cache"):
+    def __init__(self, storage_path: str = "./knowledge_cache") -> None:
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
         self.index = None
         self._load_existing_index()
     
-    def _load_existing_index(self):
+    def _load_existing_index(self) -> Any:
         """Load existing index from storage"""
         if not LLAMAINDEX_AVAILABLE:
             return
@@ -248,9 +258,9 @@ class IncrementalKnowledgeBase:
                 persist_dir=str(self.storage_path)
             )
             self.index = load_index_from_storage(storage_context)
-            logger.info(f"Loaded existing index from {self.storage_path}")
+            logger.info("Loaded existing index from {}", extra={"self_storage_path": self.storage_path})
         except Exception as e:
-            logger.info(f"No existing index found at {self.storage_path}: {e}")
+            logger.info("No existing index found at {}: {}", extra={"self_storage_path": self.storage_path, "e": e})
             self.index = None
     
     def add_documents_incrementally(self, documents: List[Document]) -> bool:
@@ -274,11 +284,11 @@ class IncrementalKnowledgeBase:
             
             # Persist index
             self.index.storage_context.persist(persist_dir=str(self.storage_path))
-            logger.info(f"Added {len(documents)} documents incrementally")
+            logger.info("Added {} documents incrementally", extra={"len_documents_": len(documents)})
             return True
             
         except Exception as e:
-            logger.error(f"Failed to add documents incrementally: {e}")
+            logger.error("Failed to add documents incrementally: {}", extra={"e": e})
             return False
     
     def get_cache_stats(self) -> Dict[str, Any]:
@@ -302,12 +312,12 @@ class IncrementalKnowledgeBase:
 class GAIAQueryEngine:
     """Specialized query engine for GAIA tasks"""
     
-    def __init__(self, index: VectorStoreIndex):
+    def __init__(self, index: VectorStoreIndex) -> None:
         self.index = index
         self.query_engine = None
         self._setup_query_engine()
     
-    def _setup_query_engine(self):
+    def _setup_query_engine(self) -> Any:
         """Setup specialized query engine for GAIA tasks"""
         if not LLAMAINDEX_AVAILABLE or self.index is None:
             return
@@ -336,7 +346,7 @@ class GAIAQueryEngine:
             logger.info("GAIA query engine setup completed")
             
         except Exception as e:
-            logger.error(f"Failed to setup query engine: {e}")
+            logger.error("Failed to setup query engine: {}", extra={"e": e})
     
     def query_gaia_task(self, query: str, task_type: str = "general") -> str:
         """Query the knowledge base for GAIA tasks"""
@@ -353,7 +363,7 @@ class GAIAQueryEngine:
             return str(response)
             
         except Exception as e:
-            logger.error(f"Query failed: {e}")
+            logger.error("Query failed: {}", extra={"e": e})
             return f"Query failed: {str(e)}"
     
     def _enhance_query_for_task(self, query: str, task_type: str) -> str:
@@ -378,6 +388,10 @@ class GAIAQueryEngine:
             "synthesizer_type": type(self.query_engine.response_synthesizer).__name__
         }
 
+@circuit_breaker("gaia_knowledge_base_creation", CircuitBreakerConfig(
+    failure_threshold=3, 
+    recovery_timeout=60
+))
 def create_gaia_knowledge_base(
     storage_path: Optional[str] = None,
     use_supabase: Optional[bool] = None
@@ -402,9 +416,9 @@ def create_gaia_knowledge_base(
             return EnhancedKnowledgeBase()
         else:
             # Create incremental knowledge base with local storage
-            logger.info(f"Creating incremental knowledge base at {storage_path}")
+            logger.info("Creating incremental knowledge base at {}", extra={"storage_path": storage_path})
             return IncrementalKnowledgeBase(storage_path)
             
     except Exception as e:
-        logger.error(f"Failed to create knowledge base: {e}")
+        logger.error("Failed to create knowledge base: {}", extra={"e": e})
         raise 

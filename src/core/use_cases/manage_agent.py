@@ -92,7 +92,7 @@ class ManageAgentUseCase:
             }
             
         except Exception as e:
-            self.logger.error(f"Failed to create agent: {str(e)}")
+            self.logger.error("Failed to create agent: {}", extra={"str_e_": str(e)})
             await self.logging_service.log_error(
                 "agent_creation_failed",
                 str(e),
@@ -160,7 +160,7 @@ class ManageAgentUseCase:
             }
             
         except Exception as e:
-            self.logger.error(f"Failed to update agent {agent_id}: {str(e)}")
+            self.logger.error("Failed to update agent {}: {}", extra={"agent_id": agent_id, "str_e_": str(e)})
             await self.logging_service.log_error(
                 "agent_update_failed",
                 str(e),
@@ -205,7 +205,7 @@ class ManageAgentUseCase:
             return {"success": True, "agent_id": str(agent_id)}
             
         except Exception as e:
-            self.logger.error(f"Failed to delete agent {agent_id}: {str(e)}")
+            self.logger.error("Failed to delete agent {}: {}", extra={"agent_id": agent_id, "str_e_": str(e)})
             await self.logging_service.log_error(
                 "agent_deletion_failed",
                 str(e),
@@ -260,7 +260,7 @@ class ManageAgentUseCase:
             return {"success": False, "error": f"Agent {agent_id} not found"}
             
         except Exception as e:
-            self.logger.error(f"Failed to get agent {agent_id}: {str(e)}")
+            self.logger.error("Failed to get agent {}: {}", extra={"agent_id": agent_id, "str_e_": str(e)})
             return {"success": False, "error": str(e)}
     
     async def list_agents(self, agent_type: Optional[AgentType] = None) -> Dict[str, Any]:
@@ -317,7 +317,7 @@ class ManageAgentUseCase:
             }
             
         except Exception as e:
-            self.logger.error(f"Failed to list agents: {str(e)}")
+            self.logger.error("Failed to list agents: {}", extra={"str_e_": str(e)})
             return {"success": False, "error": str(e)}
     
     async def get_agent_statistics(self) -> Dict[str, Any]:
@@ -342,7 +342,7 @@ class ManageAgentUseCase:
             return {"success": True, "statistics": stats}
             
         except Exception as e:
-            self.logger.error(f"Failed to get agent statistics: {str(e)}")
+            self.logger.error("Failed to get agent statistics: {}", extra={"str_e_": str(e)})
             return {"success": False, "error": str(e)}
     
     async def shutdown_all_agents(self) -> Dict[str, Any]:
@@ -366,7 +366,7 @@ class ManageAgentUseCase:
             }
             
         except Exception as e:
-            self.logger.error(f"Failed to shutdown all agents: {str(e)}")
+            self.logger.error("Failed to shutdown all agents: {}", extra={"str_e_": str(e)})
             await self.logging_service.log_error(
                 "agents_shutdown_failed",
                 str(e)

@@ -7,6 +7,10 @@ This script automatically fixes common version problems in requirements.txt
 import subprocess
 import sys
 import re
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 # Known problematic packages and their fixes
 KNOWN_FIXES = {
@@ -50,20 +54,20 @@ def get_latest_version(package_name):
 
 def fix_requirements_file(filename):
     """Fix common issues in requirements.txt file."""
-    print(f"Fixing requirements in {filename}...")
+    logger.info("Fixing requirements in {}...", extra={"filename": filename})
     
     try:
         with open(filename, 'r') as f:
             lines = f.readlines()
     except FileNotFoundError:
-        print(f"Error: File '{filename}' not found")
+        logger.info("Error: File '{}' not found", extra={"filename": filename})
         return False
     
     # Backup original file
     backup_filename = filename + '.backup'
     with open(backup_filename, 'w') as f:
         f.writelines(lines)
-    print(f"Created backup: {backup_filename}")
+    logger.info("Created backup: {}", extra={"backup_filename": backup_filename})
     
     fixed_lines = []
     changes_made = 0
@@ -82,7 +86,7 @@ def fix_requirements_file(filename):
         for problem, fix in KNOWN_FIXES.items():
             if line_stripped == problem:
                 fixed_lines.append(fix + '\n')
-                print(f"  Fixed: {problem} → {fix}")
+                logger.info("  Fixed: {} → {}", extra={"problem": problem, "fix": fix})
                 changes_made += 1
                 fixed = True
                 break
@@ -98,7 +102,7 @@ def fix_requirements_file(filename):
                     if latest and latest.startswith('0.3'):
                         new_line = f"{package_name}=={latest}\n"
                         fixed_lines.append(new_line)
-                        print(f"  Updated: {line_stripped} → {package_name}=={latest}")
+                        logger.info("  Updated: {} → {}=={}", extra={"line_stripped": line_stripped, "package_name": package_name, "latest": latest})
                         changes_made += 1
                         fixed = True
             
@@ -106,13 +110,13 @@ def fix_requirements_file(filename):
             elif line_stripped.startswith('llama-index=='):
                 fixed_lines.append('llama-index==0.12.42\n')
                 if line_stripped != 'llama-index==0.12.42':
-                    print(f"  Updated: {line_stripped} → llama-index==0.12.42")
+                    logger.info("  Updated: {} → llama-index==0.12.42", extra={"line_stripped": line_stripped})
                     changes_made += 1
                 fixed = True
             elif line_stripped.startswith('llama-index-core=='):
                 fixed_lines.append('llama-index-core==0.12.42\n')
                 if line_stripped != 'llama-index-core==0.12.42':
-                    print(f"  Updated: {line_stripped} → llama-index-core==0.12.42")
+                    logger.info("  Updated: {} → llama-index-core==0.12.42", extra={"line_stripped": line_stripped})
                     changes_made += 1
                 fixed = True
         
@@ -123,14 +127,14 @@ def fix_requirements_file(filename):
     with open(filename, 'w') as f:
         f.writelines(fixed_lines)
     
-    print(f"\nTotal changes made: {changes_made}")
+    logger.info("\nTotal changes made: {}", extra={"changes_made": changes_made})
     
     if changes_made > 0:
-        print(f"\n✅ Fixed {filename} successfully!")
-        print(f"Backup saved as {backup_filename}")
+        logger.info("\n✅ Fixed {} successfully!", extra={"filename": filename})
+        logger.info("Backup saved as {}", extra={"backup_filename": backup_filename})
         return True
     else:
-        print("\n✅ No issues found in requirements.txt")
+        logger.info("\n✅ No issues found in requirements.txt")
         return True
 
 def main():
@@ -139,15 +143,15 @@ def main():
     if len(sys.argv) > 1:
         filename = sys.argv[1]
     
-    print("Requirements Quick Fix Tool")
-    print("==========================")
-    print("This tool fixes common version issues in requirements.txt\n")
+    logger.info("Requirements Quick Fix Tool")
+    logger.info("==========================")
+    logger.info("This tool fixes common version issues in requirements.txt\n")
     
     if fix_requirements_file(filename):
-        print("\nNext steps:")
-        print("1. Review the changes")
-        print("2. Test installation: pip install -r requirements.txt")
-        print("3. If issues persist, use the verify script to check all versions")
+        logger.info("\nNext steps:")
+        logger.info("1. Review the changes")
+        logger.info("2. Test installation: pip install -r requirements.txt")
+        logger.info("3. If issues persist, use the verify script to check all versions")
 
 if __name__ == "__main__":
     main() 

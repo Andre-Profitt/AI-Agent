@@ -64,7 +64,7 @@ class AsyncResponseCache:
         # Start cleanup thread
         self.cleanup_thread = threading.Thread(target=self._cleanup_expired, daemon=True)
         self.cleanup_thread.start()
-        logger.info(f"Initialized AsyncResponseCache with max_size={self.max_size}, ttl={self.ttl_seconds}s")
+        logger.info("Initialized AsyncResponseCache with max_size={}, ttl={}s", extra={"self_max_size": self.max_size, "self_ttl_seconds": self.ttl_seconds})
     
     def _cleanup_expired(self):
         """Background thread to clean up expired cache entries"""
@@ -84,10 +84,10 @@ class AsyncResponseCache:
                         self.timestamps.pop(key, None)
                         
                     if expired_keys:
-                        logger.debug(f"Cleaned up {len(expired_keys)} expired cache entries")
+                        logger.debug("Cleaned up {} expired cache entries", extra={"len_expired_keys_": len(expired_keys)})
                         
             except Exception as e:
-                logger.error(f"Error in cache cleanup: {e}")
+                logger.error("Error in cache cleanup: {}", extra={"e": e})
     
     def get(self, key: str) -> Optional[Any]:
         """Get value from cache if not expired"""
@@ -95,7 +95,7 @@ class AsyncResponseCache:
             if key in self.cache:
                 # Check if expired
                 if time.time() - self.timestamps[key] <= self.ttl_seconds:
-                    logger.debug(f"Cache hit for key: {key[:50]}...")
+                    logger.debug("Cache hit for key: {}...", extra={"key_": key[})
                     return self.cache[key]
                 else:
                     # Remove expired entry
@@ -115,7 +115,7 @@ class AsyncResponseCache:
             
             self.cache[key] = value
             self.timestamps[key] = time.time()
-            logger.debug(f"Cache set for key: {key[:50]}...")
+            logger.debug("Cache set for key: {}...", extra={"key_": key[})
     
     def invalidate(self, pattern: str = None):
         """Invalidate cache entries matching pattern"""
@@ -129,7 +129,7 @@ class AsyncResponseCache:
                 self.cache.pop(key, None)
                 self.timestamps.pop(key, None)
             
-            logger.info(f"Invalidated {len(keys_to_remove)} cache entries")
+            logger.info("Invalidated {} cache entries", extra={"len_keys_to_remove_": len(keys_to_remove)})
     
     def get_stats(self) -> Dict[str, Any]:
         """Get cache statistics"""
@@ -160,9 +160,9 @@ class SessionManager:
         with self.lock:
             if session_id not in self.sessions:
                 self.sessions[session_id] = SessionMetrics(session_id=session_id)
-                logger.info(f"Created new session: {session_id}")
+                logger.info("Created new session: {}", extra={"session_id": session_id})
             else:
-                logger.warning(f"Session already exists: {session_id}")
+                logger.warning("Session already exists: {}", extra={"session_id": session_id})
         
         return session_id
     
@@ -179,7 +179,7 @@ class SessionManager:
                 for key, value in kwargs.items():
                     if hasattr(session, key):
                         setattr(session, key, value)
-                logger.debug(f"Updated session {session_id}: {kwargs}")
+                logger.debug("Updated session {}: {}", extra={"session_id": session_id, "kwargs": kwargs})
     
     def record_query(self, session_id: str, response_time: float, tool_usage: Dict[str, int] = None):
         """Record a query in session metrics"""
@@ -242,7 +242,7 @@ class SessionManager:
                 self.sessions.pop(session_id)
             
             if sessions_to_remove:
-                logger.info(f"Cleaned up {len(sessions_to_remove)} old sessions")
+                logger.info("Cleaned up {} old sessions", extra={"len_sessions_to_remove_": len(sessions_to_remove)})
     
     def get_cache(self) -> AsyncResponseCache:
         """Get the response cache"""
@@ -257,18 +257,18 @@ class ParallelAgentPool:
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
         self.active_tasks: Dict[str, concurrent.futures.Future] = {}
         self.lock = threading.RLock()
-        logger.info(f"ParallelAgentPool initialized with {max_workers} workers")
+        logger.info("ParallelAgentPool initialized with {} workers", extra={"max_workers": max_workers})
     
     def submit_task(self, task_id: str, func, *args, **kwargs) -> concurrent.futures.Future:
         """Submit a task for parallel execution"""
         with self.lock:
             if task_id in self.active_tasks:
-                logger.warning(f"Task {task_id} already exists, cancelling previous")
+                logger.warning("Task {} already exists, cancelling previous", extra={"task_id": task_id})
                 self.active_tasks[task_id].cancel()
             
             future = self.executor.submit(func, *args, **kwargs)
             self.active_tasks[task_id] = future
-            logger.debug(f"Submitted task {task_id} for parallel execution")
+            logger.debug("Submitted task {} for parallel execution", extra={"task_id": task_id})
             return future
     
     def get_task_result(self, task_id: str, timeout: float = None) -> Any:
@@ -284,10 +284,10 @@ class ParallelAgentPool:
                 self.active_tasks.pop(task_id)
                 return result
             except concurrent.futures.TimeoutError:
-                logger.warning(f"Task {task_id} timed out")
+                logger.warning("Task {} timed out", extra={"task_id": task_id})
                 raise
             except Exception as e:
-                logger.error(f"Task {task_id} failed: {e}")
+                logger.error("Task {} failed: {}", extra={"task_id": task_id, "e": e})
                 self.active_tasks.pop(task_id)
                 raise
     
@@ -297,7 +297,7 @@ class ParallelAgentPool:
             if task_id in self.active_tasks:
                 self.active_tasks[task_id].cancel()
                 self.active_tasks.pop(task_id)
-                logger.info(f"Cancelled task {task_id}")
+                logger.info("Cancelled task {}", extra={"task_id": task_id})
     
     def get_active_tasks(self) -> List[str]:
         """Get list of active task IDs"""

@@ -7,6 +7,10 @@ Showcasing FSM, ReAct, Chain of Thought, and Multi-Agent capabilities
 import asyncio
 import sys
 import os
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 # Add the src directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
@@ -16,19 +20,19 @@ from optimized_chain_of_thought import OptimizedChainOfThought, ReasoningType
 
 async def main():
     """Main demo function"""
-    print("🚀 Enhanced Advanced Hybrid AI Agent Architecture Demo")
+    logger.info("🚀 Enhanced Advanced Hybrid AI Agent Architecture Demo")
     print("=" * 70)
-    print("This demo showcases the integration of:")
-    print("• Finite State Machine (FSM) with ReAct")
-    print("• Optimized Chain of Thought (CoT) reasoning")
-    print("• Multi-agent collaboration")
-    print("• Adaptive mode selection")
-    print("• Performance optimization")
-    print("• Emergent behavior detection")
+    logger.info("This demo showcases the integration of:")
+    logger.info("• Finite State Machine (FSM) with ReAct")
+    logger.info("• Optimized Chain of Thought (CoT) reasoning")
+    logger.info("• Multi-agent collaboration")
+    logger.info("• Adaptive mode selection")
+    logger.info("• Performance optimization")
+    logger.info("• Emergent behavior detection")
     print("=" * 70)
     
     # Initialize the enhanced hybrid agent
-    print("\n📋 Initializing Enhanced Hybrid Agent...")
+    logger.info("\n📋 Initializing Enhanced Hybrid Agent...")
     agent = AdvancedHybridAgent(
         "demo_agent",
         config={
@@ -51,7 +55,7 @@ async def main():
         }
     )
     
-    print("✅ Agent initialized successfully!")
+    logger.info("✅ Agent initialized successfully!")
     
     # Test different types of queries
     test_queries = [
@@ -82,13 +86,13 @@ async def main():
         }
     ]
     
-    print(f"\n🧪 Testing {len(test_queries)} different query types...")
+    logger.info("\n🧪 Testing {} different query types...", extra={"len_test_queries_": len(test_queries)})
     print("-" * 70)
     
     for i, test_case in enumerate(test_queries, 1):
-        print(f"\n📝 Test Case {i}: {test_case['description']}")
-        print(f"Query: {test_case['query']}")
-        print(f"Expected Mode: {test_case['expected_mode'].name}")
+        logger.info("\n📝 Test Case {}: {}", extra={"i": i, "test_case__description_": test_case['description']})
+        logger.info("Query: {}", extra={"test_case__query_": test_case['query']})
+        logger.info("Expected Mode: {}", extra={"test_case__expected_mode__name": test_case['expected_mode'].name})
         
         # Process the query
         start_time = asyncio.get_event_loop().time()
@@ -96,92 +100,92 @@ async def main():
         execution_time = asyncio.get_event_loop().time() - start_time
         
         # Display results
-        print(f"✅ Actual Mode: {result.get('mode', 'unknown')}")
-        print(f"🎯 Confidence: {result.get('confidence', 0):.3f}")
-        print(f"⏱️  Execution Time: {execution_time:.3f}s")
+        logger.info("✅ Actual Mode: {}", extra={"result_get__mode____unknown__": result.get('mode', 'unknown')})
+        logger.info("🎯 Confidence: {}", extra={"result_get__confidence___0_": result.get('confidence', 0)})
+        logger.info("⏱️  Execution Time: {}s", extra={"execution_time": execution_time})
         
         # Show mode-specific details
         if result.get('mode') == 'chain_of_thought':
             reasoning_path = result.get('reasoning_path')
             if reasoning_path:
-                print(f"🧠 CoT Steps: {len(reasoning_path.steps)}")
-                print(f"📋 Template: {reasoning_path.template_used}")
-                print(f"🔍 Reasoning Types: {[step.reasoning_type.name for step in reasoning_path.steps[:3]]}")
+                logger.info("🧠 CoT Steps: {}", extra={"len_reasoning_path_steps_": len(reasoning_path.steps)})
+                logger.info("📋 Template: {}", extra={"reasoning_path_template_used": reasoning_path.template_used})
+                logger.info("🔍 Reasoning Types: {}", extra={"_step_reasoning_type_name_for_step_in_reasoning_path_steps_": [step.reasoning_type.name for step in reasoning_path.steps[})
                 
                 # Show key insights
                 insights = result.get('insights', {})
                 if insights:
-                    print(f"💡 Key Thoughts: {insights.get('key_thoughts', [])[:2]}")
+                    logger.info("💡 Key Thoughts: {}", extra={"insights_get__key_thoughts______": insights.get('key_thoughts', [])[})
         
         elif result.get('mode') == 'fsm_react':
             steps = result.get('steps', [])
             tools_used = result.get('tools_used', [])
-            print(f"⚙️  FSM Steps: {len(steps)}")
-            print(f"🔧 Tools Used: {tools_used}")
+            logger.info("⚙️  FSM Steps: {}", extra={"len_steps_": len(steps)})
+            logger.info("🔧 Tools Used: {}", extra={"tools_used": tools_used})
         
         elif result.get('mode') == 'hybrid':
-            print(f"🔄 Hybrid Synthesis: {result.get('answer', '')[:100]}...")
-            print(f"📊 Secondary Answer: {result.get('secondary_answer', '')[:50]}...")
+            logger.info("🔄 Hybrid Synthesis: {}...", extra={"result_get__answer_______": result.get('answer', '')[})
+            logger.info("📊 Secondary Answer: {}...", extra={"result_get__secondary_answer_______": result.get('secondary_answer', '')[})
         
         elif result.get('mode') == 'multi_agent':
             research = result.get('research', {})
             execution = result.get('execution', {})
             synthesis = result.get('synthesis', {})
-            print(f"🔬 Research Confidence: {research.get('confidence', 0):.3f}")
-            print(f"⚡ Execution Confidence: {execution.get('confidence', 0):.3f}")
-            print(f"🎯 Synthesis Confidence: {synthesis.get('confidence', 0):.3f}")
+            logger.info("🔬 Research Confidence: {}", extra={"research_get__confidence___0_": research.get('confidence', 0)})
+            logger.info("⚡ Execution Confidence: {}", extra={"execution_get__confidence___0_": execution.get('confidence', 0)})
+            logger.info("🎯 Synthesis Confidence: {}", extra={"synthesis_get__confidence___0_": synthesis.get('confidence', 0)})
         
         # Show emergent insights if any
         if 'emergent_insights' in result:
             insights = result['emergent_insights']
-            print(f"🌟 Emergent Insights: {insights}")
+            logger.info("🌟 Emergent Insights: {}", extra={"insights": insights})
         
         print("-" * 50)
     
     # Performance Analysis
-    print(f"\n📊 Performance Analysis")
+    logger.info("\n📊 Performance Analysis")
     print("=" * 50)
     
     report = agent.get_performance_report()
     
-    print(f"📈 Total Queries: {report['total_queries']}")
-    print(f"🎯 Average Confidence: {report['average_confidence']:.3f}")
-    print(f"⏱️  Average Execution Time: {report['average_execution_time']:.3f}s")
+    logger.info("📈 Total Queries: {}", extra={"report__total_queries_": report['total_queries']})
+    logger.info("🎯 Average Confidence: {}", extra={"report__average_confidence_": report['average_confidence']})
+    logger.info("⏱️  Average Execution Time: {}s", extra={"report__average_execution_time_": report['average_execution_time']})
     
-    print(f"\n📋 Mode Usage:")
+    logger.info("\n📋 Mode Usage:")
     for mode, count in report['mode_usage'].items():
         percentage = (count / report['total_queries']) * 100
-        print(f"  {mode}: {count} queries ({percentage:.1f}%)")
+        logger.info("  {}: {} queries ({}%)", extra={"mode": mode, "count": count, "percentage": percentage})
     
     # CoT Performance Details
     if 'cot_performance' in report:
         cot_perf = report['cot_performance']
-        print(f"\n🧠 Chain of Thought Performance:")
-        print(f"  Cache Hit Rate: {cot_perf.get('cache_hit_rate', 0):.3f}")
-        print(f"  Average Confidence: {cot_perf.get('average_confidence', 0):.3f}")
-        print(f"  Templates Used: {cot_perf.get('templates_usage', {})}")
+        logger.info("\n🧠 Chain of Thought Performance:")
+        logger.info("  Cache Hit Rate: {}", extra={"cot_perf_get__cache_hit_rate___0_": cot_perf.get('cache_hit_rate', 0)})
+        logger.info("  Average Confidence: {}", extra={"cot_perf_get__average_confidence___0_": cot_perf.get('average_confidence', 0)})
+        logger.info("  Templates Used: {cot_perf.get('templates_usage', {})}")
     
     # Reasoning History
-    print(f"\n📚 Recent Reasoning History:")
+    logger.info("\n📚 Recent Reasoning History:")
     print("-" * 50)
     history = agent.get_reasoning_history()
     for entry in history[-5:]:  # Show last 5 entries
-        print(f"  {entry['mode']}: {entry['query'][:40]}... (conf: {entry['confidence']:.2f})")
+        logger.info("  {}: {}... (conf: {})", extra={"entry__mode_": entry['mode'], "entry__query__": entry['query'][, "entry__confidence_": entry['confidence']})
     
     # Advanced Features Demo
-    print(f"\n🚀 Advanced Features Demo")
+    logger.info("\n🚀 Advanced Features Demo")
     print("=" * 50)
     
     # Test parallel reasoning
-    print("\n🔄 Testing Parallel Reasoning...")
+    logger.info("\n🔄 Testing Parallel Reasoning...")
     parallel_result = await agent.process_query(
         "Analyze the benefits and risks of renewable energy sources"
     )
-    print(f"Parallel Mode: {parallel_result.get('mode')}")
-    print(f"Best Confidence: {parallel_result.get('confidence', 0):.3f}")
+    logger.info("Parallel Mode: {}", extra={"parallel_result_get__mode__": parallel_result.get('mode')})
+    logger.info("Best Confidence: {}", extra={"parallel_result_get__confidence___0_": parallel_result.get('confidence', 0)})
     
     # Test caching
-    print("\n💾 Testing Cache Performance...")
+    logger.info("\n💾 Testing Cache Performance...")
     cache_query = "What is machine learning?"
     start_time = asyncio.get_event_loop().time()
     result1 = await agent.process_query(cache_query)
@@ -191,25 +195,25 @@ async def main():
     result2 = await agent.process_query(cache_query)
     time2 = asyncio.get_event_loop().time() - start_time
     
-    print(f"First run: {time1:.3f}s")
-    print(f"Cached run: {time2:.3f}s")
-    print(f"Speedup: {time1/time2:.1f}x")
+    logger.info("First run: {}s", extra={"time1": time1})
+    logger.info("Cached run: {}s", extra={"time2": time2})
+    logger.info("Speedup: {}x", extra={"time1_time2": time1/time2})
     
-    print(f"\n🎉 Demo completed successfully!")
-    print("The enhanced hybrid architecture demonstrates:")
-    print("• Intelligent mode selection based on query complexity")
-    print("• Optimized Chain of Thought with multiple reasoning paths")
-    print("• Multi-agent collaboration for complex tasks")
-    print("• Performance optimization through caching")
-    print("• Emergent behavior detection and analysis")
-    print("• Comprehensive performance tracking and reporting")
+    logger.info("\n🎉 Demo completed successfully!")
+    logger.info("The enhanced hybrid architecture demonstrates:")
+    logger.info("• Intelligent mode selection based on query complexity")
+    logger.info("• Optimized Chain of Thought with multiple reasoning paths")
+    logger.info("• Multi-agent collaboration for complex tasks")
+    logger.info("• Performance optimization through caching")
+    logger.info("• Emergent behavior detection and analysis")
+    logger.info("• Comprehensive performance tracking and reporting")
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n\n⏹️  Demo interrupted by user")
+        logger.info("\n\n⏹️  Demo interrupted by user")
     except Exception as e:
-        print(f"\n❌ Error during demo: {e}")
+        logger.info("\n❌ Error during demo: {}", extra={"e": e})
         import traceback
         traceback.print_exc() 

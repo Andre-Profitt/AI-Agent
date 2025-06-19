@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from src.core.entities.tool import Tool, ToolType
 from src.utils.tools_enhanced import (
+from typing import Optional, Dict, Any, List, Union, Tuple
     WebSearchTool,
     CalculatorTool,
     FileReaderTool,
@@ -20,7 +21,7 @@ from src.utils.tools_enhanced import (
 class ToolFactory:
     """Factory for creating different types of tools"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
         
         # Registry of tool implementations
@@ -42,11 +43,11 @@ class ToolFactory:
         config = config or {}
         tool_id = f"{tool_name}_{uuid4().hex[:8]}"
         
-        self.logger.debug(f"Creating tool: {tool_name}")
+        self.logger.debug("Creating tool: {}", extra={"tool_name": tool_name})
         
         try:
             if tool_name not in self._tool_registry:
-                self.logger.warning(f"Unknown tool type: {tool_name}")
+                self.logger.warning("Unknown tool type: {}", extra={"tool_name": tool_name})
                 return None
             
             tool_class = self._tool_registry[tool_name]
@@ -88,11 +89,11 @@ class ToolFactory:
             # Cache the tool
             self._tool_cache[tool_id] = tool
             
-            self.logger.debug(f"Successfully created tool: {tool_name} (id: {tool_id})")
+            self.logger.debug("Successfully created tool: {} (id: {})", extra={"tool_name": tool_name, "tool_id": tool_id})
             return tool
             
         except Exception as e:
-            self.logger.error(f"Failed to create tool {tool_name}: {e}")
+            self.logger.error("Failed to create tool {}: {}", extra={"tool_name": tool_name, "e": e})
             return None
     
     def get_tool(self, tool_id: str) -> Optional[Tool]:
@@ -118,7 +119,7 @@ class ToolFactory:
     def register_tool_type(self, name: str, tool_class: type) -> None:
         """Register a new tool type"""
         self._tool_registry[name] = tool_class
-        self.logger.info(f"Registered new tool type: {name}")
+        self.logger.info("Registered new tool type: {}", extra={"name": name})
     
     def create_tool_set(self, tool_names: List[str], configs: Optional[Dict[str, Dict[str, Any]]] = None) -> List[Tool]:
         """Create multiple tools at once"""

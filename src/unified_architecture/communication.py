@@ -16,6 +16,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from enum import Enum, auto
 import logging
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ class AgentMessage:
     ttl: Optional[float] = None  # Time to live in seconds
     metadata: Dict[str, Any] = field(default_factory=dict)
     
-    def __post_init__(self):
+    def __post_init__(self) -> Any:
         """Validate message after initialization"""
         if self.priority < 1 or self.priority > 10:
             raise ValueError("Priority must be between 1 and 10")
@@ -87,7 +88,7 @@ class AgentMessage:
 class CommunicationProtocol:
     """Inter-agent messaging system with various communication patterns"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.message_queues: Dict[str, asyncio.PriorityQueue] = defaultdict(
             lambda: asyncio.PriorityQueue()
         )
@@ -112,17 +113,17 @@ class CommunicationProtocol:
             "response_timeouts": 0
         }
         
-    async def register_agent(self, agent_id: str, message_handler: Callable):
+    async def register_agent(self, agent_id: str, message_handler: Callable) -> Any:
         """Register an agent for communication"""
         if agent_id in self.message_handlers:
-            logger.warning(f"Agent {agent_id} already registered")
+            logger.warning("Agent {} already registered", extra={"agent_id": agent_id})
             return False
         
         self.message_handlers[agent_id] = message_handler
-        logger.info(f"Registered agent {agent_id} for communication")
+        logger.info("Registered agent {} for communication", extra={"agent_id": agent_id})
         return True
     
-    async def unregister_agent(self, agent_id: str):
+    async def unregister_agent(self, agent_id: str) -> Any:
         """Unregister an agent from communication"""
         if agent_id in self.message_handlers:
             del self.message_handlers[agent_id]
@@ -140,7 +141,7 @@ class CommunicationProtocol:
         for msg_id in expired_responses:
             del self.pending_responses[msg_id]
         
-        logger.info(f"Unregistered agent {agent_id} from communication")
+        logger.info("Unregistered agent {} from communication", extra={"agent_id": agent_id})
     
     async def send_message(self, message: AgentMessage) -> Optional[Any]:
         """Send a message to an agent"""
@@ -148,7 +149,7 @@ class CommunicationProtocol:
         
         # Check if message is expired
         if message.is_expired():
-            logger.warning(f"Message {message.message_id} is expired")
+            logger.warning("Message {} is expired", extra={"message_message_id": message.message_id})
             self.stats["messages_failed"] += 1
             return None
         
@@ -166,7 +167,7 @@ class CommunicationProtocol:
     async def _send_direct_message(self, message: AgentMessage) -> Optional[Any]:
         """Send a direct message to a specific agent"""
         if message.recipient_id not in self.message_queues:
-            logger.error(f"Recipient {message.recipient_id} not found")
+            logger.error("Recipient {} not found", extra={"message_recipient_id": message.recipient_id})
             self.stats["messages_failed"] += 1
             return None
         
@@ -186,13 +187,13 @@ class CommunicationProtocol:
                 self.stats["messages_delivered"] += 1
                 return response
             except asyncio.TimeoutError:
-                logger.error(f"Response timeout for message {message.message_id}")
+                logger.error("Response timeout for message {}", extra={"message_message_id": message.message_id})
                 self.stats["response_timeouts"] += 1
                 if message.message_id in self.pending_responses:
                     del self.pending_responses[message.message_id]
                 return None
             except Exception as e:
-                logger.error(f"Error waiting for response: {e}")
+                logger.error("Error waiting for response: {}", extra={"e": e})
                 if message.message_id in self.pending_responses:
                     del self.pending_responses[message.message_id]
                 return None
@@ -200,7 +201,7 @@ class CommunicationProtocol:
             self.stats["messages_delivered"] += 1
             return None
     
-    async def _broadcast_message(self, message: AgentMessage):
+    async def _broadcast_message(self, message: AgentMessage) -> Any:
         """Broadcast a message to all agents"""
         tasks = []
         recipients = set(self.message_queues.keys())
@@ -228,26 +229,26 @@ class CommunicationProtocol:
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)
             successful = sum(1 for r in results if r is not None)
-            logger.debug(f"Broadcast sent to {successful}/{len(recipients)} agents")
+            logger.debug("Broadcast sent to {}/{} agents", extra={"successful": successful, "len_recipients_": len(recipients)})
     
-    async def subscribe_to_topic(self, agent_id: str, topic: str):
+    async def subscribe_to_topic(self, agent_id: str, topic: str) -> Any:
         """Subscribe an agent to a broadcast topic"""
         self.broadcast_topics[topic].add(agent_id)
         self.agent_subscriptions[agent_id].add(topic)
-        logger.debug(f"Agent {agent_id} subscribed to topic: {topic}")
+        logger.debug("Agent {} subscribed to topic: {}", extra={"agent_id": agent_id, "topic": topic})
     
-    async def unsubscribe_from_topic(self, agent_id: str, topic: str):
+    async def unsubscribe_from_topic(self, agent_id: str, topic: str) -> Any:
         """Unsubscribe an agent from a broadcast topic"""
         self.broadcast_topics[topic].discard(agent_id)
         self.agent_subscriptions[agent_id].discard(topic)
-        logger.debug(f"Agent {agent_id} unsubscribed from topic: {topic}")
+        logger.debug("Agent {} unsubscribed from topic: {}", extra={"agent_id": agent_id, "topic": topic})
     
-    async def publish_to_topic(self, topic: str, message: AgentMessage):
+    async def publish_to_topic(self, topic: str, message: AgentMessage) -> Any:
         """Publish a message to a specific topic"""
         subscribers = self.broadcast_topics.get(topic, set())
         
         if not subscribers:
-            logger.debug(f"No subscribers for topic: {topic}")
+            logger.debug("No subscribers for topic: {}", extra={"topic": topic})
             return
         
         tasks = []
@@ -273,12 +274,12 @@ class CommunicationProtocol:
         
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
-            logger.debug(f"Published to topic {topic} with {len(subscribers)} subscribers")
+            logger.debug("Published to topic {} with {} subscribers", extra={"topic": topic, "len_subscribers_": len(subscribers)})
     
-    async def process_messages(self, agent_id: str):
+    async def process_messages(self, agent_id: str) -> Any:
         """Process messages for an agent"""
         if agent_id not in self.message_handlers:
-            logger.error(f"No handler registered for agent {agent_id}")
+            logger.error("No handler registered for agent {}", extra={"agent_id": agent_id})
             return
         
         handler = self.message_handlers[agent_id]
@@ -291,7 +292,7 @@ class CommunicationProtocol:
                 
                 # Check if message is expired
                 if message.is_expired():
-                    logger.debug(f"Skipping expired message: {message.message_id}")
+                    logger.debug("Skipping expired message: {}", extra={"message_message_id": message.message_id})
                     continue
                 
                 # Process message
@@ -308,13 +309,13 @@ class CommunicationProtocol:
                 self.message_queues[agent_id].task_done()
                 
             except asyncio.CancelledError:
-                logger.info(f"Message processing cancelled for agent {agent_id}")
+                logger.info("Message processing cancelled for agent {}", extra={"agent_id": agent_id})
                 break
             except Exception as e:
-                logger.error(f"Error processing message for {agent_id}: {e}")
+                logger.error("Error processing message for {}: {}", extra={"agent_id": agent_id, "e": e})
                 self.stats["messages_failed"] += 1
     
-    async def send_response(self, original_message: AgentMessage, response: Any):
+    async def send_response(self, original_message: AgentMessage, response: Any) -> Any:
         """Send a response to a message"""
         response_message = AgentMessage(
             message_id=str(uuid.uuid4()),
@@ -331,7 +332,7 @@ class CommunicationProtocol:
         
         return await self.send_message(response_message)
     
-    async def send_heartbeat(self, agent_id: str, status: Dict[str, Any]):
+    async def send_heartbeat(self, agent_id: str, status: Dict[str, Any]) -> Any:
         """Send a heartbeat message"""
         heartbeat_message = AgentMessage(
             message_id=str(uuid.uuid4()),
@@ -357,7 +358,7 @@ class CommunicationProtocol:
             "history_size": len(self.message_history)
         }
     
-    async def cleanup_expired_messages(self):
+    async def cleanup_expired_messages(self) -> None:
         """Clean up expired messages and responses"""
         # Clean up expired pending responses
         current_time = time.time()
@@ -381,10 +382,10 @@ class CommunicationProtocol:
                 self.message_history.remove(msg)
         
         if expired_responses or expired_messages:
-            logger.debug(f"Cleaned up {len(expired_responses)} expired responses "
-                        f"and {len(expired_messages)} expired messages")
+            logger.debug("Cleaned up {} expired responses "
+                        f"and {} expired messages", extra={"len_expired_responses_": len(expired_responses), "len_expired_messages_": len(expired_messages)})
     
-    async def shutdown(self):
+    async def shutdown(self) -> Any:
         """Shutdown the communication protocol"""
         # Cancel all pending responses
         for future in self.pending_responses.values():

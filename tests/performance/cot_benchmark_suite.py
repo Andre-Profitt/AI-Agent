@@ -181,12 +181,12 @@ class CoTBenchmark:
         """Run benchmark on a set of queries"""
         results = []
         
-        print(f"Running benchmark: {name}")
-        print(f"Number of queries: {len(queries)}")
+        logger.info("Running benchmark: {}", extra={"name": name})
+        logger.info("Number of queries: {}", extra={"len_queries_": len(queries)})
         print("-" * 50)
         
         for i, query in enumerate(queries):
-            print(f"Processing query {i+1}/{len(queries)}: {query[:50]}...")
+            logger.info("Processing query {}/{}: {}...", extra={"i_1": i+1, "len_queries_": len(queries), "query_": query[})
             
             # Measure performance
             result = await self._benchmark_single_query(cot_system, query)
@@ -402,7 +402,7 @@ class BenchmarkVisualizer:
         template_data = analysis['by_template']
         
         if not template_data:
-            print("No template data available for visualization")
+            logger.info("No template data available for visualization")
             return
             
         templates = list(template_data.keys())
@@ -516,13 +516,13 @@ class BenchmarkVisualizer:
 
 async def run_performance_tests():
     """Run comprehensive performance tests"""
-    print("=== Chain of Thought Performance Testing Suite ===\n")
+    logger.info("=== Chain of Thought Performance Testing Suite ===\n")
     
     # Initialize benchmark engine
     benchmark = CoTBenchmark()
     
     # Test 1: Basic Performance
-    print("Test 1: Basic Performance")
+    logger.info("Test 1: Basic Performance")
     print("-" * 50)
     
     cot = OptimizedChainOfThought("test_cot", {'max_paths': 3})
@@ -537,14 +537,14 @@ async def run_performance_tests():
     suite = await benchmark.run_benchmark(cot, test_queries, "basic_performance")
     analysis = benchmark.analyze_results(suite)
     
-    print("\nBasic Performance Results:")
-    print(f"Average execution time: {analysis['overall']['avg_execution_time']:.3f}s")
-    print(f"Average confidence: {analysis['overall']['avg_confidence']:.3f}")
-    print(f"Cache hit rate: {analysis['overall']['cache_hit_rate']:.2%}")
-    print(f"Average memory usage: {analysis['overall']['avg_memory_mb']:.2f} MB")
+    logger.info("\nBasic Performance Results:")
+    logger.info("Average execution time: {}s", extra={"analysis__overall___avg_execution_time_": analysis['overall']['avg_execution_time']})
+    logger.info("Average confidence: {}", extra={"analysis__overall___avg_confidence_": analysis['overall']['avg_confidence']})
+    logger.info("Cache hit rate: {}", extra={"analysis__overall___cache_hit_rate_": analysis['overall']['cache_hit_rate']})
+    logger.info("Average memory usage: {} MB", extra={"analysis__overall___avg_memory_mb_": analysis['overall']['avg_memory_mb']})
     
     # Test 2: Stress Test
-    print("\n\nTest 2: Stress Test (50 queries)")
+    logger.info("\n\nTest 2: Stress Test (50 queries)")
     print("-" * 50)
     
     # Generate many queries
@@ -564,50 +564,50 @@ async def run_performance_tests():
     stress_suite = await benchmark.run_benchmark(cot, stress_queries, "stress_test")
     stress_analysis = benchmark.analyze_results(stress_suite)
     
-    print("\nStress Test Results:")
-    print(f"Total queries processed: {stress_analysis['overall']['total_queries']}")
-    print(f"Average execution time: {stress_analysis['overall']['avg_execution_time']:.3f}s")
-    print(f"Peak memory usage: {max(r.memory_usage for r in stress_suite.results):.2f} MB")
+    logger.info("\nStress Test Results:")
+    logger.info("Total queries processed: {}", extra={"stress_analysis__overall___total_queries_": stress_analysis['overall']['total_queries']})
+    logger.info("Average execution time: {}s", extra={"stress_analysis__overall___avg_execution_time_": stress_analysis['overall']['avg_execution_time']})
+    logger.info("Peak memory usage: {} MB", extra={"max_r_memory_usage_for_r_in_stress_suite_results_": max(r.memory_usage for r in stress_suite.results)})
     
     # Test 3: Cache Performance
-    print("\n\nTest 3: Cache Performance")
+    logger.info("\n\nTest 3: Cache Performance")
     print("-" * 50)
     
     # Test cache effectiveness
     cache_test_queries = QueryDataset.get_medium_queries()[:5]
     
     # First run - no cache
-    print("First run (cold cache)...")
+    logger.info("First run (cold cache)...")
     first_run = await benchmark.run_benchmark(cot, cache_test_queries, "cache_cold")
     
     # Second run - with cache
-    print("Second run (warm cache)...")
+    logger.info("Second run (warm cache)...")
     second_run = await benchmark.run_benchmark(cot, cache_test_queries, "cache_warm")
     
     first_times = [r.execution_time for r in first_run.results]
     second_times = [r.execution_time for r in second_run.results]
     
     speedup = statistics.mean(first_times) / statistics.mean(second_times)
-    print(f"\nCache speedup: {speedup:.2f}x")
-    print(f"First run avg: {statistics.mean(first_times):.3f}s")
-    print(f"Second run avg: {statistics.mean(second_times):.3f}s")
+    logger.info("\nCache speedup: {}x", extra={"speedup": speedup})
+    logger.info("First run avg: {}s", extra={"statistics_mean_first_times_": statistics.mean(first_times)})
+    logger.info("Second run avg: {}s", extra={"statistics_mean_second_times_": statistics.mean(second_times)})
     
     # Test 4: Comparative Configuration Test
-    print("\n\nTest 4: Configuration Comparison")
+    logger.info("\n\nTest 4: Configuration Comparison")
     print("-" * 50)
     
     comparative_results = await benchmark.run_comparative_benchmark()
     
-    print("\nConfiguration Comparison Results:")
+    logger.info("\nConfiguration Comparison Results:")
     for config_name, suite in comparative_results.items():
         analysis = benchmark.analyze_results(suite)
-        print(f"\n{config_name}:")
-        print(f"  Avg execution time: {analysis['overall']['avg_execution_time']:.3f}s")
-        print(f"  Avg confidence: {analysis['overall']['avg_confidence']:.3f}")
-        print(f"  Avg memory: {analysis['overall']['avg_memory_mb']:.2f} MB")
+        logger.info("\n{}:", extra={"config_name": config_name})
+        logger.info("  Avg execution time: {}s", extra={"analysis__overall___avg_execution_time_": analysis['overall']['avg_execution_time']})
+        logger.info("  Avg confidence: {}", extra={"analysis__overall___avg_confidence_": analysis['overall']['avg_confidence']})
+        logger.info("  Avg memory: {} MB", extra={"analysis__overall___avg_memory_mb_": analysis['overall']['avg_memory_mb']})
     
     # Test 5: Domain-Specific Performance
-    print("\n\nTest 5: Domain-Specific Performance")
+    logger.info("\n\nTest 5: Domain-Specific Performance")
     print("-" * 50)
     
     # Test different query domains
@@ -618,17 +618,17 @@ async def run_performance_tests():
     
     domain_results = {}
     for domain, queries in domain_queries.items():
-        print(f"Testing {domain} queries...")
+        logger.info("Testing {} queries...", extra={"domain": domain})
         domain_suite = await benchmark.run_benchmark(cot, queries, f"{domain}_domain")
         domain_analysis = benchmark.analyze_results(domain_suite)
         domain_results[domain] = domain_analysis
         
-        print(f"  {domain.capitalize()} domain:")
-        print(f"    Avg execution time: {domain_analysis['overall']['avg_execution_time']:.3f}s")
-        print(f"    Avg confidence: {domain_analysis['overall']['avg_confidence']:.3f}")
+        logger.info("  {} domain:", extra={"domain_capitalize__": domain.capitalize()})
+        logger.info("    Avg execution time: {}s", extra={"domain_analysis__overall___avg_execution_time_": domain_analysis['overall']['avg_execution_time']})
+        logger.info("    Avg confidence: {}", extra={"domain_analysis__overall___avg_confidence_": domain_analysis['overall']['avg_confidence']})
     
     # Visualize results
-    print("\n\nGenerating visualizations...")
+    logger.info("\n\nGenerating visualizations...")
     visualizer = BenchmarkVisualizer()
     
     # Plot execution time vs complexity
@@ -678,5 +678,5 @@ if __name__ == "__main__":
         }
         json.dump(serializable_results, f, indent=2)
     
-    print("\n\nBenchmark results saved to 'cot_benchmark_results.json'")
-    print("Performance testing completed successfully!") 
+    logger.info("\n\nBenchmark results saved to 'cot_benchmark_results.json'")
+    logger.info("Performance testing completed successfully!") 

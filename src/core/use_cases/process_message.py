@@ -123,13 +123,13 @@ class ProcessMessageUseCase:
             
         except Exception as e:
             execution_time = time.time() - start_time
-            self.logger.error(f"Message processing failed: {str(e)}", exc_info=True)
+            self.logger.error("Message processing failed: {}", exc_info=True)
             
             # Log error
             await self.logging_service.log_error(
                 "message_processing_failed",
                 str(e),
-                {"execution_time": execution_time, "session_id": str(session_id) if session_id else None}
+                {}
             )
             
             return {
@@ -141,7 +141,7 @@ class ProcessMessageUseCase:
     def _validate_input(self, user_message: str) -> None:
         """Validate user input."""
         if not user_message or not user_message.strip():
-            raise ValidationException("Message cannot be empty")
+            raise ValidationException("Message cannot be empty", extra={"str_e_": str(e), "_execution_time_": "execution_time", "_success_": "success"})
         
         if len(user_message) > self.config.max_input_length:
             raise ValidationException(

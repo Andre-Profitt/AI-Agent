@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 import structlog
 from pathlib import Path
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 # Configure structlog
 structlog.configure(
@@ -31,16 +32,16 @@ structlog.configure(
 class StructuredLogger:
     """Wrapper for structured logging"""
     
-    def __init__(self, name: str):
+    def __init__(self, name: str) -> None:
         self.logger = structlog.get_logger(name)
         self._context = {}
     
-    def bind(self, **kwargs):
+    def bind(self, **kwargs) -> Any:
         """Bind context variables"""
         self._context.update(kwargs)
         return self
     
-    def _log(self, level: str, message: str, **kwargs):
+    def _log(self, level: str, message: str, **kwargs) -> Any:
         """Internal log method"""
         log_data = {
             **self._context,
@@ -52,28 +53,28 @@ class StructuredLogger:
         
         getattr(self.logger, level)(message, **log_data)
     
-    def debug(self, message: str, **kwargs):
+    def debug(self, message: str, **kwargs) -> Any:
         self._log('debug', message, **kwargs)
     
-    def info(self, message: str, **kwargs):
+    def info(self, message: str, **kwargs) -> Any:
         self._log('info', message, **kwargs)
     
-    def warning(self, message: str, **kwargs):
+    def warning(self, message: str, **kwargs) -> Any:
         self._log('warning', message, **kwargs)
     
-    def error(self, message: str, exc_info=False, **kwargs):
+    def error(self, message: str, exc_info=False, **kwargs) -> Any:
         if exc_info:
             kwargs['exc_info'] = exc_info
         self._log('error', message, **kwargs)
     
-    def critical(self, message: str, **kwargs):
+    def critical(self, message: str, **kwargs) -> Any:
         self._log('critical', message, **kwargs)
 
 def setup_logging(
     log_level: str = "INFO",
     log_file: Optional[str] = None,
     json_logs: bool = True
-):
+) -> None:
     """Setup logging configuration"""
     
     # Create logs directory if needed
@@ -122,8 +123,8 @@ def get_logger(name: str) -> StructuredLogger:
 class LoggerAdapter:
     """Adapter for legacy logging compatibility"""
     
-    def __init__(self, logger: StructuredLogger):
+    def __init__(self, logger: StructuredLogger) -> None:
         self.logger = logger
     
-    def __getattr__(self, name):
+    def __getattr__(self, name) -> Any:
         return getattr(self.logger, name) 

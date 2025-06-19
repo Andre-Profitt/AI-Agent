@@ -14,6 +14,10 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from statistics import mean, median, stdev
 import argparse
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class TestResult:
@@ -78,7 +82,7 @@ class PerformanceTester:
     
     async def test_agent_registration(self, num_agents: int = 10) -> List[TestResult]:
         """Test agent registration endpoint"""
-        print(f"Testing agent registration with {num_agents} agents...")
+        logger.info("Testing agent registration with {} agents...", extra={"num_agents": num_agents})
         
         tasks = []
         for i in range(num_agents):
@@ -97,7 +101,7 @@ class PerformanceTester:
     
     async def test_task_submission(self, num_tasks: int = 20) -> List[TestResult]:
         """Test task submission endpoint"""
-        print(f"Testing task submission with {num_tasks} tasks...")
+        logger.info("Testing task submission with {} tasks...", extra={"num_tasks": num_tasks})
         
         tasks = []
         for i in range(num_tasks):
@@ -118,7 +122,7 @@ class PerformanceTester:
     
     async def test_list_endpoints(self, num_requests: int = 50) -> List[TestResult]:
         """Test list endpoints (agents, tasks, resources, conflicts)"""
-        print(f"Testing list endpoints with {num_requests} requests...")
+        logger.info("Testing list endpoints with {} requests...", extra={"num_requests": num_requests})
         
         endpoints = [
             '/api/v1/agents',
@@ -139,7 +143,7 @@ class PerformanceTester:
     
     async def test_health_endpoint(self, num_requests: int = 100) -> List[TestResult]:
         """Test health endpoint"""
-        print(f"Testing health endpoint with {num_requests} requests...")
+        logger.info("Testing health endpoint with {} requests...", extra={"num_requests": num_requests})
         
         tasks = []
         for _ in range(num_requests):
@@ -152,7 +156,7 @@ class PerformanceTester:
     
     async def test_dashboard_endpoints(self, num_requests: int = 30) -> List[TestResult]:
         """Test dashboard endpoints"""
-        print(f"Testing dashboard endpoints with {num_requests} requests...")
+        logger.info("Testing dashboard endpoints with {} requests...", extra={"num_requests": num_requests})
         
         endpoints = [
             '/api/v1/dashboard/summary',
@@ -171,7 +175,7 @@ class PerformanceTester:
     
     async def test_websocket_connections(self, num_connections: int = 10, duration: int = 30):
         """Test WebSocket connections"""
-        print(f"Testing WebSocket connections with {num_connections} connections for {duration}s...")
+        logger.info("Testing WebSocket connections with {} connections for {}s...", extra={"num_connections": num_connections, "duration": duration})
         
         async def websocket_client(client_id: str):
             try:
@@ -196,10 +200,10 @@ class PerformanceTester:
                             except asyncio.TimeoutError:
                                 continue
                         
-                        print(f"Client {client_id}: Received {message_count} messages")
+                        logger.info("Client {}: Received {} messages", extra={"client_id": client_id, "message_count": message_count})
                         
             except Exception as e:
-                print(f"WebSocket client {client_id} error: {e}")
+                logger.info("WebSocket client {} error: {}", extra={"client_id": client_id, "e": e})
         
         # Create multiple WebSocket connections
         tasks = []
@@ -258,32 +262,32 @@ class PerformanceTester:
     def print_report(self, report: Dict[str, Any]):
         """Print formatted performance report"""
         print("\n" + "="*60)
-        print("PERFORMANCE TEST REPORT")
+        logger.info("PERFORMANCE TEST REPORT")
         print("="*60)
         
         summary = report["summary"]
-        print(f"\nSUMMARY:")
-        print(f"  Total Requests: {summary['total_requests']}")
-        print(f"  Successful: {summary['successful_requests']}")
-        print(f"  Failed: {summary['failed_requests']}")
-        print(f"  Success Rate: {summary['successful_requests']/summary['total_requests']*100:.2f}%")
-        print(f"  Total Duration: {summary['total_duration']:.2f}s")
+        logger.info("\nSUMMARY:")
+        logger.info("  Total Requests: {}", extra={"summary__total_requests_": summary['total_requests']})
+        logger.info("  Successful: {}", extra={"summary__successful_requests_": summary['successful_requests']})
+        logger.info("  Failed: {}", extra={"summary__failed_requests_": summary['failed_requests']})
+        logger.info("  Success Rate: {}%", extra={"summary__successful_requests__summary__total_requests__100": summary['successful_requests']/summary['total_requests']*100})
+        logger.info("  Total Duration: {}s", extra={"summary__total_duration_": summary['total_duration']})
         
-        print(f"\nENDPOINT DETAILS:")
+        logger.info("\nENDPOINT DETAILS:")
         for endpoint, stats in report["endpoints"].items():
-            print(f"\n  {endpoint}:")
-            print(f"    Requests: {stats['total_requests']}")
-            print(f"    Success Rate: {stats['successful_requests']/stats['total_requests']*100:.2f}%")
+            logger.info("\n  {}:", extra={"endpoint": endpoint})
+            logger.info("    Requests: {}", extra={"stats__total_requests_": stats['total_requests']})
+            logger.info("    Success Rate: {}%", extra={"stats__successful_requests__stats__total_requests__100": stats['successful_requests']/stats['total_requests']*100})
             
             rt_stats = stats['response_time_stats']
-            print(f"    Response Time (s):")
-            print(f"      Mean: {rt_stats['mean']:.3f}")
-            print(f"      Median: {rt_stats['median']:.3f}")
-            print(f"      Min: {rt_stats['min']:.3f}")
-            print(f"      Max: {rt_stats['max']:.3f}")
-            print(f"      Std Dev: {rt_stats['std_dev']:.3f}")
+            logger.info("    Response Time (s):")
+            logger.info("      Mean: {}", extra={"rt_stats__mean_": rt_stats['mean']})
+            logger.info("      Median: {}", extra={"rt_stats__median_": rt_stats['median']})
+            logger.info("      Min: {}", extra={"rt_stats__min_": rt_stats['min']})
+            logger.info("      Max: {}", extra={"rt_stats__max_": rt_stats['max']})
+            logger.info("      Std Dev: {}", extra={"rt_stats__std_dev_": rt_stats['std_dev']})
             
-            print(f"    Status Codes: {stats['status_code_distribution']}")
+            logger.info("    Status Codes: {}", extra={"stats__status_code_distribution_": stats['status_code_distribution']})
 
 async def main():
     parser = argparse.ArgumentParser(description='Performance test for Multi-Agent Platform API')
@@ -300,16 +304,16 @@ async def main():
     
     args = parser.parse_args()
     
-    print("Starting Performance Test...")
-    print(f"Target URL: {args.base_url}")
-    print(f"Test Configuration:")
-    print(f"  Agents: {args.agents}")
-    print(f"  Tasks: {args.tasks}")
-    print(f"  List Requests: {args.list_requests}")
-    print(f"  Health Requests: {args.health_requests}")
-    print(f"  Dashboard Requests: {args.dashboard_requests}")
-    print(f"  WebSocket Connections: {args.websocket_connections}")
-    print(f"  WebSocket Duration: {args.websocket_duration}s")
+    logger.info("Starting Performance Test...")
+    logger.info("Target URL: {}", extra={"args_base_url": args.base_url})
+    logger.info("Test Configuration:")
+    logger.info("  Agents: {}", extra={"args_agents": args.agents})
+    logger.info("  Tasks: {}", extra={"args_tasks": args.tasks})
+    logger.info("  List Requests: {}", extra={"args_list_requests": args.list_requests})
+    logger.info("  Health Requests: {}", extra={"args_health_requests": args.health_requests})
+    logger.info("  Dashboard Requests: {}", extra={"args_dashboard_requests": args.dashboard_requests})
+    logger.info("  WebSocket Connections: {}", extra={"args_websocket_connections": args.websocket_connections})
+    logger.info("  WebSocket Duration: {}s", extra={"args_websocket_duration": args.websocket_duration})
     
     async with PerformanceTester(args.base_url, args.auth_token) as tester:
         # Run all tests
@@ -330,7 +334,7 @@ async def main():
         if args.output:
             with open(args.output, 'w') as f:
                 json.dump(report, f, indent=2)
-            print(f"\nReport saved to: {args.output}")
+            logger.info("\nReport saved to: {}", extra={"args_output": args.output})
 
 if __name__ == "__main__":
     asyncio.run(main()) 

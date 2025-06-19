@@ -1,0 +1,110 @@
+{
+  "scores": {
+    "Circuit Breakers": 90,
+    "Config Validation": 100,
+    "Structured Logging": 0,
+    "Type Hints": 42,
+    "Parallel Execution": 100,
+    "Workflow Orchestration": 80,
+    "HTTP Retry Logic": 80
+  },
+  "overall": 70.28571428571429,
+  "details": {
+    "circuit_breakers": {
+      "score": 90,
+      "issues": [
+        "src/infrastructure/database.py: Unprotected database calls",
+        "src/services/health_check.py: Unprotected database calls"
+      ],
+      "good_examples": [
+        "src/config/integrations.py: 3 circuit breakers",
+        "src/infrastructure/database_enhanced.py: 3 circuit breakers",
+        "src/services/integration_hub.py: 4 circuit breakers",
+        "src/infrastructure/workflow/workflow_engine.py: 4 circuit breakers"
+      ]
+    },
+    "config_validation": {
+      "score": 100,
+      "issues": [],
+      "protected_configs": [
+        "\u2713 Has _safe_get_env method",
+        "\u2713 Has is_configured_safe method",
+        "\u2713 Uses circuit breaker decorators"
+      ]
+    },
+    "structured_logging": {
+      "score": 0,
+      "print_count": 4162,
+      "fstring_count": 243,
+      "files_with_prints": [
+        "test_gaia_integration.py: 5 prints",
+        "complete_fix.py: 52 prints",
+        "fix_final_prints.py: 18 prints",
+        "verify_100_percent.py: 9 prints",
+        "fix_remaining_prints.py: 11 prints"
+      ],
+      "files_with_fstrings": [
+        "fix_final_prints.py: 15 f-strings",
+        "fix_integration_hub.py: 2 f-strings",
+        "fix_remaining_prints.py: 9 f-strings",
+        "agent.py: 5 f-strings",
+        "app.py: 8 f-strings"
+      ]
+    },
+    "type_hints": {
+      "score": 42,
+      "total_functions": 744,
+      "typed_functions": 626,
+      "total_inits": 62,
+      "typed_inits": 0,
+      "missing_hints": [
+        "src/core/health_check.py::__init__",
+        "src/config/integrations.py::__init__",
+        "src/agents/enhanced_fsm.py::__init__",
+        "src/agents/enhanced_fsm.py::__init__",
+        "src/agents/enhanced_fsm.py::__init__",
+        "src/agents/enhanced_fsm.py::__init__",
+        "src/agents/enhanced_fsm.py::__init__",
+        "src/agents/enhanced_fsm.py::__init__",
+        "src/agents/migrated_enhanced_fsm_agent.py::__init__",
+        "src/agents/multi_agent_system.py::__init__"
+      ]
+    },
+    "parallel_execution": {
+      "score": 100,
+      "sequential_patterns": [
+        "src/database/supabase_manager.py: Sequential await in loop",
+        "src/core/optimized_chain_of_thought.py: Sequential await in loop",
+        "src/unified_architecture/shared_memory.py: Sequential await in loop",
+        "src/unified_architecture/registry.py: Sequential await in loop",
+        "src/unified_architecture/resource_management.py: Sequential await in loop"
+      ],
+      "parallel_usage": [
+        "src/core/monitoring.py: Uses parallel execution",
+        "src/core/health_check.py: Uses parallel execution",
+        "src/core/optimized_chain_of_thought.py: Uses parallel execution",
+        "src/agents/advanced_hybrid_architecture.py: Uses parallel execution",
+        "src/unified_architecture/platform.py: Uses parallel execution"
+      ]
+    },
+    "workflow_orchestration": {
+      "score": 80,
+      "integration_points": [
+        "\u2713 src/agents/advanced_agent_fsm.py: Integrated"
+      ],
+      "missing_integration": [
+        "\u2717 src/application/agents/agent_executor.py: Not integrated"
+      ]
+    },
+    "http_retry": {
+      "score": 80,
+      "unprotected_calls": [
+        "\u2717 src/utils/weather.py: No retry logic",
+        "\u2717 src/infrastructure/gaia_logic.py: No retry logic"
+      ],
+      "protected_calls": [
+        "\u2713 src/services/knowledge_ingestion.py: Has retry logic"
+      ]
+    }
+  }
+}

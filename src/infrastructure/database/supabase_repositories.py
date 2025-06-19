@@ -93,7 +93,7 @@ class SupabaseMessageRepository(MessageRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "message_repository", "error")
-            logger.error(f"Error saving message: {str(e)}")
+            logger.error("Error saving message: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("find_by_id", "messages")
@@ -113,7 +113,7 @@ class SupabaseMessageRepository(MessageRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "message_repository", "error")
-            logger.error(f"Error finding message: {str(e)}")
+            logger.error("Error finding message: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("find_by_session", "messages")
@@ -131,7 +131,7 @@ class SupabaseMessageRepository(MessageRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "message_repository", "error")
-            logger.error(f"Error finding messages by session: {str(e)}")
+            logger.error("Error finding messages by session: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("find_by_type", "messages")
@@ -149,7 +149,7 @@ class SupabaseMessageRepository(MessageRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "message_repository", "error")
-            logger.error(f"Error finding messages by type: {str(e)}")
+            logger.error("Error finding messages by type: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("delete", "messages")
@@ -167,7 +167,7 @@ class SupabaseMessageRepository(MessageRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "message_repository", "error")
-            logger.error(f"Error deleting message: {str(e)}")
+            logger.error("Error deleting message: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("get_statistics", "messages")
@@ -201,7 +201,7 @@ class SupabaseMessageRepository(MessageRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "message_repository", "error")
-            logger.error(f"Error getting statistics: {str(e)}")
+            logger.error("Error getting statistics: {}", extra={"str_e_": str(e)})
             return {"error": str(e)}
 
     def _to_entity(self, data: Dict[str, Any]) -> Message:
@@ -226,7 +226,7 @@ class SupabaseMessageRepository(MessageRepository):
             return message
         except Exception as e:
             record_error(type(e).__name__, "message_repository", "error")
-            logger.error(f"Error converting data to entity: {str(e)}")
+            logger.error("Error converting data to entity: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Data conversion error: {str(e)}")
 
 # Import missing classes for the rest of the file
@@ -288,7 +288,7 @@ class SupabaseToolRepository(ToolRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "tool_repository", "error")
-            logger.error(f"Error saving tool: {str(e)}")
+            logger.error("Error saving tool: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("find_by_id", "tools")
@@ -310,7 +310,7 @@ class SupabaseToolRepository(ToolRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "tool_repository", "error")
-            logger.error(f"Error finding tool: {str(e)}")
+            logger.error("Error finding tool: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("find_by_name", "tools")
@@ -332,7 +332,7 @@ class SupabaseToolRepository(ToolRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "tool_repository", "error")
-            logger.error(f"Error finding tool by name: {str(e)}")
+            logger.error("Error finding tool by name: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("find_by_type", "tools")
@@ -353,7 +353,7 @@ class SupabaseToolRepository(ToolRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "tool_repository", "error")
-            logger.error(f"Error finding tools by type: {str(e)}")
+            logger.error("Error finding tools by type: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("delete", "tools")
@@ -371,7 +371,7 @@ class SupabaseToolRepository(ToolRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "tool_repository", "error")
-            logger.error(f"Error deleting tool: {str(e)}")
+            logger.error("Error deleting tool: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("get_statistics", "tools")
@@ -404,7 +404,7 @@ class SupabaseToolRepository(ToolRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "tool_repository", "error")
-            logger.error(f"Error getting statistics: {str(e)}")
+            logger.error("Error getting statistics: {}", extra={"str_e_": str(e)})
             return {"error": str(e)}
 
     async def _update_metrics(self, tool: Tool) -> None:
@@ -414,7 +414,7 @@ class SupabaseToolRepository(ToolRepository):
                 # This would update reliability metrics for the tool
                 pass
         except Exception as e:
-            logger.warning(f"Failed to update tool metrics: {str(e)}")
+            logger.warning("Failed to update tool metrics: {}", extra={"str_e_": str(e)})
 
     async def _load_metrics(self, tool: Tool) -> None:
         """Load tool reliability metrics."""
@@ -423,7 +423,7 @@ class SupabaseToolRepository(ToolRepository):
                 # This would load reliability metrics for the tool
                 pass
         except Exception as e:
-            logger.warning(f"Failed to load tool metrics: {str(e)}")
+            logger.warning("Failed to load tool metrics: {}", extra={"str_e_": str(e)})
 
     def _to_entity(self, data: Dict[str, Any]) -> Tool:
         """Convert database record to entity."""
@@ -448,7 +448,7 @@ class SupabaseToolRepository(ToolRepository):
             return tool
         except Exception as e:
             record_error(type(e).__name__, "tool_repository", "error")
-            logger.error(f"Error converting data to entity: {str(e)}")
+            logger.error("Error converting data to entity: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Data conversion error: {str(e)}")
 
 class SupabaseSessionRepository(SessionRepository):
@@ -495,7 +495,7 @@ class SupabaseSessionRepository(SessionRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "session_repository", "error")
-            logger.error(f"Error saving session: {str(e)}")
+            logger.error("Error saving session: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("find_by_id", "sessions")
@@ -515,7 +515,7 @@ class SupabaseSessionRepository(SessionRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "session_repository", "error")
-            logger.error(f"Error finding session: {str(e)}")
+            logger.error("Error finding session: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("find_active", "sessions")
@@ -533,7 +533,7 @@ class SupabaseSessionRepository(SessionRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "session_repository", "error")
-            logger.error(f"Error finding active sessions: {str(e)}")
+            logger.error("Error finding active sessions: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("delete", "sessions")
@@ -551,7 +551,7 @@ class SupabaseSessionRepository(SessionRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "session_repository", "error")
-            logger.error(f"Error deleting session: {str(e)}")
+            logger.error("Error deleting session: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("get_statistics", "sessions")
@@ -582,7 +582,7 @@ class SupabaseSessionRepository(SessionRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "session_repository", "error")
-            logger.error(f"Error getting statistics: {str(e)}")
+            logger.error("Error getting statistics: {}", extra={"str_e_": str(e)})
             return {"error": str(e)}
 
     def _to_entity(self, data: Dict[str, Any]) -> Session:
@@ -602,7 +602,7 @@ class SupabaseSessionRepository(SessionRepository):
             return session
         except Exception as e:
             record_error(type(e).__name__, "session_repository", "error")
-            logger.error(f"Error converting data to entity: {str(e)}")
+            logger.error("Error converting data to entity: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Data conversion error: {str(e)}")
 
 class SupabaseAgentRepository(AgentRepository):
@@ -650,7 +650,7 @@ class SupabaseAgentRepository(AgentRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "agent_repository", "error")
-            logger.error(f"Error saving agent: {str(e)}")
+            logger.error("Error saving agent: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("find_by_id", "agents")
@@ -670,7 +670,7 @@ class SupabaseAgentRepository(AgentRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "agent_repository", "error")
-            logger.error(f"Error finding agent: {str(e)}")
+            logger.error("Error finding agent: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("find_by_type", "agents")
@@ -688,7 +688,7 @@ class SupabaseAgentRepository(AgentRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "agent_repository", "error")
-            logger.error(f"Error finding agents by type: {str(e)}")
+            logger.error("Error finding agents by type: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("find_available", "agents")
@@ -706,7 +706,7 @@ class SupabaseAgentRepository(AgentRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "agent_repository", "error")
-            logger.error(f"Error finding available agents: {str(e)}")
+            logger.error("Error finding available agents: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("delete", "agents")
@@ -724,7 +724,7 @@ class SupabaseAgentRepository(AgentRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "agent_repository", "error")
-            logger.error(f"Error deleting agent: {str(e)}")
+            logger.error("Error deleting agent: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("update_performance_metrics", "agents")
@@ -743,7 +743,7 @@ class SupabaseAgentRepository(AgentRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "agent_repository", "error")
-            logger.error(f"Error updating performance metrics: {str(e)}")
+            logger.error("Error updating performance metrics: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Database error: {str(e)}")
 
     @track_database_operation("get_statistics", "agents")
@@ -776,7 +776,7 @@ class SupabaseAgentRepository(AgentRepository):
             
         except Exception as e:
             record_error(type(e).__name__, "agent_repository", "error")
-            logger.error(f"Error getting statistics: {str(e)}")
+            logger.error("Error getting statistics: {}", extra={"str_e_": str(e)})
             return {"error": str(e)}
 
     def _to_entity(self, data: Dict[str, Any]) -> Agent:
@@ -798,5 +798,5 @@ class SupabaseAgentRepository(AgentRepository):
             return agent
         except Exception as e:
             record_error(type(e).__name__, "agent_repository", "error")
-            logger.error(f"Error converting data to entity: {str(e)}")
+            logger.error("Error converting data to entity: {}", extra={"str_e_": str(e)})
             raise InfrastructureException(f"Data conversion error: {str(e)}") 

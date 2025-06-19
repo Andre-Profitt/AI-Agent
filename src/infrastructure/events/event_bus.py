@@ -6,7 +6,7 @@ Usage Example:
     import asyncio
     
     async def my_handler(event: Event):
-        print(f"Handled event: {event.type} from {event.source}")
+        logger.info("Handled event: {} from {}", extra={"event_type": event.type, "event_source": event.source})
     
     async def main():
         bus = get_event_bus()
@@ -161,7 +161,7 @@ class EventBus:
         for i, sub in enumerate(self.subscriptions):
             if sub.id == subscription_id:
                 self.subscriptions.pop(i)
-                logger.info(f"Subscription removed: {subscription_id}")
+                logger.info("Subscription removed: {}", extra={"subscription_id": subscription_id})
                 return True
         return False
     
@@ -182,7 +182,7 @@ class EventBus:
             except asyncio.TimeoutError:
                 continue
             except Exception as e:
-                logger.error(f"Error processing event: {str(e)}\n{traceback.format_exc()}")
+                logger.error("Error processing event: {}\n{}", extra={"str_e_": str(e), "traceback_format_exc": traceback.format_exc()})
                 self._stats["events_failed"] += 1
     
     async def _handle_event(self, event: Event) -> None:
@@ -202,7 +202,7 @@ class EventBus:
         try:
             await subscription.handle_event(event)
         except Exception as e:
-            logger.error(f"Handler error: {e}\n{traceback.format_exc()}",
+            logger.error("Handler error: %s\n%s", e, traceback.format_exc(), ,
                          extra={"event_id": str(event.id), "handler": str(subscription.handler)})
     
     def _add_to_history(self, event: Event) -> None:

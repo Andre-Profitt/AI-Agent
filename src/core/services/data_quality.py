@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from enum import Enum
 import re
 import json
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class DataQualityMetrics:
 class DataQualityValidator:
     """Enhanced data quality validation system."""
     
-    def __init__(self, quality_level: DataQualityLevel = DataQualityLevel.STANDARD):
+    def __init__(self, quality_level: DataQualityLevel = DataQualityLevel.STANDARD) -> None:
         self.quality_level = quality_level
         self.validation_history = []
         self.quality_metrics_history = []

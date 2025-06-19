@@ -49,7 +49,7 @@ class ToolExecutorImpl(ToolExecutor):
                 "status": "running"
             }
             
-            self.logger.info(f"Starting tool execution {execution_id} for tool {tool.name}")
+            self.logger.info("Starting tool execution {} for tool {}", extra={"execution_id": execution_id, "tool_name": tool.name})
             
             # Validate parameters
             validation_result = await self.validate_parameters(tool, parameters)
@@ -79,7 +79,7 @@ class ToolExecutorImpl(ToolExecutor):
             result["execution_id"] = str(execution_id)
             result["execution_time"] = execution_time
             
-            self.logger.info(f"Tool execution {execution_id} completed successfully in {execution_time:.2f}s")
+            self.logger.info("Tool execution {} completed successfully in {}s", extra={"execution_id": execution_id, "execution_time": execution_time})
             
             return result
             
@@ -89,7 +89,7 @@ class ToolExecutorImpl(ToolExecutor):
             self._active_executions[execution_id]["error"] = str(e)
             self._active_executions[execution_id]["execution_time"] = execution_time
             
-            self.logger.error(f"Tool execution {execution_id} failed: {str(e)}")
+            self.logger.error("Tool execution {} failed: {}", extra={"execution_id": execution_id, "str_e_": str(e)})
             raise DomainException(f"Tool execution failed: {str(e)}")
     
     async def validate_parameters(self, tool: Tool, parameters: Dict[str, Any]) -> Dict[str, Any]:
@@ -221,7 +221,7 @@ class ToolExecutorImpl(ToolExecutor):
         if execution["status"] == "running":
             execution["status"] = "cancelled"
             execution["end_time"] = datetime.now()
-            self.logger.info(f"Tool execution {execution_id} cancelled")
+            self.logger.info("Tool execution {} cancelled", extra={"execution_id": execution_id})
             return True
         
         return False

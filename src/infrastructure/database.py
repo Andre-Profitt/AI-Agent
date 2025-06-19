@@ -7,6 +7,7 @@ import os
 import logging
 from typing import Optional, Any
 from supabase import create_client, Client
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ def get_supabase_client() -> Client:
     
     return _supabase_client
 
-def get_vector_store():
+def get_vector_store() -> Any:
     """Get vector store instance"""
     global _vector_store
     
@@ -50,7 +51,7 @@ def get_vector_store():
                 loop.close()
                 
         except Exception as e:
-            logger.warning(f"Could not initialize enhanced vector store: {e}")
+            logger.warning("Could not initialize enhanced vector store: {}", extra={"e": e})
             _vector_store = None
     
     return _vector_store
@@ -58,11 +59,11 @@ def get_vector_store():
 class SupabaseLogHandler(logging.Handler):
     """Custom log handler for Supabase"""
     
-    def __init__(self, client: Client):
+    def __init__(self, client: Client) -> None:
         super().__init__()
         self.client = client
     
-    def emit(self, record):
+    def emit(self, record) -> Any:
         try:
             # Create log entry
             log_entry = {
@@ -79,9 +80,9 @@ class SupabaseLogHandler(logging.Handler):
             
         except Exception as e:
             # Don't let logging errors crash the application
-            print(f"Log handler error: {e}")
+            logger.info("Log handler error: {}", extra={"e": e})
     
-    def log_interaction(self, session_id: str, user_message: str, assistant_response: str):
+    def log_interaction(self, session_id: str, user_message: str, assistant_response: str) -> Any:
         """Log user interaction"""
         try:
             interaction = {
@@ -94,9 +95,9 @@ class SupabaseLogHandler(logging.Handler):
             self.client.table('interactions').insert(interaction).execute()
             
         except Exception as e:
-            logger.error(f"Failed to log interaction: {e}")
+            logger.error("Failed to log interaction: {}", extra={"e": e})
 
-def create_tables():
+def create_tables() -> Any:
     """Create necessary database tables"""
     try:
         client = get_supabase_client()
@@ -110,7 +111,7 @@ def create_tables():
         logger.info("Database tables created successfully")
         
     except Exception as e:
-        logger.error(f"Failed to create tables: {e}")
+        logger.error("Failed to create tables: {}", extra={"e": e})
 
 def health_check() -> dict:
     """Check database health"""

@@ -11,6 +11,10 @@ import time
 import json
 from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -29,8 +33,8 @@ try:
     from errors.error_category import ErrorCategory
     from reasoning.reasoning_path import ReasoningPath, ReasoningType
 except ImportError as e:
-    print(f"Import error: {e}")
-    print("Trying alternative import paths...")
+    logger.info("Import error: {}", extra={"e": e})
+    logger.info("Trying alternative import paths...")
     
     # Try alternative import paths
     try:
@@ -47,12 +51,12 @@ except ImportError as e:
         from src.errors.error_category import ErrorCategory
         from src.reasoning.reasoning_path import ReasoningPath, ReasoningType
     except ImportError as e2:
-        print(f"Alternative import also failed: {e2}")
-        print("Available modules in src:")
+        logger.info("Alternative import also failed: {}", extra={"e2": e2})
+        logger.info("Available modules in src:")
         src_path = Path(__file__).parent.parent / "src"
         if src_path.exists():
             for item in src_path.iterdir():
-                print(f"  - {item.name}")
+                logger.info("  - {}", extra={"item_name": item.name})
         raise
 
 class TestEnhancedInputValidation(unittest.TestCase):
@@ -435,23 +439,23 @@ def run_comprehensive_tests():
     result = runner.run(test_suite)
     
     # Print summary
-    print(f"\n{'='*60}")
-    print(f"COMPREHENSIVE TEST RESULTS")
-    print(f"{'='*60}")
-    print(f"Tests run: {result.testsRun}")
-    print(f"Failures: {len(result.failures)}")
-    print(f"Errors: {len(result.errors)}")
-    print(f"Success rate: {((result.testsRun - len(result.failures) - len(result.errors)) / result.testsRun * 100):.1f}%")
+    logger.info("\n{}", extra={"____60": '='*60})
+    logger.info("COMPREHENSIVE TEST RESULTS")
+    logger.info("{}", extra={"____60": '='*60})
+    logger.info("Tests run: {}", extra={"result_testsRun": result.testsRun})
+    logger.info("Failures: {}", extra={"len_result_failures_": len(result.failures)})
+    logger.info("Errors: {}", extra={"len_result_errors_": len(result.errors)})
+    logger.info("Success rate: {}%", extra={"__result_testsRun___len_result_failures____len_result_errors_____result_testsRun___100_": ((result.testsRun - len(result.failures) - len(result.errors)) / result.testsRun * 100)})
     
     if result.failures:
-        print(f"\nFAILURES:")
+        logger.info("\nFAILURES:")
         for test, traceback in result.failures:
-            print(f"- {test}: {traceback}")
+            logger.info("- {}: {}", extra={"test": test, "traceback": traceback})
     
     if result.errors:
-        print(f"\nERRORS:")
+        logger.info("\nERRORS:")
         for test, traceback in result.errors:
-            print(f"- {test}: {traceback}")
+            logger.info("- {}: {}", extra={"test": test, "traceback": traceback})
     
     return result.wasSuccessful()
 

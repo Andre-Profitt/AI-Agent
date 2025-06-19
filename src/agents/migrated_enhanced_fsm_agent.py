@@ -81,7 +81,7 @@ class MigratedEnhancedFSMAgent:
         self.current_context: Dict[str, Any] = {}
         self.execution_history: List[Dict[str, Any]] = []
         
-        logger.info(f"MigratedEnhancedFSMAgent initialized with {len(self.tools)} tools")
+        logger.info("MigratedEnhancedFSMAgent initialized with {} tools", extra={"len_self_tools_": len(self.tools)})
     
     def _build_hierarchical_fsm(self):
         """Build the hierarchical FSM structure"""
@@ -126,7 +126,7 @@ class MigratedEnhancedFSMAgent:
             # Add composite state
             self.fsm.add_state(processing)
         
-        logger.info(f"Built hierarchical FSM with {len(self.fsm.states)} states")
+        logger.info("Built hierarchical FSM with {} states", extra={"len_self_fsm_states_": len(self.fsm.states)})
     
     def _setup_probabilistic_transitions(self):
         """Set up probabilistic transitions with context modifiers"""
@@ -161,7 +161,7 @@ class MigratedEnhancedFSMAgent:
         self.fsm.add_transition(exec_to_error)
         self.fsm.add_transition(error_to_plan)
         
-        logger.info(f"Set up {len(self.fsm.transitions)} probabilistic transitions")
+        logger.info("Set up {} probabilistic transitions", extra={"len_self_fsm_transitions_": len(self.fsm.transitions)})
     
     def _planning_action(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Action for the PLANNING state"""
@@ -333,10 +333,10 @@ class MigratedEnhancedFSMAgent:
                     if self.enable_discovery and self.discovery_engine:
                         pattern = self.discovery_engine.analyze_context(self.current_context)
                         if pattern:
-                            logger.info(f"Discovered new pattern: {pattern.name}")
+                            logger.info("Discovered new pattern: {}", extra={"pattern_name": pattern.name})
                 
                 else:
-                    logger.warning(f"Transition to {best_transition['to_state']} failed")
+                    logger.warning("Transition to {} failed", extra={"best_transition__to_state_": best_transition['to_state']})
                     break
             
             # Prepare result
@@ -357,7 +357,7 @@ class MigratedEnhancedFSMAgent:
             return result
             
         except Exception as e:
-            logger.error(f"Error during FSM execution: {e}")
+            logger.error("Error during FSM execution: {}", extra={"e": e})
             
             # Handle error in FSM
             if self.fsm.current_state and self.fsm.current_state.name != "ERROR_HANDLING":

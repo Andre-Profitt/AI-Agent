@@ -71,6 +71,22 @@ class ToolCallTracker:
         self.call_stack: List[ToolCall] = []
         self.call_history: Dict[str, List[ToolCall]] = defaultdict(list)
         
+
+    async def _get_safe_config_value(self, key: str) -> str:
+        """Safely get configuration value with error handling"""
+        try:
+            parts = key.split('_')
+            if len(parts) == 2:
+                service, attr = parts
+                config_obj = getattr(self.config, service, None)
+                if config_obj:
+                    return getattr(config_obj, attr, "")
+            
+            # Direct attribute access
+            return getattr(self.config, key, "")
+        except Exception as e:
+            logger.error("Config access failed", extra={"key": key, "error": str(e)})
+            return ""
     def can_call(self, tool_name: str, params: Dict[str, Any]) -> bool:
         """Check if tool call is allowed"""
         # Check depth
@@ -86,14 +102,14 @@ class ToolCallTracker:
         ]
         
         if len(recent_calls) >= self.max_repeats:
-            logger.warning(f"Tool {tool_name} called {len(recent_calls)} times recently")
+            logger.warning("Tool {} called {} times recently", extra={"tool_name": tool_name, "len_recent_calls_": len(recent_calls)})
             return False
         
         # Check for direct recursion
         if self.call_stack and self.call_stack[-1].tool_name == tool_name:
             # Allow recursion only with different parameters
             if self.call_stack[-1].params == params:
-                logger.warning(f"Direct recursion detected for {tool_name}")
+                logger.warning("Direct recursion detected for {}", extra={"tool_name": tool_name})
                 return False
         
         return True
@@ -379,7 +395,7 @@ class ResourcePoolManager:
                     pool['in_use'].add(id(resource))
                     return resource
                 except Exception as e:
-                    logger.error(f"Failed to create new resource for {resource_type}: {e}")
+                    logger.error("Failed to create new resource for {}: {}", extra={"resource_type": resource_type, "e": e})
             raise TimeoutError(f"Could not acquire {resource_type} resource")
     
     async def release(self, resource_type: str, resource):
@@ -390,7 +406,7 @@ class ResourcePoolManager:
             try:
                 await pool['resources'].put(resource)
             except asyncio.QueueFull:
-                logger.warning(f"Resource pool full for {resource_type}, discarding resource")
+                logger.warning("Resource pool full for {}, discarding resource", extra={"resource_type": resource_type})
     
     def get_pool_stats(self, resource_type: str) -> Dict[str, Any]:
         """Get statistics for a resource pool"""
@@ -526,7 +542,7 @@ class ToolOrchestrator:
             cached_result = self.cache.get(cache_key) if self.cache else None
             
             if cached_result:
-                logger.debug(f"Cache hit for {tool_name}")
+                logger.debug("Cache hit for {}", extra={"tool_name": tool_name})
                 return {"success": True, "output": cached_result, "cached": True}
             
             # Get tool
@@ -566,7 +582,7 @@ class ToolOrchestrator:
             return result
             
         except Exception as e:
-            logger.error(f"Error executing {tool_name}: {e}")
+            logger.error("Error executing {}: {}", extra={"tool_name": tool_name, "e": e})
             self.circuit_breaker.record_failure(tool_name)
             return {"success": False, "error": str(e)}
         finally:
@@ -582,7 +598,7 @@ class ToolOrchestrator:
         # Check compatibility with other tools in use
         incompatible_tools = self.compatibility_checker.get_incompatible_tools(tool_name)
         if incompatible_tools:
-            logger.warning(f"Tool {tool_name} has incompatible tools: {incompatible_tools}")
+            logger.warning("Tool {} has incompatible tools: {}", extra={"tool_name": tool_name, "incompatible_tools": incompatible_tools})
         
         return await self.execute_with_fallback(tool_name, params, session_id)
     
@@ -658,7 +674,7 @@ class ToolOrchestrator:
                 break
         
         if not failed_category:
-            logger.warning(f"No fallback category found for {failed_tool}")
+            logger.warning("No fallback category found for {}", extra={"failed_tool": failed_tool})
             return []
         
         # Try other tools in same category
@@ -683,7 +699,7 @@ class ToolOrchestrator:
             await self.db_client.table('tool_metrics').insert(metrics_data).execute()
             
         except Exception as e:
-            logger.warning(f"Failed to update database metrics for {tool_name}: {e}")
+            logger.warning("Failed to update database metrics for {}: {}", extra={"tool_name": tool_name, "e": e})
             # Don't raise - metrics failure shouldn't break tool execution
 
 # ============================================
@@ -919,7 +935,7 @@ class MetricAwareErrorHandler:
             }).execute()
             
         except Exception as e:
-            logger.error(f"Failed to update error metrics: {e}")
+            logger.error("Failed to update error metrics: {}", extra={"e": e})
 
 # ============================================
 # KNOWLEDGE BASE FALLBACK MECHANISM
@@ -982,7 +998,7 @@ class EmbeddingManager:
                 )
                 return response.data[0].embedding
             except Exception as e:
-                logger.error(f"OpenAI embedding failed: {e}")
+                logger.error("OpenAI embedding failed: {}", extra={"e": e})
                 return self._encode_local(text)
         elif self.method == "local" and self._model:
             return self._encode_local(text)
@@ -1047,11 +1063,11 @@ class IntegrationHub:
             await self._initialize_error_handler()
             
             # 8. LangChain agent (needs tools)
-            if self.config.langchain.enable_memory:
+            if await self._get_safe_config_value("langchain_enable_memory"):
                 await self._initialize_langchain()
             
             # 9. CrewAI (needs tools and knowledge base)
-            if self.config.crewai.enable_multi_agent:
+            if await self._get_safe_config_value("crewai_enable_multi_agent"):
                 await self._initialize_crewai()
             
             # 10. Initialize monitoring dashboard
@@ -1061,7 +1077,7 @@ class IntegrationHub:
             logger.info("Enhanced Integration Hub initialized successfully")
             
         except Exception as e:
-            logger.error(f"Failed to initialize Enhanced Integration Hub: {e}")
+            logger.error("Failed to initialize Enhanced Integration Hub: {}", extra={"e": e})
             await self.cleanup()
             raise RuntimeError(f"Failed to initialize integrations: {e}")
     
@@ -1084,7 +1100,7 @@ class IntegrationHub:
             logger.info("New integration components initialized")
             
         except Exception as e:
-            logger.error(f"Failed to initialize new components: {e}")
+            logger.error("Failed to initialize new components: {}", extra={"e": e})
             # Don't fail initialization for new components
     
     async def _initialize_monitoring(self):
@@ -1107,7 +1123,7 @@ class IntegrationHub:
             logger.info("Monitoring dashboard initialized")
             
         except Exception as e:
-            logger.error(f"Failed to initialize monitoring: {e}")
+            logger.error("Failed to initialize monitoring: {}", extra={"e": e})
     
     async def _monitoring_loop(self, monitoring: 'MonitoringDashboard'):
         """Periodic monitoring loop"""
@@ -1116,7 +1132,7 @@ class IntegrationHub:
                 await monitoring.collect_metrics()
                 await asyncio.sleep(60)  # Collect metrics every minute
             except Exception as e:
-                logger.error(f"Monitoring loop error: {e}")
+                logger.error("Monitoring loop error: {}", extra={"e": e})
                 await asyncio.sleep(60)
     
     async def _initialize_tools(self):
@@ -1146,7 +1162,7 @@ class IntegrationHub:
             logger.info("Registered tools in unified registry", extra={"tool_count": len(unified_tool_registry.tools)})
             
         except ImportError as e:
-            logger.warning(f"Some tool modules not available: {e}")
+            logger.warning("Some tool modules not available: {}", extra={"e": e})
             # Register basic tools as fallback
             from src.tools import file_reader
             unified_tool_registry.register(file_reader)
@@ -1158,8 +1174,8 @@ class IntegrationHub:
             from src.infrastructure.database_enhanced import initialize_supabase_enhanced
             
             supabase_components = await initialize_supabase_enhanced(
-                url=self.config.supabase.url,
-                key=self.config.supabase.key
+                url=await self._get_safe_config_value("supabase_url"),
+                key=await self._get_safe_config_value("supabase_key")
             )
             
             self.components['supabase'] = supabase_components
@@ -1174,7 +1190,7 @@ class IntegrationHub:
             logger.info("Supabase database initialized with circuit breaker protection")
             
         except Exception as e:
-            logger.error(f"Database initialization failed: {e}")
+            logger.error("Database initialization failed: {}", extra={"e": e})
             raise
     
     async def _initialize_knowledge_base(self):
@@ -1184,7 +1200,7 @@ class IntegrationHub:
             
             # Use consistent embedding manager
             knowledge_base = create_gaia_knowledge_base(
-                storage_path=self.config.llamaindex.storage_path,
+                storage_path=await self._get_safe_config_value("llamaindex_storage_path"),
                 use_supabase='supabase' in self.components
             )
             
@@ -1198,7 +1214,7 @@ class IntegrationHub:
             local_kb = create_local_knowledge_tool()
             self.components['knowledge_base'] = local_kb
         except Exception as e:
-            logger.error(f"Failed to initialize knowledge base: {e}")
+            logger.error("Failed to initialize knowledge base: {}", extra={"e": e})
             # Don't fail initialization for knowledge base
             from src.knowledge_utils import create_local_knowledge_tool
             local_kb = create_local_knowledge_tool()
@@ -1223,7 +1239,7 @@ class IntegrationHub:
             logger.info("Tool orchestrator initialized with circuit breaker protection")
             
         except Exception as e:
-            logger.error(f"Tool orchestrator initialization failed: {e}")
+            logger.error("Tool orchestrator initialization failed: {}", extra={"e": e})
             raise
     
     @circuit_breaker("session_manager_db", CircuitBreakerConfig(failure_threshold=3, recovery_timeout=30))
@@ -1238,7 +1254,7 @@ class IntegrationHub:
             logger.info("Session manager initialized with circuit breaker protection")
             
         except Exception as e:
-            logger.error(f"Session manager initialization failed: {e}")
+            logger.error("Session manager initialization failed: {}", extra={"e": e})
             raise
     
     async def _initialize_error_handler(self):
@@ -1253,7 +1269,7 @@ class IntegrationHub:
             logger.info("Metric-aware error handler initialized")
             
         except Exception as e:
-            logger.error(f"Failed to initialize error handler: {e}")
+            logger.error("Failed to initialize error handler: {}", extra={"e": e})
             # Don't fail initialization for error handler
     
     async def _initialize_langchain(self):
@@ -1263,7 +1279,7 @@ class IntegrationHub:
             logger.info("LangChain agent initialized")
             
         except Exception as e:
-            logger.error(f"Failed to initialize LangChain: {e}")
+            logger.error("Failed to initialize LangChain: {}", extra={"e": e})
             # Don't fail initialization for LangChain
     
     async def _initialize_crewai(self):
@@ -1273,7 +1289,7 @@ class IntegrationHub:
             logger.info("CrewAI multi-agent system initialized")
             
         except Exception as e:
-            logger.error(f"Failed to initialize CrewAI: {e}")
+            logger.error("Failed to initialize CrewAI: {}", extra={"e": e})
             # Don't fail initialization for CrewAI
     
     def get_tool_orchestrator(self) -> Optional[ToolOrchestrator]:
@@ -1343,7 +1359,7 @@ class IntegrationHub:
                     if asyncio.iscoroutine(result):
                         await result
             except Exception as e:
-                logger.error(f"Error in cleanup handler: {e}")
+                logger.error("Error in cleanup handler: {}", extra={"e": e})
         
         self._cleanup_handlers.clear()
         self.initialized = False
@@ -1499,7 +1515,7 @@ class ToolVersionManager:
         version_key = f"{tool_name}:{version}"
         if version_key in self.tool_versions:
             self.tool_versions[version_key]['deprecated'] = True
-            logger.warning(f"Deprecated version {version} for tool {tool_name}")
+            logger.warning("Deprecated version {} for tool {}", extra={"version": version, "tool_name": tool_name})
 
 class MonitoringDashboard:
     """Unified monitoring for all components"""
@@ -1684,7 +1700,7 @@ class IntegrationTestFramework:
                 results[test_name] = {'passed': True, 'details': result}
             except Exception as e:
                 results[test_name] = {'passed': False, 'error': str(e)}
-                logger.error(f"Integration test {test_name} failed: {e}")
+                logger.error("Integration test {} failed: {}", extra={"test_name": test_name, "e": e})
         
         self.test_results.append({
             'timestamp': datetime.now(),

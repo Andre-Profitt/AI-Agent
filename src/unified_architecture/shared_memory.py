@@ -140,10 +140,10 @@ class SharedMemorySystem:
                 
                 self.stats["total_stores"] += 1
                 
-                logger.debug(f"Agent {agent_id} stored key: {key} (type: {memory_type.name})")
+                logger.debug("Agent {} stored key: {} (type: {})", extra={"agent_id": agent_id, "key": key, "memory_type_name": memory_type.name})
                 
             except Exception as e:
-                logger.error(f"Error storing memory entry {key}: {e}")
+                logger.error("Error storing memory entry {}: {}", extra={"key": key, "e": e})
     
     async def retrieve(self, key: str, agent_id: str) -> Optional[Any]:
         """Retrieve information from shared memory"""
@@ -276,7 +276,7 @@ class SharedMemorySystem:
             ttl=86400 * 7  # Keep for 7 days
         )
         
-        logger.info(f"Agent {agent_id} shared experience: {experience.get('task_type', 'unknown')}")
+        logger.info("Agent {} shared experience: {}", extra={"agent_id": agent_id, "experience_get__task_type____unknown__": experience.get('task_type', 'unknown')})
     
     async def get_relevant_experiences(self, context: Dict[str, Any],
                                      limit: int = 5) -> List[Dict[str, Any]]:
@@ -374,7 +374,7 @@ class SharedMemorySystem:
             if key in self.vector_index:
                 del self.vector_index[key]
             
-            logger.debug(f"Deleted memory entry: {key}")
+            logger.debug("Deleted memory entry: {}", extra={"key": key})
     
     async def _evict_old_entries(self):
         """Evict old entries when memory is full"""
@@ -389,7 +389,7 @@ class SharedMemorySystem:
             key, entry = entries[i]
             await self.delete(key)
         
-        logger.info(f"Evicted {num_to_remove} old memory entries")
+        logger.info("Evicted {} old memory entries", extra={"num_to_remove": num_to_remove})
     
     async def cleanup_expired(self):
         """Clean up expired memory entries"""
@@ -404,7 +404,7 @@ class SharedMemorySystem:
                 await self.delete(key)
             
             if expired_keys:
-                logger.info(f"Cleaned up {len(expired_keys)} expired memory entries")
+                logger.info("Cleaned up {} expired memory entries", extra={"len_expired_keys_": len(expired_keys)})
     
     async def export_memory(self, memory_type: Optional[MemoryType] = None) -> Dict[str, Any]:
         """Export memory data"""
@@ -439,9 +439,9 @@ class SharedMemorySystem:
                 
                 imported_count += 1
             except Exception as e:
-                logger.error(f"Error importing memory entry {key}: {e}")
+                logger.error("Error importing memory entry {}: {}", extra={"key": key, "e": e})
         
-        logger.info(f"Imported {imported_count} memory entries")
+        logger.info("Imported {} memory entries", extra={"imported_count": imported_count})
         return imported_count
     
     async def clear_memory(self, memory_type: Optional[MemoryType] = None):
@@ -458,5 +458,5 @@ class SharedMemorySystem:
             for key in keys_to_remove:
                 await self.delete(key)
             
-            logger.info(f"Cleared {len(keys_to_remove)} memory entries "
-                       f"({'all' if memory_type is None else memory_type.name})") 
+            logger.info("Cleared {} memory entries "
+                       f"({})", extra={"len_keys_to_remove_": len(keys_to_remove), "_all__if_memory_type_is_None_else_memory_type_name": 'all' if memory_type is None else memory_type.name}) 

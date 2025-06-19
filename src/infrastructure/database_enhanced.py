@@ -12,6 +12,7 @@ from functools import lru_cache
 
 # Import circuit breaker protection
 from src.infrastructure.resilience.circuit_breaker import (
+from typing import Optional, Dict, Any, List, Union, Tuple
     CircuitBreaker,
     CircuitBreakerConfig,
     circuit_breaker
@@ -43,7 +44,7 @@ class SearchResult:
 class SupabaseConnectionPool:
     """Enhanced Supabase client with connection pooling"""
     
-    def __init__(self, url: str, key: str, pool_size: int = 10):
+    def __init__(self, url: str, key: str, pool_size: int = 10) -> None:
         self.url = url
         self.key = key
         self.pool_size = pool_size
@@ -51,7 +52,7 @@ class SupabaseConnectionPool:
         self._session = None
         self._initialized = False
         
-    async def initialize(self):
+    async def initialize(self) -> Any:
         """Initialize connection pool"""
         if self._initialized:
             return
@@ -71,10 +72,10 @@ class SupabaseConnectionPool:
             await self._pool.put(client)
         
         self._initialized = True
-        logger.info(f"Supabase connection pool initialized with {self.pool_size} connections")
+        logger.info("Supabase connection pool initialized with {} connections", extra={"self_pool_size": self.pool_size})
     
     @asynccontextmanager
-    async def get_client(self):
+    async def get_client(self) -> Any:
         """Get client from pool"""
         if not self._initialized:
             await self.initialize()
@@ -85,7 +86,7 @@ class SupabaseConnectionPool:
         finally:
             await self._pool.put(client)
     
-    async def close(self):
+    async def close(self) -> None:
         """Close all connections"""
         if self._session:
             await self._session.close()
@@ -94,7 +95,7 @@ class SupabaseConnectionPool:
 class OptimizedVectorStore:
     """Optimized vector store with batch operations and caching"""
     
-    def __init__(self, pool: SupabaseConnectionPool):
+    def __init__(self, pool: SupabaseConnectionPool) -> None:
         self.pool = pool
         self.config = integration_config
         
@@ -121,7 +122,7 @@ class OptimizedVectorStore:
         self, 
         documents: List[Document],
         batch_size: int = None
-    ):
+    ) -> Any:
         """Batch insert for better performance with circuit breaker protection"""
         if batch_size is None:
             batch_size = self._batch_size
@@ -144,15 +145,15 @@ class OptimizedVectorStore:
                 # Use upsert for conflict resolution
                 try:
                     result = await client.table("knowledge_base").upsert(batch_data).execute()
-                    logger.info(f"Inserted {len(batch_data)} documents with circuit breaker protection")
+                    logger.info("Inserted {} documents with circuit breaker protection", extra={"len_batch_data_": len(batch_data)})
                 except Exception as e:
-                    logger.error(f"Batch insert failed: {e}")
+                    logger.error("Batch insert failed: {}", extra={"e": e})
                     raise
 
 class HybridVectorSearch:
     """Combine vector similarity with metadata filtering and BM25"""
     
-    def __init__(self, pool: SupabaseConnectionPool):
+    def __init__(self, pool: SupabaseConnectionPool) -> None:
         self.pool = pool
         # Use centralized embedding manager
         self.embedding_manager = get_embedding_manager()
@@ -205,7 +206,7 @@ class HybridVectorSearch:
                 return search_results[:top_k]
                 
             except Exception as e:
-                logger.error(f"Hybrid search failed: {e}")
+                logger.error("Hybrid search failed: {}", extra={"e": e})
                 # Fallback to simple vector search
                 return await self._fallback_search(client, query_embedding, top_k)
     
@@ -245,46 +246,46 @@ class HybridVectorSearch:
             return search_results
             
         except Exception as e:
-            logger.error(f"Fallback search also failed: {e}")
+            logger.error("Fallback search also failed: {}", extra={"e": e})
             return []
 
 class SupabaseRealtimeManager:
     """Manage realtime subscriptions"""
     
-    def __init__(self, client: Client):
+    def __init__(self, client: Client) -> None:
         self.client = client
         self.subscriptions = {}
     
-    async def subscribe_to_tool_metrics(self, callback):
+    async def subscribe_to_tool_metrics(self, callback) -> Any:
         """Subscribe to tool execution metrics"""
         try:
             subscription = self.client.table('tool_metrics').on('INSERT', callback).subscribe()
             self.subscriptions['tool_metrics'] = subscription
             logger.info("Subscribed to tool metrics")
         except Exception as e:
-            logger.error(f"Failed to subscribe to tool metrics: {e}")
+            logger.error("Failed to subscribe to tool metrics: {}", extra={"e": e})
     
-    async def subscribe_to_knowledge_updates(self, callback):
+    async def subscribe_to_knowledge_updates(self, callback) -> Any:
         """Subscribe to knowledge base updates"""
         try:
             subscription = self.client.table('knowledge_base').on('INSERT', callback).subscribe()
             self.subscriptions['knowledge_updates'] = subscription
             logger.info("Subscribed to knowledge updates")
         except Exception as e:
-            logger.error(f"Failed to subscribe to knowledge updates: {e}")
+            logger.error("Failed to subscribe to knowledge updates: {}", extra={"e": e})
     
-    async def unsubscribe_all(self):
+    async def unsubscribe_all(self) -> Any:
         """Unsubscribe from all subscriptions"""
         for name, subscription in self.subscriptions.items():
             try:
                 await subscription.unsubscribe()
-                logger.info(f"Unsubscribed from {name}")
+                logger.info("Unsubscribed from {}", extra={"name": name})
             except Exception as e:
-                logger.error(f"Failed to unsubscribe from {name}: {e}")
+                logger.error("Failed to unsubscribe from {}: {}", extra={"name": name, "e": e})
         self.subscriptions.clear()
 
 @circuit_breaker("supabase_initialization", CircuitBreakerConfig(failure_threshold=3, recovery_timeout=60))
-async def initialize_supabase_enhanced(url: Optional[str] = None, key: Optional[str] = None):
+async def initialize_supabase_enhanced(url: Optional[str] = None, key: Optional[str] = None) -> Any:
     """Initialize Supabase with circuit breaker protection"""
     try:
         # Use provided URL/key or fall back to config
@@ -322,7 +323,7 @@ async def initialize_supabase_enhanced(url: Optional[str] = None, key: Optional[
         }
         
     except Exception as e:
-        logger.error(f"Supabase initialization failed: {e}")
+        logger.error("Supabase initialization failed: {}", extra={"e": e})
         raise
 
 # Global instances for backward compatibility

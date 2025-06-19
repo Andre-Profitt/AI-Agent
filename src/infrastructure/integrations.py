@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import json
 import logging
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,7 @@ class GAIAConfig:
 class IntegrationConfig:
     """Centralized configuration for all integrations"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.supabase = SupabaseConfig()
         self.langchain = LangChainConfig()
         self.crewai = CrewAIConfig()
@@ -99,7 +100,7 @@ class IntegrationConfig:
         self.gaia = GAIAConfig()
         self._load_from_environment()
     
-    def _load_from_environment(self):
+    def _load_from_environment(self) -> Any:
         """Load configuration from environment variables"""
         
         # Supabase
@@ -139,7 +140,7 @@ class IntegrationConfig:
             return True
             
         except Exception as e:
-            logger.error(f"Failed to update configuration: {e}")
+            logger.error("Failed to update configuration: {}", extra={"e": e})
             return False
     
     async def validate(self) -> tuple[bool, List[str]]:
@@ -202,17 +203,17 @@ class IntegrationConfig:
             config_dict = self.to_dict()
             with open(file_path, 'w') as f:
                 json.dump(config_dict, f, indent=2)
-            logger.info(f"Configuration saved to {file_path}")
+            logger.info("Configuration saved to {}", extra={"file_path": file_path})
             return True
         except Exception as e:
-            logger.error(f"Failed to save configuration: {e}")
+            logger.error("Failed to save configuration: {}", extra={"e": e})
             return False
     
     def load_from_file(self, file_path: str) -> bool:
         """Load configuration from file"""
         try:
             if not Path(file_path).exists():
-                logger.warning(f"Configuration file {file_path} not found")
+                logger.warning("Configuration file {} not found", extra={"file_path": file_path})
                 return False
             
             with open(file_path, 'r') as f:
@@ -220,11 +221,11 @@ class IntegrationConfig:
             
             # Update configuration with loaded values
             self.update_config(config_dict)
-            logger.info(f"Configuration loaded from {file_path}")
+            logger.info("Configuration loaded from {}", extra={"file_path": file_path})
             return True
             
         except Exception as e:
-            logger.error(f"Failed to load configuration: {e}")
+            logger.error("Failed to load configuration: {}", extra={"e": e})
             return False
 
 # Global integration configuration instance
@@ -234,4 +235,4 @@ integration_config = IntegrationConfig()
 is_valid, issues = integration_config.validate()
 if not is_valid:
     for issue in issues:
-        logger.warning(f"Integration config issue: {issue}") 
+        logger.warning("Integration config issue: {}", extra={"issue": issue}) 

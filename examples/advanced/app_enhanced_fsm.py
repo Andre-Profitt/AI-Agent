@@ -77,10 +77,10 @@ try:
 except ImportError as e:
     import sys
     import os
-    print(f"Import Error: {e}")
-    print(f"Current working directory: {os.getcwd()}")
-    print(f"Python path: {sys.path}")
-    print(f"Contents of src directory: {os.listdir('src') if os.path.exists('src') else 'src directory not found'}")
+    logger.info("Import Error: {}", extra={"e": e})
+    logger.info("Current working directory: {}", extra={"os_getcwd__": os.getcwd()})
+    logger.info("Python path: {}", extra={"sys_path": sys.path})
+    logger.info("Contents of src directory: {}", extra={"os_listdir__src___if_os_path_exists__src___else__src_directory_not_found_": os.listdir('src') if os.path.exists('src') else 'src directory not found'})
     raise
 
 # Helper functions for chat processing
@@ -528,7 +528,7 @@ def main():
         
     except Exception as e:
         logger.error(f"Application startup failed: {e}")
-        print(f"Failed to start application: {e}")
+        logger.info("Failed to start application: {}", extra={"e": e})
         sys.exit(1)
     finally:
         # Cleanup integration hub

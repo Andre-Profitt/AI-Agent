@@ -18,6 +18,7 @@ from .config import config
 from src.agents.advanced_agent_fsm import FSMReActAgent
 from src.utils.tools_enhanced import get_enhanced_tools
 from .database import get_supabase_client, SupabaseLogHandler
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ class AdvancedGAIAAgent:
     GAIA wrapper that delegates every question to the FSM-based agent,
     guaranteeing deterministic execution and GAIA-ready tools.
     """
-    def __init__(self, log_handler: Optional[logging.Handler] = None):
+    def __init__(self, log_handler: Optional[logging.Handler] = None) -> None:
         tools = get_enhanced_tools()
         self.fsm_agent = FSMReActAgent(
             tools=tools,
@@ -52,7 +53,7 @@ class AdvancedGAIAAgent:
             self._update_stats(time.time() - start, success=True)
             return answer
         except Exception as e:
-            logger.error(f"Error processing GAIA question: {e}")
+            logger.error("Error processing GAIA question: {}", extra={"e": e})
             self._update_stats(time.time() - start, success=False)
             return f"Error: {str(e)}"
     
@@ -116,7 +117,7 @@ class AdvancedGAIAAgent:
         
         return response if response else "Unable to determine answer"
     
-    def _update_stats(self, processing_time: float, success: bool):
+    def _update_stats(self, processing_time: float, success: bool) -> Any:
         """Update performance statistics"""
         self.performance_stats["total_questions"] += 1
         if success:
@@ -147,7 +148,7 @@ class AdvancedGAIAAgent:
 class GAIAEvaluator:
     """Handles GAIA benchmark evaluation workflow"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.api_url = config.api.GAIA_API_URL
         self.questions_url = f"{self.api_url}/questions"
         self.submit_url = f"{self.api_url}/submit"
@@ -158,7 +159,7 @@ class GAIAEvaluator:
             self.log_handler = SupabaseLogHandler(supabase_client)
             self.logging_enabled = True
         except Exception as e:
-            logger.warning(f"Supabase logging disabled: {e}")
+            logger.warning("Supabase logging disabled: {}", extra={"e": e})
             self.log_handler = None
             self.logging_enabled = False
     
@@ -175,7 +176,7 @@ class GAIAEvaluator:
             return "❌ Please Login to Hugging Face with the button.", None
         
         username = profile.username
-        logger.info(f"Starting GAIA evaluation for user: {username}")
+        logger.info("Starting GAIA evaluation for user: {}", extra={"username": username})
         
         # Initialize agent
         try:
@@ -216,7 +217,7 @@ class GAIAEvaluator:
     
     def _fetch_questions(self) -> List[Dict[str, Any]] | str:
         """Fetch questions from GAIA API"""
-        logger.info(f"Fetching questions from: {self.questions_url}")
+        logger.info("Fetching questions from: {}", extra={"self_questions_url": self.questions_url})
         
         try:
             response = requests.get(self.questions_url, timeout=15)
@@ -230,11 +231,11 @@ class GAIAEvaluator:
             # Debug log the first question to see its structure
             if questions_data:
                 first_question = questions_data[0]
-                logger.info(f"First question structure: {first_question}")
-                logger.info(f"Question type: {type(first_question.get('question'))}")
-                logger.info(f"Question value: {first_question.get('question')}")
+                logger.info("First question structure: {}", extra={"first_question": first_question})
+                logger.info("Question type: {}", extra={"type_first_question_get__question___": type(first_question.get('question'))})
+                logger.info("Question value: {}", extra={"first_question_get__question__": first_question.get('question')})
                 
-            logger.info(f"Successfully fetched {len(questions_data)} questions")
+            logger.info("Successfully fetched {} questions", extra={"len_questions_data_": len(questions_data)})
             return questions_data
             
         except requests.exceptions.RequestException as e:
@@ -253,20 +254,20 @@ class GAIAEvaluator:
         answers_payload = []
         start_time = time.time()
         
-        logger.info(f"Starting processing of {len(questions_data)} questions")
+        logger.info("Starting processing of {} questions", extra={"len_questions_data_": len(questions_data)})
         
         for i, item in enumerate(questions_data, 1):
             task_id = item.get("task_id")
             question_text = item.get("question")
             
             if not task_id or question_text is None:
-                logger.warning(f"Skipping invalid question item: {item}")
+                logger.warning("Skipping invalid question item: {}", extra={"item": item})
                 continue
                 
             # Validate question_text is a string
             if not isinstance(question_text, str):
                 error_msg = f"Question text must be a string, got {type(question_text)}"
-                logger.error(f"Error on question {i} (ID: {task_id}): {error_msg}")
+                logger.error("Error on question {} (ID: {}): {}", extra={"i": i, "task_id": task_id, "error_msg": error_msg})
                 
                 results_log.append({
                     "Task ID": task_id,
@@ -277,7 +278,7 @@ class GAIAEvaluator:
                 continue
             
             try:
-                logger.info(f"Processing question {i}/{len(questions_data)} (ID: {task_id})")
+                logger.info("Processing question {}/{} (ID: {})", extra={"i": i, "len_questions_data_": len(questions_data), "task_id": task_id})
                 
                 # Process with agent
                 question_start = time.time()
@@ -297,11 +298,11 @@ class GAIAEvaluator:
                     "Processing Time": f"{question_time:.1f}s"
                 })
                 
-                logger.info(f"Question {i} completed in {question_time:.1f}s")
+                logger.info("Question {} completed in {}s", extra={"i": i, "question_time": question_time})
                 
             except Exception as e:
                 error_msg = f"AGENT ERROR: {e}"
-                logger.error(f"Error on question {i} (ID: {task_id}): {e}")
+                logger.error("Error on question {} (ID: {}): {}", extra={"i": i, "task_id": task_id, "e": e})
                 
                 results_log.append({
                     "Task ID": task_id,
@@ -311,15 +312,15 @@ class GAIAEvaluator:
                 })
         
         total_time = time.time() - start_time
-        logger.info(f"Completed processing in {total_time:.1f}s "
-                   f"(avg: {total_time/len(questions_data):.1f}s per question)")
+        logger.info("Completed processing in {}s "
+                   f"(avg: {}s per question)", extra={"total_time": total_time, "total_time_len_questions_data_": total_time/len(questions_data)})
         
         return results_log, answers_payload
     
     def _submit_results(self, submission_data: Dict[str, Any], 
                        agent: AdvancedGAIAAgent, total_questions: int) -> str:
         """Submit results to GAIA API"""
-        logger.info(f"Submitting {len(submission_data['answers'])} answers")
+        logger.info("Submitting {} answers", extra={"len_submission_data__answers__": len(submission_data['answers'])})
         
         try:
             response = requests.post(self.submit_url, json=submission_data, timeout=60)
@@ -377,7 +378,7 @@ def check_gaia_availability() -> bool:
 # Global GAIA availability flag
 GAIA_AVAILABLE = check_gaia_availability() 
 
-async def run_gaia_evaluation(self, username: str, password: str):
+async def run_gaia_evaluation(self, username: str, password: str) -> Any:
     logger.info("Starting GAIA evaluation", extra={
         "operation": "gaia_evaluation",
         "username": username

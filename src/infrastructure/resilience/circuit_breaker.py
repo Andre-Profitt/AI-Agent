@@ -99,7 +99,7 @@ class CircuitBreaker:
         if self.stats.current_state == CircuitState.OPEN:
             # Check if recovery timeout has passed
             if (current_time - self._last_state_change) >= self.config.recovery_timeout:
-                logger.info(f"Circuit breaker '{self.name}' transitioning to HALF_OPEN")
+                logger.info("Circuit breaker '{}' transitioning to HALF_OPEN", extra={"self_name": self.name})
                 self.stats.current_state = CircuitState.HALF_OPEN
                 self._last_state_change = current_time
                 
@@ -113,7 +113,7 @@ class CircuitBreaker:
         
         if self.stats.current_state == CircuitState.HALF_OPEN:
             if self.stats.consecutive_successes >= self.config.success_threshold:
-                logger.info(f"Circuit breaker '{self.name}' transitioning to CLOSED")
+                logger.info("Circuit breaker '{}' transitioning to CLOSED", extra={"self_name": self.name})
                 self.stats.current_state = CircuitState.CLOSED
                 self._last_state_change = time.time()
                 
@@ -127,11 +127,11 @@ class CircuitBreaker:
         
         if self.stats.current_state == CircuitState.CLOSED:
             if self.stats.consecutive_failures >= self.config.failure_threshold:
-                logger.warning(f"Circuit breaker '{self.name}' transitioning to OPEN")
+                logger.warning("Circuit breaker '{}' transitioning to OPEN", extra={"self_name": self.name})
                 self.stats.current_state = CircuitState.OPEN
                 self._last_state_change = time.time()
         elif self.stats.current_state == CircuitState.HALF_OPEN:
-            logger.warning(f"Circuit breaker '{self.name}' transitioning back to OPEN")
+            logger.warning("Circuit breaker '{}' transitioning back to OPEN", extra={"self_name": self.name})
             self.stats.current_state = CircuitState.OPEN
             self._last_state_change = time.time()
             
@@ -145,7 +145,7 @@ class CircuitBreaker:
         
         if self.stats.current_state == CircuitState.HALF_OPEN:
             if self.stats.consecutive_successes >= self.config.success_threshold:
-                logger.info(f"Circuit breaker '{self.name}' transitioning to CLOSED")
+                logger.info("Circuit breaker '{}' transitioning to CLOSED", extra={"self_name": self.name})
                 self.stats.current_state = CircuitState.CLOSED
                 self._last_state_change = time.time()
                 
@@ -159,11 +159,11 @@ class CircuitBreaker:
         
         if self.stats.current_state == CircuitState.CLOSED:
             if self.stats.consecutive_failures >= self.config.failure_threshold:
-                logger.warning(f"Circuit breaker '{self.name}' transitioning to OPEN")
+                logger.warning("Circuit breaker '{}' transitioning to OPEN", extra={"self_name": self.name})
                 self.stats.current_state = CircuitState.OPEN
                 self._last_state_change = time.time()
         elif self.stats.current_state == CircuitState.HALF_OPEN:
-            logger.warning(f"Circuit breaker '{self.name}' transitioning back to OPEN")
+            logger.warning("Circuit breaker '{}' transitioning back to OPEN", extra={"self_name": self.name})
             self.stats.current_state = CircuitState.OPEN
             self._last_state_change = time.time()
             
@@ -177,7 +177,7 @@ class CircuitBreaker:
         self.stats.consecutive_failures = 0
         self.stats.consecutive_successes = 0
         self._last_state_change = time.time()
-        logger.info(f"Circuit breaker '{self.name}' reset to CLOSED")
+        logger.info("Circuit breaker '{}' reset to CLOSED", extra={"self_name": self.name})
 
 class CircuitBreakerOpenError(Exception):
     """Exception raised when circuit breaker is open"""

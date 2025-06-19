@@ -72,12 +72,12 @@ class ParallelExecutor:
                         result = await loop.run_in_executor(self.thread_pool, tool, **input_data)
                     
                     execution_time = time.time() - start_time
-                    self.logger.debug(f"Tool executed successfully in {execution_time:.3f}s")
+                    self.logger.debug("Tool executed successfully in {}s", extra={"execution_time": execution_time})
                     return True, result
                     
                 except Exception as e:
                     execution_time = time.time() - start_time
-                    self.logger.error(f"Tool execution failed: {e}")
+                    self.logger.error("Tool execution failed: {}", extra={"e": e})
                     return False, str(e)
         
         # Create tasks for all tools
@@ -135,12 +135,12 @@ class ParallelExecutor:
                     result_dict["execution_time"] = execution_time
                     result_dict["agent_id"] = agent.agent_id
                     
-                    self.logger.debug(f"Agent {agent.agent_id} executed task {task.task_id} in {execution_time:.3f}s")
+                    self.logger.debug("Agent {} executed task {} in {}s", extra={"agent_agent_id": agent.agent_id, "task_task_id": task.task_id, "execution_time": execution_time})
                     return agent.agent_id, result_dict
                     
                 except Exception as e:
                     execution_time = time.time() - start_time
-                    self.logger.error(f"Agent {agent.agent_id} failed to execute task {task.task_id}: {e}")
+                    self.logger.error("Agent {} failed to execute task {}: {}", extra={"agent_agent_id": agent.agent_id, "task_task_id": task.task_id, "e": e})
                     return agent.agent_id, {
                         "error": str(e),
                         "execution_time": execution_time,
@@ -190,7 +190,7 @@ class ParallelExecutor:
                         loop = asyncio.get_event_loop()
                         return await loop.run_in_executor(self.thread_pool, map_func, item)
                 except Exception as e:
-                    self.logger.error(f"Map function failed for item {item}: {e}")
+                    self.logger.error("Map function failed for item {}: {}", extra={"item": item, "e": e})
                     raise
         
         # Map phase - execute map function on all items
@@ -201,7 +201,7 @@ class ParallelExecutor:
         valid_results = []
         for result in map_results:
             if isinstance(result, Exception):
-                self.logger.warning(f"Map operation failed: {result}")
+                self.logger.warning("Map operation failed: {}", extra={"result": result})
             else:
                 valid_results.append(result)
         
@@ -417,7 +417,7 @@ class ParallelFSMReactAgent:
             # Find tool by name
             tool = next((t for t in self.tools if t.name == tool_name), None)
             if not tool:
-                self.logger.warning(f"Tool {tool_name} not found")
+                self.logger.warning("Tool {} not found", extra={"tool_name": tool_name})
                 continue
             
             tools.append(tool.func)
@@ -476,9 +476,9 @@ async def example_parallel_execution():
     
     for (success, result) in results:
         if success:
-            print(f"Result: {result}")
+            logger.info("Result: {}", extra={"result": result})
         else:
-            print(f"Error: {result}")
+            logger.info("Error: {}", extra={"result": result})
     
     # Map-reduce example
     async def process_item(item: int) -> int:
@@ -492,7 +492,7 @@ async def example_parallel_execution():
     final_result = await executor.map_reduce(
         process_item, sum_results, items
     )
-    print(f"Sum of squares: {final_result}")
+    logger.info("Sum of squares: {}", extra={"final_result": final_result})
     
     # Cleanup
     executor.shutdown() 

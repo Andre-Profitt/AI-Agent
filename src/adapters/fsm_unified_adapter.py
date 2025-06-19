@@ -56,11 +56,11 @@ class FSMUnifiedAdapter(IUnifiedAgent):
             self._initialized = True
             self.status = AgentStatus.AVAILABLE
             
-            logger.info(f"FSM agent adapter {self.name} initialized successfully")
+            logger.info("FSM agent adapter {} initialized successfully", extra={"self_name": self.name})
             return True
             
         except Exception as e:
-            logger.error(f"Failed to initialize FSM agent adapter: {e}")
+            logger.error("Failed to initialize FSM agent adapter: {}", extra={"e": e})
             self.status = AgentStatus.ERROR
             return False
     
@@ -102,7 +102,7 @@ class FSMUnifiedAdapter(IUnifiedAgent):
             
         except Exception as e:
             execution_time = (datetime.now() - start_time).total_seconds()
-            logger.error(f"FSM agent execution failed: {e}")
+            logger.error("FSM agent execution failed: {}", extra={"e": e})
             
             return TaskResult(
                 task_id=task.task_id,
@@ -163,10 +163,10 @@ class FSMUnifiedAdapter(IUnifiedAgent):
         try:
             self.status = AgentStatus.OFFLINE
             self._initialized = False
-            logger.info(f"FSM agent adapter {self.name} shut down")
+            logger.info("FSM agent adapter {} shut down", extra={"self_name": self.name})
             return True
         except Exception as e:
-            logger.error(f"Error shutting down FSM agent adapter: {e}")
+            logger.error("Error shutting down FSM agent adapter: {}", extra={"e": e})
             return False
     
     async def health_check(self) -> Dict[str, Any]:
@@ -231,7 +231,7 @@ class UnifiedArchitectureBridge:
         
         if success:
             self.adapters[agent_id] = adapter
-            logger.info(f"FSM agent {name} registered with unified architecture")
+            logger.info("FSM agent {} registered with unified architecture", extra={"name": name})
         
         return success
     
@@ -306,7 +306,7 @@ async def example_fsm_integration():
         )
         
         if success:
-            print("FSM agent registered successfully")
+            logger.info("FSM agent registered successfully")
             
             # Create and submit a task
             task = await bridge.create_task_from_query(
@@ -316,11 +316,11 @@ async def example_fsm_integration():
             )
             
             result = await bridge.submit_task(task)
-            print(f"Task result: {result}")
+            logger.info("Task result: {}", extra={"result": result})
             
             # Get agent metrics
             metrics = await bridge.get_agent_metrics("fsm-agent-001")
-            print(f"Agent metrics: {metrics}")
+            logger.info("Agent metrics: {}", extra={"metrics": metrics})
         
     finally:
         await bridge.shutdown()

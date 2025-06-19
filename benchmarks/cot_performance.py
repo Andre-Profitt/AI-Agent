@@ -16,6 +16,10 @@ from datetime import datetime
 
 # Import the CoT system
 from src.core.optimized_chain_of_thought import (
+import logging
+
+logger = logging.getLogger(__name__)
+
     OptimizedChainOfThought,
     ReasoningPath,
     ComplexityAnalyzer
@@ -56,11 +60,11 @@ class CoTBenchmarkSuite:
     
     async def run_benchmarks(self, cot_system):
         """Run comprehensive benchmarks"""
-        print("Running CoT Performance Benchmarks...")
+        logger.info("Running CoT Performance Benchmarks...")
         print("=" * 60)
         
         for complexity, queries in self.query_sets.items():
-            print(f"\n{complexity.upper()} Queries:")
+            logger.info("\n{} Queries:", extra={"complexity_upper__": complexity.upper()})
             print("-" * 40)
             
             complexity_results = await self._benchmark_query_set(
@@ -75,7 +79,7 @@ class CoTBenchmarkSuite:
         results = []
         
         for query in queries:
-            print(f"  Benchmarking: {query[:50]}...")
+            logger.info("  Benchmarking: {}...", extra={"query_": query[})
             
             # Warm up
             await cot_system.reason(query)
@@ -268,7 +272,7 @@ class CoTBenchmarkSuite:
         plt.savefig('benchmarks/cot_performance_analysis.png', dpi=300, bbox_inches='tight')
         plt.close()
         
-        print(f"Visualizations saved to benchmarks/cot_performance_analysis.png")
+        logger.info("Visualizations saved to benchmarks/cot_performance_analysis.png")
     
     def _save_detailed_results(self, df, analysis):
         """Save detailed results to JSON"""
@@ -289,7 +293,7 @@ class CoTBenchmarkSuite:
         with open(filename, 'w') as f:
             json.dump(results_data, f, indent=2, default=str)
         
-        print(f"Detailed results saved to {filename}")
+        logger.info("Detailed results saved to {}", extra={"filename": filename})
 
 
 class MemoryProfiler:
@@ -303,12 +307,12 @@ class MemoryProfiler:
             import psutil
             self.process = psutil.Process(os.getpid())
         except ImportError:
-            print("Warning: psutil not available. Memory profiling disabled.")
+            logger.info("Warning: psutil not available. Memory profiling disabled.")
     
     async def profile_memory_usage(self, cot_system, num_queries=100):
         """Profile memory usage over multiple queries"""
         if not self.process:
-            print("Memory profiling not available")
+            logger.info("Memory profiling not available")
             return []
         
         import tracemalloc
@@ -356,14 +360,14 @@ class MemoryProfiler:
         last = memory_usage[-1]['memory_mb']
         growth_rate = (last - first) / first * 100
         
-        print(f"\nMemory Analysis:")
-        print(f"Initial memory: {first:.2f} MB")
-        print(f"Final memory: {last:.2f} MB")
-        print(f"Growth rate: {growth_rate:.1f}%")
+        logger.info("\nMemory Analysis:")
+        logger.info("Initial memory: {} MB", extra={"first": first})
+        logger.info("Final memory: {} MB", extra={"last": last})
+        logger.info("Growth rate: {}%", extra={"growth_rate": growth_rate})
         
         # Check for memory leaks
         if growth_rate > 50:
-            print("WARNING: High memory growth detected. Possible memory leak.")
+            logger.info("WARNING: High memory growth detected. Possible memory leak.")
         
         # Analyze top memory consumers
         if self.snapshots:
@@ -379,9 +383,9 @@ class MemoryProfiler:
         
         top_stats = last.compare_to(first, 'lineno')
         
-        print("\nTop memory consumers:")
+        logger.info("\nTop memory consumers:")
         for stat in top_stats[:10]:
-            print(f"{stat}")
+            logger.info("{}", extra={"stat": stat})
 
 
 class LoadTester:
@@ -393,7 +397,7 @@ class LoadTester:
     
     async def run_load_test(self, num_concurrent=10, total_queries=100):
         """Run load test with concurrent queries"""
-        print(f"Starting load test: {num_concurrent} concurrent, {total_queries} total")
+        logger.info("Starting load test: {} concurrent, {} total", extra={"num_concurrent": num_concurrent, "total_queries": total_queries})
         
         queries = self._generate_test_queries(total_queries)
         start_time = time.time()
@@ -540,7 +544,7 @@ class LoadTester:
 
 async def run_comprehensive_benchmarks():
     """Run all comprehensive benchmarks"""
-    print("🚀 Starting Comprehensive CoT Benchmark Suite")
+    logger.info("🚀 Starting Comprehensive CoT Benchmark Suite")
     print("=" * 60)
     
     # Create CoT system for benchmarking
@@ -556,42 +560,42 @@ async def run_comprehensive_benchmarks():
     )
     
     # Run performance benchmarks
-    print("\n📊 Running Performance Benchmarks...")
+    logger.info("\n📊 Running Performance Benchmarks...")
     benchmark_suite = CoTBenchmarkSuite()
     performance_results = await benchmark_suite.run_benchmarks(cot_system)
     
     # Run memory profiling
-    print("\n🧠 Running Memory Profiling...")
+    logger.info("\n🧠 Running Memory Profiling...")
     memory_profiler = MemoryProfiler()
     memory_results = await memory_profiler.profile_memory_usage(cot_system, num_queries=50)
     
     # Run load testing
-    print("\n⚡ Running Load Testing...")
+    logger.info("\n⚡ Running Load Testing...")
     load_tester = LoadTester(cot_system)
     load_results = await load_tester.run_load_test(num_concurrent=5, total_queries=50)
     
     # Print summary
     print("\n" + "=" * 60)
-    print("📈 BENCHMARK SUMMARY")
+    logger.info("📈 BENCHMARK SUMMARY")
     print("=" * 60)
     
-    print(f"\nPerformance Metrics:")
-    print(f"  Average Execution Time: {performance_results['summary']['avg_execution_time']:.3f}s")
-    print(f"  Average Confidence: {performance_results['summary']['avg_confidence']:.3f}")
-    print(f"  Cache Effectiveness: {performance_results['summary']['cache_effectiveness']:.1%}")
-    print(f"  Total Steps Generated: {performance_results['summary']['total_steps']}")
+    logger.info("\nPerformance Metrics:")
+    logger.info("  Average Execution Time: {}s", extra={"performance_results__summary___avg_execution_time_": performance_results['summary']['avg_execution_time']})
+    logger.info("  Average Confidence: {}", extra={"performance_results__summary___avg_confidence_": performance_results['summary']['avg_confidence']})
+    logger.info("  Cache Effectiveness: {}", extra={"performance_results__summary___cache_effectiveness_": performance_results['summary']['cache_effectiveness']})
+    logger.info("  Total Steps Generated: {}", extra={"performance_results__summary___total_steps_": performance_results['summary']['total_steps']})
     
-    print(f"\nLoad Test Results:")
-    print(f"  Success Rate: {load_results['summary']['success_rate']:.1f}%")
-    print(f"  Queries per Second: {load_results['summary']['queries_per_second']:.1f}")
-    print(f"  Average Query Duration: {load_results['performance']['avg_query_duration']:.3f}s")
+    logger.info("\nLoad Test Results:")
+    logger.info("  Success Rate: {}%", extra={"load_results__summary___success_rate_": load_results['summary']['success_rate']})
+    logger.info("  Queries per Second: {}", extra={"load_results__summary___queries_per_second_": load_results['summary']['queries_per_second']})
+    logger.info("  Average Query Duration: {}s", extra={"load_results__performance___avg_query_duration_": load_results['performance']['avg_query_duration']})
     
-    print(f"\nRecommendations:")
+    logger.info("\nRecommendations:")
     for rec in performance_results['recommendations']:
-        print(f"  [{rec['priority'].upper()}] {rec['message']}")
+        logger.info("  [{}] {}", extra={"rec__priority__upper__": rec['priority'].upper(), "rec__message_": rec['message']})
     
     for rec in load_results['recommendations']:
-        print(f"  [LOAD] {rec}")
+        logger.info("  [LOAD] {}", extra={"rec": rec})
     
     return {
         'performance': performance_results,

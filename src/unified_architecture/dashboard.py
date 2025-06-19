@@ -372,16 +372,16 @@ class CollaborationDashboard:
                 # Check for alerts
                 alerts = await self._get_active_alerts()
                 if alerts:
-                    logger.warning(f"Active alerts: {len(alerts)}")
+                    logger.warning("Active alerts: {}", extra={"len_alerts_": len(alerts)})
                     for alert in alerts:
-                        logger.warning(f"Alert: {alert['message']}")
+                        logger.warning("Alert: {}", extra={"alert__message_": alert['message']})
                 
                 await asyncio.sleep(self.monitoring_interval)
                 
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Error in monitoring loop: {e}")
+                logger.error("Error in monitoring loop: {}", extra={"e": e})
                 await asyncio.sleep(self.monitoring_interval)
     
     async def stop_monitoring(self):

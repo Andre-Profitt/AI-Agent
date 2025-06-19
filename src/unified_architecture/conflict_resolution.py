@@ -106,8 +106,8 @@ class ConflictResolver:
         self.stats["total_conflicts"] += 1
         self.stats["conflicts_by_type"][conflict.conflict_type.name] += 1
         
-        logger.info(f"Conflict reported: {conflict.conflict_type.name} "
-                   f"involving {conflict.involved_agents} (severity: {conflict.severity})")
+        logger.info("Conflict reported: {} "
+                   f"involving {} (severity: {})", extra={"conflict_conflict_type_name": conflict.conflict_type.name, "conflict_involved_agents": conflict.involved_agents, "conflict_severity": conflict.severity})
         
         # Attempt automatic resolution
         if self.auto_resolve_enabled:
@@ -126,7 +126,7 @@ class ConflictResolver:
         # Get resolution strategy
         strategy = self.resolution_strategies.get(conflict.conflict_type)
         if not strategy:
-            logger.error(f"No resolution strategy for {conflict.conflict_type}")
+            logger.error("No resolution strategy for {}", extra={"conflict_conflict_type": conflict.conflict_type})
             self.stats["failed_resolutions"] += 1
             return False
         
@@ -161,15 +161,15 @@ class ConflictResolver:
                 # Remove from active conflicts
                 del self.active_conflicts[conflict_id]
                 
-                logger.info(f"Conflict {conflict_id} resolved: {resolution.get('strategy', 'unknown')}")
+                logger.info("Conflict {} resolved: {}", extra={"conflict_id": conflict_id, "resolution_get__strategy____unknown__": resolution.get('strategy', 'unknown')})
                 return True
             else:
                 self.stats["failed_resolutions"] += 1
-                logger.warning(f"Failed to resolve conflict {conflict_id}")
+                logger.warning("Failed to resolve conflict {}", extra={"conflict_id": conflict_id})
                 return False
                 
         except Exception as e:
-            logger.error(f"Error resolving conflict {conflict_id}: {e}")
+            logger.error("Error resolving conflict {}: {}", extra={"conflict_id": conflict_id, "e": e})
             self.stats["failed_resolutions"] += 1
             return False
     
@@ -402,7 +402,7 @@ class ConflictResolver:
             "status": "active"
         }
         
-        logger.info(f"Started negotiation {negotiation_id} for conflict {conflict_id}")
+        logger.info("Started negotiation {} for conflict {}", extra={"negotiation_id": negotiation_id, "conflict_id": conflict_id})
         return negotiation_id
     
     async def submit_proposal(self, negotiation_id: str, agent_id: str, 
@@ -418,7 +418,7 @@ class ConflictResolver:
             "round": session["rounds"]
         }
         
-        logger.debug(f"Agent {agent_id} submitted proposal in negotiation {negotiation_id}")
+        logger.debug("Agent {} submitted proposal in negotiation {}", extra={"agent_id": agent_id, "negotiation_id": negotiation_id})
         return True
     
     async def evaluate_negotiation(self, negotiation_id: str) -> Optional[Dict[str, Any]]:
@@ -458,7 +458,7 @@ class ConflictResolver:
                               strategy: Callable):
         """Add a custom resolution strategy"""
         self.resolution_strategies[conflict_type] = strategy
-        logger.info(f"Added custom resolution strategy for {conflict_type.name}")
+        logger.info("Added custom resolution strategy for {}", extra={"conflict_type_name": conflict_type.name})
     
     def get_conflict_stats(self) -> Dict[str, Any]:
         """Get conflict resolution statistics"""
@@ -521,4 +521,4 @@ class ConflictResolver:
             del self.active_conflicts[conflict_id]
         
         if conflicts_to_remove:
-            logger.info(f"Cleaned up {len(conflicts_to_remove)} old conflicts") 
+            logger.info("Cleaned up {} old conflicts", extra={"len_conflicts_to_remove_": len(conflicts_to_remove)}) 

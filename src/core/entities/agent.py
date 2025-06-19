@@ -10,6 +10,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from src.shared.types import AgentConfig, ModelConfig
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 
 class AgentType(str, Enum):
@@ -62,7 +63,7 @@ class Agent:
     created_at: datetime = field(default_factory=datetime.now)
     last_active: datetime = field(default_factory=datetime.now)
     
-    def __post_init__(self):
+    def __post_init__(self) -> Any:
         """Validate agent after initialization."""
         if not self.name.strip():
             raise ValueError("Agent name cannot be empty")

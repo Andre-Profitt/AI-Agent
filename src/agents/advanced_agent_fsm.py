@@ -514,7 +514,7 @@ class RateLimiter:
         if len(self.requests) >= self.max_requests_per_minute:
             sleep_time = 60 - (now - self.requests[0])
             if sleep_time > 0:
-                logger.info(f"Rate limiting: sleeping for {sleep_time:.2f} seconds")
+                logger.info("Rate limiting: sleeping for {} seconds", extra={"sleep_time": sleep_time})
                 time.sleep(sleep_time)
         
         self.requests.append(now)
@@ -569,8 +569,8 @@ class ResilientAPIClient:
         correlation_id = correlation_id or str(uuid.uuid4())
         
         with correlation_context(correlation_id):
-            logger.info(f"Initiating API call to {self.base_url}/chat/completions", 
-                       extra={'model': model, 'message_count': len(messages)})
+            logger.info("Initiating API call to {}/chat/completions", 
+                       extra={})
             
             # Apply rate limiting
             self.rate_limiter.wait_if_needed()
@@ -585,8 +585,8 @@ class ResilientAPIClient:
             
             # CRITICAL: Enforce JSON response format
             if enforce_json:
-                payload["response_format"] = {"type": "json_object"}
-                logger.debug("JSON response format enforced")
+                payload["response_format"] = {}
+                logger.debug("JSON response format enforced", extra={"self_base_url": self.base_url, "_model_": 'model', "_model_": "model", "_type_": "type"})
                 
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
@@ -612,17 +612,17 @@ class ResilientAPIClient:
                 return result
                 
             except requests.exceptions.HTTPError as http_err:
-                logger.error(f"HTTP error occurred: {http_err}", 
-                           extra={'status_code': response.status_code, 'response_body': response.text[:500]})
+                logger.error("HTTP error occurred: {}", 
+                           extra={})
                 raise
             except requests.exceptions.ConnectionError as conn_err:
-                logger.error(f"Connection error occurred: {conn_err}")
+                logger.error("Connection error occurred: {}", extra={})
                 raise
             except requests.exceptions.Timeout as timeout_err:
-                logger.error(f"Request timed out: {timeout_err}")
+                logger.error("Request timed out: {}", extra={})
                 raise
             except requests.exceptions.RequestException as req_err:
-                logger.error(f"Unexpected request error: {req_err}")
+                logger.error("Unexpected request error: {}", extra={})
                 raise
 
 # --- ENHANCED PLANNING WITH STRUCTURED OUTPUT ---
@@ -638,7 +638,7 @@ class EnhancedPlanner:
         correlation_id = correlation_id or str(uuid.uuid4())
         
         with correlation_context(correlation_id):
-            logger.info("Creating structured plan", extra={'query_length': len(query)})
+            logger.info("Creating structured plan", extra={})
         
             # Create the prompt with explicit JSON requirement
             system_prompt = """You are a strategic planning engine. You MUST respond with a valid JSON object.
@@ -659,19 +659,19 @@ Create a step-by-step plan to answer the user's query. Your response must be a J
 }
 
 Available tools and their exact parameters:
-- web_researcher: {"query": "search query", "source": "wikipedia"}
-- semantic_search_tool: {"query": "search query", "filename": "knowledge_base.csv", "top_k": 3}
-- python_interpreter: {"code": "python code"}
-- tavily_search: {"query": "search query", "max_results": 3}
-- file_reader: {"filename": "path/to/file", "lines": -1}
-- video_analyzer: {"url": "video_url", "action": "download_info"}
-- gaia_video_analyzer: {"video_url": "googleusercontent_url"}
+- web_researcher: {}
+- semantic_search_tool: {}
+- python_interpreter: {}
+- tavily_search: {}
+- file_reader: {}
+- video_analyzer: {}
+- gaia_video_analyzer: {}
 
 Use EXACT parameter names. Respond ONLY with the JSON object, no markdown or explanations."""
 
             messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Create a plan to answer: {query}"}
+                {},
+                {}"}
             ]
             
             try:
@@ -685,19 +685,18 @@ Use EXACT parameter names. Respond ONLY with the JSON object, no markdown or exp
                 # Extract the content
                 plan_json = response["choices"][0]["message"]["content"]
                 
-                logger.debug("Raw plan response received", extra={'response_length': len(plan_json)})
+                logger.debug("Raw plan response received", extra={})
                 
                 # Parse and validate using Pydantic
                 try:
                     plan_response = PlanResponse.model_validate_json(plan_json)
                     logger.info("Plan validation successful", 
-                               extra={'total_steps': plan_response.total_steps, 
-                                     'confidence': plan_response.confidence})
+                               extra={})
                     return plan_response
                     
                 except ValidationError as e:
-                    logger.error("Plan validation failed", extra={'validation_errors': str(e), 'raw_response': plan_json[:500]})
-                    raise ValueError(f"Plan validation failed: {e}")
+                    logger.error("Plan validation failed", extra={})
+                    raise ValueError(f"Plan validation failed: {}", extra={"_http_err_": "http_err", "_timeout_err_": "timeout_err", "_req_err_": "req_err", "_query_length_": 'query_length', "_steps_": "steps", "_query_": "query", "_query_": "query", "_code_": "code", "_query_": "query", "_filename_": "filename", "_url_": "url", "_video_url_": "video_url", "_role_": "role", "_role_": "role", "_response_length_": 'response_length', "_total_steps_": 'total_steps', "_validation_errors_": 'validation_errors', "e": e})
                     
             except Exception as e:
                 logger.error("Plan creation failed", extra={'error': str(e)})
@@ -760,7 +759,7 @@ class FSMReActAgent:
             for tool in tools:
                 self.unified_registry.register(tool)
             
-            logger.info(f"Registered {len(tools)} tools with unified registry")
+            logger.info("Registered {} tools with unified registry", extra={"len_tools_": len(tools)})
             
         except ImportError:
             logger.warning("Unified tool registry not available, using local registry")
@@ -817,7 +816,7 @@ class FSMReActAgent:
             self.workflow_orchestrator = AgentOrchestrator()
             logger.info("Workflow orchestrator initialized")
         except Exception as e:
-            logger.warning(f"Workflow orchestrator initialization failed: {e}")
+            logger.warning("Workflow orchestrator initialization failed: {}", extra={"e": e})
             self.workflow_orchestrator = None
         
         # Setup logging
@@ -831,7 +830,7 @@ class FSMReActAgent:
         if self.workflow_orchestrator:
             asyncio.create_task(self._register_with_orchestrator())
         
-        logger.info(f"FSMReActAgent initialized with {len(tools)} tools and workflow orchestration")
+        logger.info("FSMReActAgent initialized with {} tools and workflow orchestration", extra={"len_tools_": len(tools)})
     
     async def _register_with_orchestrator(self):
         """Register this agent with the workflow orchestrator"""
@@ -839,7 +838,7 @@ class FSMReActAgent:
             await self.workflow_orchestrator.register_fsm_agent('default', self)
             logger.info("FSM agent registered with workflow orchestrator")
         except Exception as e:
-            logger.error(f"Failed to register with orchestrator: {e}")
+            logger.error("Failed to register with orchestrator: {}", extra={"e": e})
     
     def select_best_tool(self, task: str, available_tools: List[BaseTool]) -> Optional[BaseTool]:
         """Select the best tool for a task using introspection and reliability metrics."""
@@ -863,7 +862,7 @@ class FSMReActAgent:
                     return max(scored_tools, key=lambda x: x[1])[0]
                     
             except Exception as e:
-                logger.warning(f"Tool introspection failed: {e}")
+                logger.warning("Tool introspection failed: {}", extra={"e": e})
         
         # Fallback to reliability-based selection
         if self.unified_registry:
@@ -912,7 +911,7 @@ class FSMReActAgent:
             }
             
         except Exception as e:
-            logger.error(f"Workflow execution failed: {e}")
+            logger.error("Workflow execution failed: {}", extra={"e": e})
             return {
                 'workflow_id': None,
                 'execution_id': None,
@@ -1275,7 +1274,7 @@ class AnswerSynthesizer:
             return answer
             
         except Exception as e:
-            logger.error(f"Answer synthesis failed: {e}")
+            logger.error("Answer synthesis failed: {}", extra={"e": e})
             return self.fallback_synthesis(results, question)
     
     def extract_facts(self, result: Dict) -> List[str]:
@@ -1536,7 +1535,7 @@ class AnswerSynthesizer:
                 return "I couldn't find a satisfactory answer to your question."
                 
         except Exception as e:
-            logger.error(f"Fallback synthesis failed: {e}")
+            logger.error("Fallback synthesis failed: {}", extra={"e": e})
             return "I encountered an error while processing your question. Please try again."
 
 class GAIAAgentState(EnhancedAgentState):

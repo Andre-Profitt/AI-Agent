@@ -8,6 +8,7 @@ import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 import asyncio
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 try:
     from .config.integrations import integration_config
@@ -24,12 +25,28 @@ logger = logging.getLogger(__name__)
 class IntegrationManager:
     """Manages initialization and coordination of all integrations"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.config = integration_config
         self.components = {}
         self._initialized = False
         
-    async def initialize_all(self):
+
+    async def _get_safe_config_value(self, key: str) -> str:
+        """Safely get configuration value with error handling"""
+        try:
+            parts = key.split('_')
+            if len(parts) == 2:
+                service, attr = parts
+                config_obj = getattr(self.config, service, None)
+                if config_obj:
+                    return getattr(config_obj, attr, "")
+            
+            # Direct attribute access
+            return getattr(self.config, key, "")
+        except Exception as e:
+            logger.error("Config access failed", extra={"key": key, "error": str(e)})
+            return ""
+    async def initialize_all(self) -> Any:
         """Initialize all components in correct order"""
         
         if self._initialized:
@@ -45,7 +62,7 @@ class IntegrationManager:
         
         try:
             # 1. Initialize Supabase if configured
-            if self.config.supabase.is_configured():
+            if await await self._get_safe_config_value("supabase_is_configured_safe")():
                 logger.info("Initializing Supabase components...")
                 from .database_enhanced import initialize_supabase_enhanced
                 self.components['supabase'] = await initialize_supabase_enhanced()
@@ -54,7 +71,7 @@ class IntegrationManager:
                 logger.info("⚠️ Supabase not configured, skipping")
             
             # 2. Initialize LlamaIndex
-            if self.config.llamaindex.enable_hierarchical_indexing:
+            if await self._get_safe_config_value("llamaindex_enable_hierarchical_indexing"):
                 logger.info("Initializing LlamaIndex components...")
                 from .llamaindex_enhanced import create_gaia_knowledge_base
                 self.components['llamaindex'] = create_gaia_knowledge_base()
@@ -63,7 +80,7 @@ class IntegrationManager:
                 logger.info("⚠️ LlamaIndex disabled, skipping")
             
             # 3. Initialize LangChain
-            if self.config.langchain.enable_memory:
+            if await self._get_safe_config_value("langchain_enable_memory"):
                 logger.info("Initializing LangChain components...")
                 try:
                     from .langchain_enhanced import initialize_enhanced_agent
@@ -71,12 +88,12 @@ class IntegrationManager:
                     self.components['langchain'] = initialize_enhanced_agent(tools)
                     logger.info("✅ LangChain components initialized")
                 except ImportError as e:
-                    logger.warning(f"⚠️ LangChain not available: {e}")
+                    logger.warning("⚠️ LangChain not available: {}", extra={"e": e})
             else:
                 logger.info("⚠️ LangChain disabled, skipping")
             
             # 4. Initialize CrewAI
-            if self.config.crewai.enable_multi_agent:
+            if await self._get_safe_config_value("crewai_enable_multi_agent"):
                 logger.info("Initializing CrewAI components...")
                 try:
                     from .crew_enhanced import initialize_crew_enhanced
@@ -84,7 +101,7 @@ class IntegrationManager:
                     self.components['crewai'] = initialize_crew_enhanced(tools)
                     logger.info("✅ CrewAI components initialized")
                 except ImportError as e:
-                    logger.warning(f"⚠️ CrewAI not available: {e}")
+                    logger.warning("⚠️ CrewAI not available: {}", extra={"e": e})
             else:
                 logger.info("⚠️ CrewAI disabled, skipping")
             
@@ -94,7 +111,7 @@ class IntegrationManager:
             return self.components
             
         except Exception as e:
-            logger.error(f"❌ Integration initialization failed: {e}")
+            logger.error("❌ Integration initialization failed: {}", extra={"e": e})
             raise
     
     def _get_available_tools(self) -> List[Any]:
@@ -114,10 +131,10 @@ class IntegrationManager:
                 WeatherTool()
             ])
         except ImportError as e:
-            logger.warning(f"Could not load basic tools: {e}")
+            logger.warning("Could not load basic tools: {}", extra={"e": e})
         
         # Add GAIA tools if enabled
-        if self.config.gaia.enable_gaia_tools:
+        if await self._get_safe_config_value("gaia_enable_gaia_tools"):
             try:
                 from .gaia.tools.gaia_specialized import (
                     GAIAVideoAnalyzer, GAIAChessLogicTool, 
@@ -130,7 +147,7 @@ class IntegrationManager:
                     GAIAMusicAnalyzer()
                 ])
             except ImportError as e:
-                logger.warning(f"Could not load GAIA tools: {e}")
+                logger.warning("Could not load GAIA tools: {}", extra={"e": e})
         
         return tools
     
@@ -155,7 +172,7 @@ class IntegrationManager:
         
         return status
     
-    async def shutdown(self):
+    async def shutdown(self) -> Any:
         """Gracefully shutdown all components"""
         logger.info("Shutting down integrations...")
         
@@ -167,7 +184,7 @@ class IntegrationManager:
                     await connection_pool.close()
                 logger.info("✅ Supabase connections closed")
             except Exception as e:
-                logger.error(f"❌ Error closing Supabase connections: {e}")
+                logger.error("❌ Error closing Supabase connections: {}", extra={"e": e})
         
         # Clear components
         self.components.clear()

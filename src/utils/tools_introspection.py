@@ -9,6 +9,10 @@ from dataclasses import dataclass
 
 from langchain_core.tools import StructuredTool, BaseTool
 from pydantic import BaseModel, Field
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 
 class ToolSchemaInfo(BaseModel):
@@ -139,8 +143,8 @@ class ToolIntrospector:
                 {"query": "weather in New York", "description": "Get weather information"}
             ],
             "python_interpreter": [
-                {"code": "print('Hello, World!')", "description": "Simple print statement"},
-                {"code": "import math; print(math.pi)", "description": "Use math library"}
+                {"code": "logger.info("Hello, World!")", "description": "Simple print statement"},
+                {"code": "import math; logger.info("Value: %s", math.pi)", "description": "Use math library"}
             ],
             "chess_logic_tool": [
                 {"fen_string": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "description": "Starting position"},

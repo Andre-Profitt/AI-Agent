@@ -8,6 +8,10 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 # Add src to path and set up module structure
 src_path = Path(__file__).parent / "src"
@@ -18,108 +22,108 @@ os.chdir(src_path)
 
 async def test_config_imports():
     """Test that configuration imports work correctly"""
-    print("🔍 Testing configuration imports...")
+    logger.info("🔍 Testing configuration imports...")
     
     try:
         from config.integrations import integration_config
-        print("✅ Integration config imported successfully")
+        logger.info("✅ Integration config imported successfully")
         
         # Test config validation
         is_valid, issues = integration_config.validate()
-        print(f"✅ Config validation: {'valid' if is_valid else 'invalid'}")
+        logger.info("✅ Config validation: {}", extra={"_valid__if_is_valid_else__invalid_": 'valid' if is_valid else 'invalid'})
         if issues:
-            print(f"⚠️ Issues: {issues}")
+            logger.info("⚠️ Issues: {}", extra={"issues": issues})
         
         return True
     except Exception as e:
-        print(f"❌ Config import failed: {e}")
+        logger.info("❌ Config import failed: {}", extra={"e": e})
         return False
 
 async def test_llamaindex_fixes():
     """Test LlamaIndex configuration fixes"""
-    print("\n🔍 Testing LlamaIndex fixes...")
+    logger.info("\n🔍 Testing LlamaIndex fixes...")
     
     try:
         from llamaindex_enhanced import create_gaia_knowledge_base, LLAMAINDEX_AVAILABLE
-        print(f"✅ LlamaIndex enhanced imported (available: {LLAMAINDEX_AVAILABLE})")
+        logger.info("✅ LlamaIndex enhanced imported (available: {})", extra={"LLAMAINDEX_AVAILABLE": LLAMAINDEX_AVAILABLE})
         
         if LLAMAINDEX_AVAILABLE:
             # Test knowledge base creation
             kb = create_gaia_knowledge_base()
-            print(f"✅ Knowledge base created: {type(kb).__name__}")
+            logger.info("✅ Knowledge base created: {}", extra={"type_kb____name__": type(kb).__name__})
         
         return True
     except Exception as e:
-        print(f"❌ LlamaIndex test failed: {e}")
+        logger.info("❌ LlamaIndex test failed: {}", extra={"e": e})
         return False
 
 async def test_database_fixes():
     """Test database configuration fixes"""
-    print("\n🔍 Testing database fixes...")
+    logger.info("\n🔍 Testing database fixes...")
     
     try:
         from database_enhanced import initialize_supabase_enhanced
         
         # Test initialization (will fail if not configured, but should not crash)
         if os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_KEY"):
-            print("✅ Supabase configured, testing initialization...")
+            logger.info("✅ Supabase configured, testing initialization...")
             try:
                 components = await initialize_supabase_enhanced()
-                print("✅ Supabase initialization successful")
+                logger.info("✅ Supabase initialization successful")
             except Exception as e:
-                print(f"⚠️ Supabase initialization failed (expected if not fully configured): {e}")
+                logger.info("⚠️ Supabase initialization failed (expected if not fully configured): {}", extra={"e": e})
         else:
-            print("⚠️ Supabase not configured, skipping initialization test")
+            logger.info("⚠️ Supabase not configured, skipping initialization test")
         
         return True
     except Exception as e:
-        print(f"❌ Database test failed: {e}")
+        logger.info("❌ Database test failed: {}", extra={"e": e})
         return False
 
 async def test_integration_manager():
     """Test integration manager"""
-    print("\n🔍 Testing integration manager...")
+    logger.info("\n🔍 Testing integration manager...")
     
     try:
         from integration_manager import IntegrationManager
         
         manager = IntegrationManager()
-        print("✅ Integration manager created")
+        logger.info("✅ Integration manager created")
         
         # Test status without initialization
         status = manager.get_status()
-        print(f"✅ Status check: {status['initialized']}")
+        logger.info("✅ Status check: {}", extra={"status__initialized_": status['initialized']})
         
         return True
     except Exception as e:
-        print(f"❌ Integration manager test failed: {e}")
+        logger.info("❌ Integration manager test failed: {}", extra={"e": e})
         return False
 
 async def test_health_check():
     """Test health check functionality"""
-    print("\n🔍 Testing health check...")
+    logger.info("\n🔍 Testing health check...")
     
     try:
         from health_check import get_health_summary
         
         summary = get_health_summary()
-        print("✅ Health summary generated")
-        print(f"   Config valid: {summary['config_valid']}")
-        print(f"   Supabase configured: {summary['supabase_configured']}")
-        print(f"   API keys: {summary['api_keys_available']}")
+        logger.info("✅ Health summary generated")
+        logger.info("   Config valid: {}", extra={"summary__config_valid_": summary['config_valid']})
+        logger.info("   Supabase configured: {}", extra={"summary__supabase_configured_": summary['supabase_configured']})
+        logger.info("   API keys: {}", extra={"summary__api_keys_available_": summary['api_keys_available']})
         
         return True
     except Exception as e:
-        print(f"❌ Health check test failed: {e}")
+        logger.info("❌ Health check test failed: {}", extra={"e": e})
         return False
 
 async def test_config_cli():
     """Test configuration CLI"""
-    print("\n🔍 Testing configuration CLI...")
+    logger.info("\n🔍 Testing configuration CLI...")
     
     try:
         from config_cli import cli
-        print("✅ Config CLI imported successfully")
+        logger.info("✅ Config CLI imported successfully")
         
         # Test that CLI commands exist
         commands = [cmd.name for cmd in cli.commands]
@@ -127,18 +131,18 @@ async def test_config_cli():
         
         for cmd in expected_commands:
             if cmd in commands:
-                print(f"✅ CLI command '{cmd}' available")
+                logger.info("✅ CLI command '{}' available", extra={"cmd": cmd})
             else:
-                print(f"⚠️ CLI command '{cmd}' missing")
+                logger.info("⚠️ CLI command '{}' missing", extra={"cmd": cmd})
         
         return True
     except Exception as e:
-        print(f"❌ Config CLI test failed: {e}")
+        logger.info("❌ Config CLI test failed: {}", extra={"e": e})
         return False
 
 async def main():
     """Run all tests"""
-    print("🚀 Starting integration fixes test suite...\n")
+    logger.info("🚀 Starting integration fixes test suite...\n")
     
     tests = [
         test_config_imports,
@@ -155,18 +159,18 @@ async def main():
             result = await test()
             results.append(result)
         except Exception as e:
-            print(f"❌ Test {test.__name__} crashed: {e}")
+            logger.info("❌ Test {} crashed: {}", extra={"test___name__": test.__name__, "e": e})
             results.append(False)
     
-    print(f"\n📊 Test Results:")
-    print(f"   Passed: {sum(results)}/{len(results)}")
-    print(f"   Failed: {len(results) - sum(results)}/{len(results)}")
+    logger.info("\n📊 Test Results:")
+    logger.info("   Passed: {}/{}", extra={"sum_results_": sum(results), "len_results_": len(results)})
+    logger.info("   Failed: {}/{}", extra={"len_results____sum_results_": len(results) - sum(results), "len_results_": len(results)})
     
     if all(results):
-        print("🎉 All tests passed! Integration fixes are working correctly.")
+        logger.info("🎉 All tests passed! Integration fixes are working correctly.")
         return 0
     else:
-        print("⚠️ Some tests failed. Check the output above for details.")
+        logger.info("⚠️ Some tests failed. Check the output above for details.")
         return 1
 
 if __name__ == "__main__":

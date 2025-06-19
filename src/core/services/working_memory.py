@@ -13,6 +13,11 @@ import anthropic
 from pydantic import BaseModel, Field
 
 from src.config import config
+import logging
+from typing import Optional, Dict, Any, List, Union, Tuple
+
+logger = logging.getLogger(__name__)
+
 
 
 @dataclass
@@ -64,7 +69,7 @@ class WorkingMemoryState:
 class WorkingMemoryManager:
     """Manages working memory updates and compression"""
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None) -> None:
         """Initialize with optional API key"""
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
         if self.api_key:
@@ -129,7 +134,7 @@ class WorkingMemoryManager:
             return new_state
             
         except Exception as e:
-            print(f"Error updating working memory: {e}")
+            logger.info("Error updating working memory: {}", extra={"e": e})
             return self._heuristic_update(user_message, assistant_response, tool_calls)
     
     def _create_update_prompt(
@@ -276,7 +281,7 @@ Respond with ONLY the compressed JSON object."""
             return WorkingMemoryState.from_json(compressed_json)
             
         except Exception as e:
-            print(f"Error compressing memory: {e}")
+            logger.info("Error compressing memory: {}", extra={"e": e})
             return self._simple_compress(max_tokens)
     
     def _simple_compress(self, max_tokens: int) -> WorkingMemoryState:
@@ -303,7 +308,7 @@ Respond with ONLY the compressed JSON object."""
         """Get formatted memory for inclusion in prompts"""
         return self.current_state.get_context_string()
     
-    def clear_memory(self):
+    def clear_memory(self) -> Any:
         """Clear working memory and start fresh"""
         self.current_state = WorkingMemoryState()
         self.update_history.clear()
@@ -337,11 +342,11 @@ if __name__ == "__main__":
         }]
     )
     
-    print("Working Memory State:")
-    print(memory.current_state.to_json())
+    logger.info("Working Memory State:")
+    logger.info("Result: %s", memory.current_state.to_json())
     
-    print("\nMemory Context String:")
-    print(memory.get_memory_for_prompt())
+    logger.info("\nMemory Context String:")
+    logger.info("Result: %s", memory.get_memory_for_prompt())
     
-    print("\nMemory Stats:")
-    print(memory.get_memory_stats()) 
+    logger.info("\nMemory Stats:")
+    logger.info("Result: %s", memory.get_memory_stats()) 

@@ -702,7 +702,7 @@ def main() -> None:
             f.write(output)
         logger.info(f"Report written to {args.output}")
     elif args.json or args.markdown or args.html:
-        print(output)
+        logger.info("Value", extra={"value": output})
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Any, Callable
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
 import logging
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 try:
     import aioredis
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 class StateManager:
     """Unified state management across different architectures"""
     
-    def __init__(self, redis_url: Optional[str] = None):
+    def __init__(self, redis_url: Optional[str] = None) -> None:
         self.local_state: Dict[str, Any] = {}
         self.state_history: deque = deque(maxlen=1000)
         self.redis_url = redis_url
@@ -45,14 +46,14 @@ class StateManager:
         self.compression_enabled = True
         self.default_ttl = 86400  # 24 hours
         
-    async def initialize(self):
+    async def initialize(self) -> Any:
         """Initialize state manager with Redis connection"""
         if self.enable_redis:
             try:
                 self.redis_client = await aioredis.create_redis_pool(self.redis_url)
                 logger.info("Connected to Redis for distributed state management")
             except Exception as e:
-                logger.error(f"Failed to connect to Redis: {e}")
+                logger.error("Failed to connect to Redis: {}", extra={"e": e})
                 self.enable_redis = False
         else:
             logger.info("Using local state management only")
@@ -69,13 +70,13 @@ class StateManager:
                     else:
                         return json.loads(value.decode())
             except Exception as e:
-                logger.error(f"Redis get error: {e}")
+                logger.error("Redis get error: {}", extra={"e": e})
         
         # Fallback to local state
         return self.local_state.get(key, default)
     
     async def set_state(self, key: str, value: Any, ttl: Optional[int] = None,
-                       metadata: Optional[Dict[str, Any]] = None):
+                       metadata: Optional[Dict[str, Any]] = None) -> Any:
         """Set state value in both local and distributed storage"""
         async with self.state_locks[key]:
             # Update local state
@@ -112,12 +113,12 @@ class StateManager:
                     else:
                         await self.redis_client.set(key, packed_value)
                 except Exception as e:
-                    logger.error(f"Redis set error: {e}")
+                    logger.error("Redis set error: {}", extra={"e": e})
             
             # Notify listeners
             await self._notify_listeners(key, old_value, value)
     
-    async def delete_state(self, key: str):
+    async def delete_state(self, key: str) -> bool:
         """Delete state from storage"""
         async with self.state_locks[key]:
             # Remove from local state
@@ -132,7 +133,7 @@ class StateManager:
                 try:
                     await self.redis_client.delete(key)
                 except Exception as e:
-                    logger.error(f"Redis delete error: {e}")
+                    logger.error("Redis delete error: {}", extra={"e": e})
             
             # Record in history
             self.state_history.append({
@@ -147,28 +148,28 @@ class StateManager:
             await self._notify_listeners(key, old_value, None)
     
     async def update_state(self, key: str, update_func: Callable[[Any], Any],
-                          ttl: Optional[int] = None):
+                          ttl: Optional[int] = None) -> bool:
         """Update state using a function"""
         async with self.state_locks[key]:
             current_value = await self.get_state(key)
             new_value = update_func(current_value)
             await self.set_state(key, new_value, ttl)
     
-    def subscribe(self, key: str, callback: Callable):
+    def subscribe(self, key: str, callback: Callable) -> Any:
         """Subscribe to state changes"""
         self.change_listeners[key].append(callback)
-        logger.debug(f"Added listener for key: {key}")
+        logger.debug("Added listener for key: {}", extra={"key": key})
     
-    def unsubscribe(self, key: str, callback: Callable):
+    def unsubscribe(self, key: str, callback: Callable) -> Any:
         """Unsubscribe from state changes"""
         if key in self.change_listeners:
             try:
                 self.change_listeners[key].remove(callback)
-                logger.debug(f"Removed listener for key: {key}")
+                logger.debug("Removed listener for key: {}", extra={"key": key})
             except ValueError:
-                logger.warning(f"Callback not found for key: {key}")
+                logger.warning("Callback not found for key: {}", extra={"key": key})
     
-    async def _notify_listeners(self, key: str, old_value: Any, new_value: Any):
+    async def _notify_listeners(self, key: str, old_value: Any, new_value: Any) -> Any:
         """Notify all listeners of state change"""
         if key not in self.change_listeners:
             return
@@ -180,7 +181,7 @@ class StateManager:
                 else:
                     callback(key, old_value, new_value)
             except Exception as e:
-                logger.error(f"Listener error for key {key}: {e}")
+                logger.error("Listener error for key {}: {}", extra={"key": key, "e": e})
     
     async def create_checkpoint(self, checkpoint_name: Optional[str] = None) -> str:
         """Create a state checkpoint"""
@@ -195,7 +196,7 @@ class StateManager:
         
         # Store checkpoint
         await self.set_state(f"checkpoint:{checkpoint_id}", checkpoint_data, ttl=604800)  # 7 days
-        logger.info(f"Created checkpoint: {checkpoint_id}")
+        logger.info("Created checkpoint: {}", extra={"checkpoint_id": checkpoint_id})
         return checkpoint_id
     
     async def restore_checkpoint(self, checkpoint_id: str) -> bool:
@@ -205,10 +206,10 @@ class StateManager:
         if checkpoint_data:
             self.local_state = checkpoint_data["state"]
             self.state_metadata = checkpoint_data.get("metadata", {})
-            logger.info(f"Restored checkpoint: {checkpoint_id}")
+            logger.info("Restored checkpoint: {}", extra={"checkpoint_id": checkpoint_id})
             return True
         
-        logger.error(f"Checkpoint not found: {checkpoint_id}")
+        logger.error("Checkpoint not found: {}", extra={"checkpoint_id": checkpoint_id})
         return False
     
     async def list_checkpoints(self) -> List[Dict[str, Any]]:
@@ -228,7 +229,7 @@ class StateManager:
                             "state_size": len(checkpoint_data["state"])
                         })
             except Exception as e:
-                logger.error(f"Error listing checkpoints: {e}")
+                logger.error("Error listing checkpoints: {}", extra={"e": e})
         
         # Sort by timestamp
         checkpoints.sort(key=lambda x: x["timestamp"], reverse=True)
@@ -260,11 +261,11 @@ class StateManager:
                 redis_keys = await self.redis_client.keys(pattern)
                 keys.extend([k.decode() for k in redis_keys])
             except Exception as e:
-                logger.error(f"Error listing Redis keys: {e}")
+                logger.error("Error listing Redis keys: {}", extra={"e": e})
         
         return sorted(set(keys))
     
-    async def cleanup_expired(self):
+    async def cleanup_expired(self) -> None:
         """Clean up expired state entries"""
         current_time = time.time()
         expired_keys = []
@@ -279,7 +280,7 @@ class StateManager:
             await self.delete_state(key)
         
         if expired_keys:
-            logger.info(f"Cleaned up {len(expired_keys)} expired state entries")
+            logger.info("Cleaned up {} expired state entries", extra={"len_expired_keys_": len(expired_keys)})
     
     async def get_state_stats(self) -> Dict[str, Any]:
         """Get statistics about state usage"""
@@ -298,7 +299,7 @@ class StateManager:
                     "total_commands_processed": info.get("total_commands_processed", 0)
                 }
             except Exception as e:
-                logger.error(f"Error getting Redis stats: {e}")
+                logger.error("Error getting Redis stats: {}", extra={"e": e})
         
         return {
             "total_keys": total_keys,
@@ -310,7 +311,7 @@ class StateManager:
             "compression_enabled": self.compression_enabled
         }
     
-    async def shutdown(self):
+    async def shutdown(self) -> Any:
         """Shutdown the state manager"""
         if self.redis_client:
             self.redis_client.close()

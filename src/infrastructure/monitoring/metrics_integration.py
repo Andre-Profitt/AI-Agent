@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 
 from src.infrastructure.monitoring.metrics import (
+from typing import Optional, Dict, Any, List, Union, Tuple
     MetricsCollector, record_agent_registration, record_task_execution,
     record_task_duration, record_agent_availability, record_task_submission,
     record_task_completion, record_error, update_resource_utilization,
@@ -27,14 +28,14 @@ class MetricsIntegration:
     Integrates metrics collection with the platform and agents
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
         self.metrics_collector = MetricsCollector()
         self._agent_metrics: Dict[str, Dict[str, Any]] = {}
         self._task_metrics: Dict[str, Dict[str, Any]] = {}
         self._platform_metrics: Dict[str, Any] = {}
     
-    async def record_agent_activity(self, agent: IUnifiedAgent, activity_type: str, **kwargs):
+    async def record_agent_activity(self, agent: IUnifiedAgent, activity_type: str, **kwargs) -> Any:
         """Record agent activity metrics"""
         try:
             agent_id = str(agent.agent_id)
@@ -86,12 +87,12 @@ class MetricsIntegration:
                     self._agent_metrics[agent_id]["errors"] = \
                         self._agent_metrics[agent_id].get("errors", 0) + 1
             
-            self.logger.debug(f"Recorded {activity_type} for agent {agent_id}")
+            self.logger.debug("Recorded {} for agent {}", extra={"activity_type": activity_type, "agent_id": agent_id})
             
         except Exception as e:
-            self.logger.error(f"Failed to record agent activity: {e}")
+            self.logger.error("Failed to record agent activity: {}", extra={"e": e})
     
-    async def record_task_activity(self, task: UnifiedTask, activity_type: str, **kwargs):
+    async def record_task_activity(self, task: UnifiedTask, activity_type: str, **kwargs) -> Any:
         """Record task activity metrics"""
         try:
             task_id = str(task.task_id)
@@ -134,12 +135,12 @@ class MetricsIntegration:
                     self._task_metrics[task_id]["status"] = "failed"
                     self._task_metrics[task_id]["error"] = error
             
-            self.logger.debug(f"Recorded {activity_type} for task {task_id}")
+            self.logger.debug("Recorded {} for task {}", extra={"activity_type": activity_type, "task_id": task_id})
             
         except Exception as e:
-            self.logger.error(f"Failed to record task activity: {e}")
+            self.logger.error("Failed to record task activity: {}", extra={"e": e})
     
-    async def record_platform_metrics(self, platform_stats: Dict[str, Any]):
+    async def record_platform_metrics(self, platform_stats: Dict[str, Any]) -> Any:
         """Record platform-level metrics"""
         try:
             # Update task queue sizes
@@ -167,10 +168,10 @@ class MetricsIntegration:
             self.logger.debug("Recorded platform metrics")
             
         except Exception as e:
-            self.logger.error(f"Failed to record platform metrics: {e}")
+            self.logger.error("Failed to record platform metrics: {}", extra={"e": e})
     
     @asynccontextmanager
-    async def track_agent_task(self, agent: IUnifiedAgent, task: UnifiedTask):
+    async def track_agent_task(self, agent: IUnifiedAgent, task: UnifiedTask) -> Any:
         """Context manager to track agent task execution"""
         start_time = time.time()
         task_id = str(task.task_id)
@@ -281,11 +282,11 @@ def get_metrics_integration() -> MetricsIntegration:
 class MetricsMiddleware:
     """Middleware for automatic metrics collection"""
     
-    def __init__(self, metrics_integration: MetricsIntegration):
+    def __init__(self, metrics_integration: MetricsIntegration) -> None:
         self.metrics_integration = metrics_integration
         self.logger = logging.getLogger(__name__)
     
-    async def track_agent_operation(self, agent: IUnifiedAgent, operation: str, **kwargs):
+    async def track_agent_operation(self, agent: IUnifiedAgent, operation: str, **kwargs) -> Any:
         """Track agent operations automatically"""
         try:
             if operation == "initialize":
@@ -303,10 +304,10 @@ class MetricsMiddleware:
                     error_type=kwargs.get("error_type", "unknown")
                 )
         except Exception as e:
-            self.logger.error(f"Metrics middleware error: {e}")
+            self.logger.error("Metrics middleware error: {}", extra={"e": e})
             raise
     
-    async def track_platform_operation(self, operation: str, **kwargs):
+    async def track_platform_operation(self, operation: str, **kwargs) -> Any:
         """Track platform operations automatically"""
         try:
             if operation == "stats_update":
@@ -317,15 +318,15 @@ class MetricsMiddleware:
                 if task:
                     await self.metrics_integration.record_task_activity(task, "submission")
         except Exception as e:
-            self.logger.error(f"Platform metrics middleware error: {e}")
+            self.logger.error("Platform metrics middleware error: {}", extra={"e": e})
             raise
 
 
 # Decorator for automatic metrics collection
-def with_metrics(operation_type: str):
+def with_metrics(operation_type: str) -> Any:
     """Decorator to automatically collect metrics for operations"""
-    def decorator(func):
-        async def wrapper(*args, **kwargs):
+    def decorator(func) -> Any:
+        async def wrapper(*args, **kwargs) -> Any:
             metrics = get_metrics_integration()
             start_time = time.time()
             

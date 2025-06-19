@@ -8,9 +8,10 @@ import asyncio
 
 from src.core.entities.session import Session
 from src.core.interfaces.session_repository import SessionRepository
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 class InMemorySessionRepository(SessionRepository):
-    def __init__(self):
+    def __init__(self) -> None:
         self._sessions: Dict[UUID, Session] = {}
 
     async def save(self, session: Session) -> Session:

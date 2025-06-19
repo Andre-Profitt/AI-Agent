@@ -87,7 +87,7 @@ class State:
             
         except Exception as e:
             self.metrics.failure_count += 1
-            logger.error(f"Error executing state {self.name}: {e}")
+            logger.error("Error executing state {}: {}", extra={"self_name": self.name, "e": e})
             raise
         
         finally:
@@ -341,7 +341,7 @@ class HierarchicalFSM:
         self.context = context.copy()
         self.started = True
         
-        logger.info(f"FSM '{self.name}' started in state '{initial_state}'")
+        logger.info("FSM '{}' started in state '{}'", extra={"self_name": self.name, "initial_state": initial_state})
     
     def transition_to(self, target_state: str, context: Dict[str, Any]) -> bool:
         """Transition to a target state"""
@@ -349,13 +349,13 @@ class HierarchicalFSM:
             raise RuntimeError("FSM not started")
         
         if target_state not in self.states:
-            logger.error(f"Target state '{target_state}' not found")
+            logger.error("Target state '{}' not found", extra={"target_state": target_state})
             return False
         
         # Find transition
         transition = self._find_transition(self.current_state.name, target_state)
         if not transition:
-            logger.error(f"No transition from '{self.current_state.name}' to '{target_state}'")
+            logger.error("No transition from '{}' to '{}'", extra={"self_current_state_name": self.current_state.name, "target_state": target_state})
             return False
         
         # Calculate probability
@@ -382,11 +382,11 @@ class HierarchicalFSM:
             # Record transition usage
             transition.record_usage(True)
             
-            logger.info(f"Transitioned from '{old_state}' to '{target_state}' (p={probability:.3f})")
+            logger.info("Transitioned from '{}' to '{}' (p={})", extra={"old_state": old_state, "target_state": target_state, "probability": probability})
             return True
         else:
             transition.record_usage(False)
-            logger.info(f"Transition to '{target_state}' rejected (p={probability:.3f})")
+            logger.info("Transition to '{}' rejected (p={})", extra={"target_state": target_state, "probability": probability})
             return False
     
     def _find_transition(self, from_state: str, to_state: str) -> Optional[ProbabilisticTransition]:
@@ -534,8 +534,8 @@ class HierarchicalFSM:
             plt.savefig(filename, dpi=300, bbox_inches='tight')
             plt.close()
             
-            logger.info(f"FSM visualization saved to {filename}")
+            logger.info("FSM visualization saved to {}", extra={"filename": filename})
             
         except Exception as e:
-            logger.error(f"Failed to save visualization: {e}")
+            logger.error("Failed to save visualization: {}", extra={"e": e})
             raise

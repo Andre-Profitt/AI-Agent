@@ -170,24 +170,24 @@ class BaseAgent(ABC):
             
             for field in required_fields:
                 if field not in config:
-                    self.logger.error(f"Missing required configuration field: {field}")
+                    self.logger.error("Missing required configuration field: {}", extra={"field": field})
                     return False
             
             return True
             
         except Exception as e:
-            self.logger.error(f"Configuration validation failed: {e}")
+            self.logger.error("Configuration validation failed: {}", extra={"e": e})
             return False
     
     def _mark_initialized(self) -> None:
         """Mark the agent as initialized."""
         self._is_initialized = True
-        self.logger.info(f"Agent {self.name} marked as initialized")
+        self.logger.info("Agent {} marked as initialized", extra={"self_name": self.name})
     
     def _mark_shutdown(self) -> None:
         """Mark the agent as shutdown."""
         self._is_shutdown = True
-        self.logger.info(f"Agent {self.name} marked as shutdown")
+        self.logger.info("Agent {} marked as shutdown", extra={"self_name": self.name})
     
     async def _safe_execute(self, task: Any, timeout: Optional[float] = None) -> Any:
         """
@@ -224,7 +224,7 @@ class BaseAgent(ABC):
         except Exception as e:
             response_time = (datetime.now() - start_time).total_seconds()
             self.record_request(False, response_time)
-            self.logger.error(f"Task execution failed: {e}")
+            self.logger.error("Task execution failed: {}", extra={"e": e})
             raise
     
     def __str__(self) -> str:

@@ -15,7 +15,7 @@ def file_reader(file_path: str) -> str:
         with open(file_path, 'r', encoding='utf-8') as f:
             return f.read()
     except Exception as e:
-        logger.error(f"Error reading file {file_path}: {e}")
+        logger.error("Error reading file {}: {}", extra={"file_path": file_path, "e": e})
         return f"Error reading file: {str(e)}"
 
 @tool
@@ -26,7 +26,7 @@ def file_writer(file_path: str, content: str) -> str:
             f.write(content)
         return f"Successfully wrote to {file_path}"
     except Exception as e:
-        logger.error(f"Error writing file {file_path}: {e}")
+        logger.error("Error writing file {}: {}", extra={"file_path": file_path, "e": e})
         return f"Error writing file: {str(e)}"
 
 # Web operations

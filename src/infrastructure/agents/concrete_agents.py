@@ -61,10 +61,10 @@ class FSMReactAgentImpl(IUnifiedAgent, BaseAgent):
         """Initialize the agent"""
         try:
             self.status = AgentStatus.AVAILABLE
-            self.logger.info(f"FSM React Agent {self.name} initialized")
+            self.logger.info("FSM React Agent {} initialized", extra={"self_name": self.name})
             return True
         except Exception as e:
-            self.logger.error(f"Failed to initialize: {e}")
+            self.logger.error("Failed to initialize: {}", extra={"e": e})
             self.status = AgentStatus.ERROR
             return False
     
@@ -100,7 +100,7 @@ class FSMReactAgentImpl(IUnifiedAgent, BaseAgent):
             )
             
         except Exception as e:
-            self.logger.error(f"Task execution failed: {e}")
+            self.logger.error("Task execution failed: {}", extra={"e": e})
             self.status = AgentStatus.ERROR
             
             return TaskResult(
@@ -124,10 +124,10 @@ class FSMReactAgentImpl(IUnifiedAgent, BaseAgent):
         """Shutdown the agent"""
         try:
             self.status = AgentStatus.OFFLINE
-            self.logger.info(f"Agent {self.name} shut down")
+            self.logger.info("Agent {} shut down", extra={"self_name": self.name})
             return True
         except Exception as e:
-            self.logger.error(f"Shutdown failed: {e}")
+            self.logger.error("Shutdown failed: {}", extra={"e": e})
             return False
     
     async def health_check(self) -> Dict[str, Any]:
@@ -192,11 +192,11 @@ class NextGenAgentImpl(IUnifiedAgent, BaseAgent):
             self.learning_rate = config.get("learning_rate", 0.01)
             
             self.status = AgentStatus.AVAILABLE
-            self.logger.info(f"Next Gen Agent {self.name} initialized")
+            self.logger.info("Next Gen Agent {} initialized", extra={"self_name": self.name})
             return True
             
         except Exception as e:
-            self.logger.error(f"Initialization failed: {e}")
+            self.logger.error("Initialization failed: {}", extra={"e": e})
             self.status = AgentStatus.ERROR
             return False
     
@@ -235,7 +235,7 @@ class NextGenAgentImpl(IUnifiedAgent, BaseAgent):
             )
             
         except Exception as e:
-            self.logger.error(f"Execution failed: {e}")
+            self.logger.error("Execution failed: {}", extra={"e": e})
             self.status = AgentStatus.ERROR
             return TaskResult(
                 task_id=task.task_id,
@@ -301,11 +301,11 @@ class NextGenAgentImpl(IUnifiedAgent, BaseAgent):
     async def shutdown(self) -> bool:
         try:
             # Save memory state
-            self.logger.info(f"Saving memory state for {self.name}")
+            self.logger.info("Saving memory state for {}", extra={"self_name": self.name})
             self.status = AgentStatus.OFFLINE
             return True
         except Exception as e:
-            self.logger.error(f"Shutdown failed: {e}")
+            self.logger.error("Shutdown failed: {}", extra={"e": e})
             return False
     
     async def health_check(self) -> Dict[str, Any]:
@@ -361,11 +361,11 @@ class CrewAgentImpl(IUnifiedAgent, BaseAgent):
             self.coordination_strategy = config.get("strategy", "democratic")
             
             self.status = AgentStatus.AVAILABLE
-            self.logger.info(f"Crew Agent {self.name} ({self.role}) initialized")
+            self.logger.info("Crew Agent {} ({}) initialized", extra={"self_name": self.name, "self_role": self.role})
             return True
             
         except Exception as e:
-            self.logger.error(f"Initialization failed: {e}")
+            self.logger.error("Initialization failed: {}", extra={"e": e})
             self.status = AgentStatus.ERROR
             return False
     
@@ -402,7 +402,7 @@ class CrewAgentImpl(IUnifiedAgent, BaseAgent):
             )
             
         except Exception as e:
-            self.logger.error(f"Execution failed: {e}")
+            self.logger.error("Execution failed: {}", extra={"e": e})
             self.status = AgentStatus.ERROR
             return TaskResult(
                 task_id=task.task_id,
@@ -502,11 +502,11 @@ class SpecializedAgentImpl(IUnifiedAgent, BaseAgent):
             self.expertise_level = config.get("expertise_level", "intermediate")
             
             self.status = AgentStatus.AVAILABLE
-            self.logger.info(f"Specialized Agent {self.name} ({self.specialization}) initialized")
+            self.logger.info("Specialized Agent {} ({}) initialized", extra={"self_name": self.name, "self_specialization": self.specialization})
             return True
             
         except Exception as e:
-            self.logger.error(f"Initialization failed: {e}")
+            self.logger.error("Initialization failed: {}", extra={"e": e})
             self.status = AgentStatus.ERROR
             return False
     
@@ -540,7 +540,7 @@ class SpecializedAgentImpl(IUnifiedAgent, BaseAgent):
             )
             
         except Exception as e:
-            self.logger.error(f"Specialized execution failed: {e}")
+            self.logger.error("Specialized execution failed: {}", extra={"e": e})
             self.status = AgentStatus.ERROR
             return TaskResult(
                 task_id=task.task_id,

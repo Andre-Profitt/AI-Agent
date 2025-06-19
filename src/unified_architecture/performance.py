@@ -14,13 +14,14 @@ from typing import Dict, List, Optional, Any, Tuple
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
 import logging
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 logger = logging.getLogger(__name__)
 
 class PerformanceTracker:
     """Tracks performance metrics for agents and tasks"""
     
-    def __init__(self, history_size: int = 1000):
+    def __init__(self, history_size: int = 1000) -> None:
         self.execution_times: Dict[str, List[float]] = defaultdict(list)
         self.success_rates: Dict[str, List[bool]] = defaultdict(list)
         self.resource_usage: Dict[str, List[Dict[str, float]]] = defaultdict(list)
@@ -42,7 +43,7 @@ class PerformanceTracker:
                         execution_time: float, success: bool,
                         resource_usage: Optional[Dict[str, float]] = None,
                         quality_score: Optional[float] = None,
-                        cost: Optional[float] = None):
+                        cost: Optional[float] = None) -> Any:
         """Record task execution metrics"""
         key = f"{agent_id}:{task_type}"
         
@@ -249,7 +250,7 @@ class PerformanceTracker:
     def record_collaboration(self, agent1_id: str, agent2_id: str,
                            collaboration_score: float,
                            task_type: str,
-                           duration: float):
+                           duration: float) -> Any:
         """Record collaboration effectiveness between agents"""
         key = tuple(sorted([agent1_id, agent2_id]))
         
@@ -299,7 +300,7 @@ class PerformanceTracker:
         return dict(self.task_type_metrics)
     
     def _check_performance_alerts(self, agent_id: str, task_type: str,
-                                execution_time: float, success: bool):
+                                execution_time: float, success: bool) -> Any:
         """Check for performance issues and generate alerts"""
         alerts = []
         
@@ -333,7 +334,7 @@ class PerformanceTracker:
         # Add alerts to tracking
         for alert in alerts:
             self.performance_alerts.append(alert)
-            logger.warning(f"Performance alert: {alert}")
+            logger.warning("Performance alert: {}", extra={"alert": alert})
     
     def get_performance_alerts(self, agent_id: Optional[str] = None,
                              alert_type: Optional[str] = None,
@@ -403,7 +404,7 @@ class PerformanceTracker:
         
         return summary
     
-    def reset_metrics(self, agent_id: Optional[str] = None):
+    def reset_metrics(self, agent_id: Optional[str] = None) -> Any:
         """Reset metrics for an agent or all agents"""
         if agent_id:
             # Reset specific agent
@@ -418,7 +419,7 @@ class PerformanceTracker:
             if agent_id in self.agent_performance_history:
                 del self.agent_performance_history[agent_id]
             
-            logger.info(f"Reset metrics for agent {agent_id}")
+            logger.info("Reset metrics for agent {}", extra={"agent_id": agent_id})
         else:
             # Reset all metrics
             self.execution_times.clear()

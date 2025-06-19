@@ -181,7 +181,7 @@ class OrchestrationEngine:
         }
         await agent.initialize(config)
         
-        logger.info(f"Registered agent: {metadata.name} ({metadata.agent_id})")
+        logger.info("Registered agent: {} ({})", extra={"metadata_name": metadata.name, "metadata_agent_id": metadata.agent_id})
         
     async def select_agent(self, task: UnifiedTask) -> Optional[str]:
         """Select the best agent for a task"""
@@ -374,7 +374,7 @@ class EnhancedMultiAgentPlatform:
                            metadata: AgentMetadata) -> bool:
         """Register an agent with the platform"""
         await self.orchestration_engine.register_agent(agent, metadata)
-        logger.info(f"Agent {metadata.name} registered with platform")
+        logger.info("Agent {} registered with platform", extra={"metadata_name": metadata.name})
         return True
     
     async def submit_task(self, task: UnifiedTask) -> TaskResult:
@@ -414,7 +414,7 @@ class ExampleUnifiedAgent(IUnifiedAgent):
         ]
         
     async def initialize(self, config: Dict[str, Any]) -> bool:
-        logger.info(f"Agent {self.name} initialized with config: {config}")
+        logger.info("Agent {} initialized with config: {}", extra={"self_name": self.name, "config": config})
         self.status = AgentStatus.AVAILABLE
         return True
     
@@ -494,11 +494,11 @@ async def example_usage():
     )
     
     result = await platform.submit_task(task)
-    print(f"Task result: {result}")
+    logger.info("Task result: {}", extra={"result": result})
     
     # Get agent metrics
     metrics = await platform.get_agent_metrics("agent_001")
-    print(f"Agent metrics: {metrics}")
+    logger.info("Agent metrics: {}", extra={"metrics": metrics})
     
     # Shutdown
     await platform.shutdown()

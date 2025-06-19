@@ -82,4 +82,4 @@ if not is_valid:
     import logging
     logger = logging.getLogger(__name__)
     for issue in issues:
-        logger.warning(f"Config issue: {issue}") 
+        logger.warning("Config issue: {}", extra={"issue": issue}) 

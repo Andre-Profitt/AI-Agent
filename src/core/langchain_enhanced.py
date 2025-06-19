@@ -12,6 +12,7 @@ from typing import List, Dict, Any, Optional
 import time
 import logging
 import asyncio
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -21,33 +22,33 @@ langchain.llm_cache = SQLiteCache(database_path=".langchain.db")
 class CustomMetricsCallback(BaseCallbackHandler):
     """Custom callback for tracking metrics"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.token_count = 0
         self.start_time = None
         
-    def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs):
+    def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs) -> Any:
         """Track LLM start"""
         self.start_time = time.time()
         logger.info("LLM started")
         
-    def on_llm_end(self, response, **kwargs):
+    def on_llm_end(self, response, **kwargs) -> Any:
         """Track LLM end and metrics"""
         if self.start_time:
             duration = time.time() - self.start_time
-            logger.info(f"LLM completed in {duration:.2f}s")
+            logger.info("LLM completed in {}s", extra={"duration": duration})
             
-    def on_llm_error(self, error: str, **kwargs):
+    def on_llm_error(self, error: str, **kwargs) -> Any:
         """Track LLM errors"""
-        logger.error(f"LLM error: {error}")
+        logger.error("LLM error: {}", extra={"error": error})
 
 class ErrorRecoveryCallback(BaseCallbackHandler):
     """Callback for error recovery strategies"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.error_count = 0
         self.last_error_time = None
         
-    def on_llm_error(self, error: str, **kwargs):
+    def on_llm_error(self, error: str, **kwargs) -> Any:
         """Handle LLM errors with recovery strategies"""
         self.error_count += 1
         self.last_error_time = time.time()
@@ -59,12 +60,12 @@ class ErrorRecoveryCallback(BaseCallbackHandler):
             logger.warning("LLM timeout, switching to faster model")
             # TODO: Implement model switching
         else:
-            logger.error(f"Unhandled LLM error: {error}")
+            logger.error("Unhandled LLM error: {}", extra={"error": error})
 
 class ParallelToolExecutor:
     """Execute compatible tools in parallel"""
     
-    def __init__(self, tools: List[BaseTool]):
+    def __init__(self, tools: List[BaseTool]) -> None:
         self.tools = {tool.name: tool for tool in tools}
         self.executor = ThreadPoolExecutor(max_workers=5)
         
@@ -112,7 +113,7 @@ class ParallelToolExecutor:
                     try:
                         results[tool_id] = future.result(timeout=30)
                     except Exception as e:
-                        logger.error(f"Tool execution failed for {tool_id}: {e}")
+                        logger.error("Tool execution failed for {}: {}", extra={"tool_id": tool_id, "e": e})
                         results[tool_id] = f"Error: {str(e)}"
         
         return results
@@ -128,7 +129,7 @@ class ParallelToolExecutor:
                 result = await tool.ainvoke(tool_args)
                 return result
             except Exception as e:
-                logger.error(f"Tool {tool_name} failed: {e}")
+                logger.error("Tool {} failed: {}", extra={"tool_name": tool_name, "e": e})
                 return f"Error: {str(e)}"
         else:
             return f"Tool {tool_name} not found"
@@ -144,7 +145,7 @@ class ParallelToolExecutor:
                 result = tool.invoke(tool_args)
                 return result
             except Exception as e:
-                logger.error(f"Tool {tool_name} failed: {e}")
+                logger.error("Tool {} failed: {}", extra={"tool_name": tool_name, "e": e})
                 return f"Error: {str(e)}"
         else:
             return f"Tool {tool_name} not found"
@@ -152,7 +153,7 @@ class ParallelToolExecutor:
 class EnhancedLangChainAgent:
     """Optimized LangChain agent with advanced features"""
     
-    def __init__(self, llm, tools: List[BaseTool]):
+    def __init__(self, llm: LLM, tools: List[BaseTool]) -> None:
         self.llm = llm
         self.tools = tools
         self.tool_executor = ParallelToolExecutor(tools)
@@ -190,7 +191,7 @@ Answer:"""
         # Create optimized chain
         self.chain = self.create_optimized_chain()
     
-    def create_optimized_chain(self):
+    def create_optimized_chain(self) -> Any:
         """Create chain with streaming and callbacks"""
         return LLMChain(
             llm=self.llm,
@@ -219,7 +220,7 @@ Answer:"""
             }
             
         except Exception as e:
-            logger.error(f"Enhanced agent error: {e}")
+            logger.error("Enhanced agent error: {}", extra={"e": e})
             return {
                 "error": str(e),
                 "memory_summary": self.get_memory_summary()
@@ -232,7 +233,7 @@ Answer:"""
         except:
             return "Memory summary not available"
 
-def initialize_enhanced_agent(llm, tools: List[BaseTool]):
+def initialize_enhanced_agent(llm, tools: List[BaseTool]) -> Any:
     """Initialize enhanced LangChain agent"""
     return EnhancedLangChainAgent(llm, tools)
 

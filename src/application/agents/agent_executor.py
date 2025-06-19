@@ -12,6 +12,7 @@ from src.core.interfaces.agent_executor import AgentExecutor
 from src.core.entities.agent import Agent, AgentType
 from src.core.entities.message import Message
 from src.shared.exceptions import DomainException
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 
 class AgentExecutorImpl(AgentExecutor):
@@ -22,7 +23,7 @@ class AgentExecutorImpl(AgentExecutor):
     and manages their lifecycle during processing.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
         self._active_executions: Dict[UUID, Dict[str, Any]] = {}
     
@@ -49,7 +50,7 @@ class AgentExecutorImpl(AgentExecutor):
                 "status": "running"
             }
             
-            self.logger.info(f"Starting execution {execution_id} for agent {agent.id}")
+            self.logger.info("Starting execution {} for agent {}", extra={"execution_id": execution_id, "agent_id": agent.id})
             
             # Validate agent
             validation_result = await self.validate_agent(agent)
@@ -77,7 +78,7 @@ class AgentExecutorImpl(AgentExecutor):
             result["execution_id"] = str(execution_id)
             result["execution_time"] = execution_time
             
-            self.logger.info(f"Execution {execution_id} completed successfully in {execution_time:.2f}s")
+            self.logger.info("Execution {} completed successfully in {}s", extra={"execution_id": execution_id, "execution_time": execution_time})
             
             return result
             
@@ -87,7 +88,7 @@ class AgentExecutorImpl(AgentExecutor):
             self._active_executions[execution_id]["error"] = str(e)
             self._active_executions[execution_id]["execution_time"] = execution_time
             
-            self.logger.error(f"Execution {execution_id} failed: {str(e)}")
+            self.logger.error("Execution {} failed: {}", extra={"execution_id": execution_id, "str_e_": str(e)})
             raise DomainException(f"Agent execution failed: {str(e)}")
     
     async def validate_agent(self, agent: Agent) -> Dict[str, Any]:
@@ -190,7 +191,7 @@ class AgentExecutorImpl(AgentExecutor):
         if execution["status"] == "running":
             execution["status"] = "cancelled"
             execution["end_time"] = datetime.now()
-            self.logger.info(f"Execution {execution_id} cancelled")
+            self.logger.info("Execution {} cancelled", extra={"execution_id": execution_id})
             return True
         
         return False

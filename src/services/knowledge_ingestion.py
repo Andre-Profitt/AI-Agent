@@ -16,13 +16,16 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # Import database for vector store access
 from src.database import get_vector_store, get_embedding_model
+from typing import Optional, Dict, Any, List, Union, Tuple
+from src.shared.types.di_types import (
+    ConfigurationService, DatabaseClient, CacheClient, LoggingService
 
 logger = logging.getLogger(__name__)
 
 class DocumentProcessor:
     """Handles document processing and embedding generation."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.vector_store = get_vector_store()
         self.embedding_model = get_embedding_model()
         self.text_splitter = RecursiveCharacterTextSplitter(
@@ -39,7 +42,7 @@ class DocumentProcessor:
     def process_file(self, file_path: Path) -> bool:
         """Process a single file and add to vector store."""
         try:
-            logger.info(f"Processing file: {file_path}")
+            logger.info("Processing file: {}", extra={"file_path": file_path})
             
             # Read file content based on type
             content = self._read_file(file_path)
@@ -49,7 +52,7 @@ class DocumentProcessor:
             # Check if already processed
             content_hash = self._compute_hash(content)
             if content_hash in self.processed_hashes:
-                logger.info(f"File already processed: {file_path}")
+                logger.info("File already processed: {}", extra={"file_path": file_path})
                 return False
             
             # Create document
@@ -87,11 +90,11 @@ class DocumentProcessor:
             
             # Mark as processed
             self.processed_hashes.add(content_hash)
-            logger.info(f"Successfully ingested {len(documents)} chunks from {file_path}")
+            logger.info("Successfully ingested {} chunks from {}", extra={"len_documents_": len(documents), "file_path": file_path})
             return True
             
         except Exception as e:
-            logger.error(f"Error processing file {file_path}: {e}")
+            logger.error("Error processing file {}: {}", extra={"file_path": file_path, "e": e})
             return False
     
     def _read_file(self, file_path: Path) -> Optional[str]:
@@ -119,13 +122,13 @@ class DocumentProcessor:
                 return "\n".join([doc.text for doc in docs])
                 
         except Exception as e:
-            logger.error(f"Failed to read file {file_path}: {e}")
+            logger.error("Failed to read file {}: {}", extra={"file_path": file_path, "e": e})
             return None
     
     def process_url(self, url: str) -> bool:
         """Process content from a URL."""
         try:
-            logger.info(f"Processing URL: {url}")
+            logger.info("Processing URL: {}", extra={"url": url})
             
             # Fetch content
             response = requests.get(url, timeout=30)
@@ -150,7 +153,7 @@ class DocumentProcessor:
             # Check if already processed
             content_hash = self._compute_hash(content)
             if content_hash in self.processed_hashes:
-                logger.info(f"URL already processed: {url}")
+                logger.info("URL already processed: {}", extra={"url": url})
                 return False
             
             # Create document
@@ -185,23 +188,23 @@ class DocumentProcessor:
             )
             
             self.processed_hashes.add(content_hash)
-            logger.info(f"Successfully ingested {len(documents)} chunks from {url}")
+            logger.info("Successfully ingested {} chunks from {}", extra={"len_documents_": len(documents), "url": url})
             return True
             
         except Exception as e:
-            logger.error(f"Error processing URL {url}: {e}")
+            logger.error("Error processing URL {}: {}", extra={"url": url, "e": e})
             return False
 
 class KnowledgeLifecycleManager:
     """Manages knowledge base lifecycle including reindexing and cache invalidation"""
     
-    def __init__(self, db_client=None, cache=None):
+    def __init__(self, db_client: Optional[DatabaseClient] = None, cache: Optional[CacheClient] = None) -> None:
         self.db_client = db_client
         self.cache = cache
         self.last_reindex = datetime.now()
         self.reindex_threshold = 10  # Reindex after N new documents
         
-    async def update_knowledge_lifecycle(self, doc_id: str, doc_metadata: Dict[str, Any]):
+    async def update_knowledge_lifecycle(self, doc_id: str, doc_metadata: Dict[str, Any]) -> bool:
         """Update knowledge lifecycle tracking"""
         if not self.db_client:
             return
@@ -215,19 +218,19 @@ class KnowledgeLifecycleManager:
                 "status": "active"
             }).execute()
             
-            logger.info(f"Updated knowledge lifecycle for document {doc_id}")
+            logger.info("Updated knowledge lifecycle for document {}", extra={"doc_id": doc_id})
             
         except Exception as e:
-            logger.error(f"Failed to update knowledge lifecycle: {e}")
+            logger.error("Failed to update knowledge lifecycle: {}", extra={"e": e})
     
-    async def trigger_reindex(self, force: bool = False):
+    async def trigger_reindex(self, force: bool = False) -> Any:
         """Trigger vector store reindexing"""
         try:
             # Check if reindex is needed
             if not force:
                 doc_count = await self._get_recent_document_count()
                 if doc_count < self.reindex_threshold:
-                    logger.debug(f"Reindex not needed yet ({doc_count} recent docs)")
+                    logger.debug("Reindex not needed yet ({} recent docs)", extra={"doc_count": doc_count})
                     return
             
             logger.info("Triggering vector store reindex...")
@@ -240,19 +243,19 @@ class KnowledgeLifecycleManager:
             logger.info("Vector store reindex completed")
             
         except Exception as e:
-            logger.error(f"Failed to trigger reindex: {e}")
+            logger.error("Failed to trigger reindex: {}", extra={"e": e})
     
-    async def invalidate_cache(self, pattern: str = "knowledge_base:*"):
+    async def invalidate_cache(self, pattern: str = "knowledge_base:*") -> Any:
         """Invalidate knowledge base cache"""
         if not self.cache:
             return
         
         try:
             self.cache.invalidate(pattern)
-            logger.info(f"Invalidated cache pattern: {pattern}")
+            logger.info("Invalidated cache pattern: {}", extra={"pattern": pattern})
             
         except Exception as e:
-            logger.error(f"Failed to invalidate cache: {e}")
+            logger.error("Failed to invalidate cache: {}", extra={"e": e})
     
     async def _get_recent_document_count(self) -> int:
         """Get count of recently added documents"""
@@ -268,10 +271,10 @@ class KnowledgeLifecycleManager:
             return len(result.data) if result.data else 0
             
         except Exception as e:
-            logger.error(f"Failed to get recent document count: {e}")
+            logger.error("Failed to get recent document count: {}", extra={"e": e})
             return 0
     
-    async def _perform_reindex(self):
+    async def _perform_reindex(self) -> Any:
         """Perform the actual reindexing operation"""
         # This is a placeholder for the actual reindexing logic
         # In a real implementation, this would:
@@ -284,8 +287,10 @@ class KnowledgeLifecycleManager:
 class KnowledgeIngestionService:
     """Enhanced knowledge ingestion service with lifecycle management."""
     
-    def __init__(self, watch_directories: List[str] = None, poll_urls: List[str] = None, 
-                 db_client=None, cache=None):
+    def __init__(self, ,
+
+    
+            watch_directories: List[str] = None        poll_urls: List[str] = None        db_client: Optional[DatabaseClient] = None        cache: Optional[CacheClient] = None) -> None:
         self.processor = DocumentProcessor()
         self.lifecycle_manager = KnowledgeLifecycleManager(db_client, cache)
         self.watch_directories = watch_directories or []
@@ -325,11 +330,11 @@ class KnowledgeIngestionService:
             # Invalidate cache
             await self.lifecycle_manager.invalidate_cache()
             
-            logger.info(f"Successfully ingested document {doc_id} from {doc_path}")
+            logger.info("Successfully ingested document {} from {}", extra={"doc_id": doc_id, "doc_path": doc_path})
             return doc_id
             
         except Exception as e:
-            logger.error(f"Failed to ingest document {doc_path}: {e}")
+            logger.error("Failed to ingest document {}: {}", extra={"doc_path": doc_path, "e": e})
             raise
     
     async def ingest_url(self, url: str) -> str:
@@ -358,14 +363,14 @@ class KnowledgeIngestionService:
             # Invalidate cache
             await self.lifecycle_manager.invalidate_cache()
             
-            logger.info(f"Successfully ingested URL {doc_id} from {url}")
+            logger.info("Successfully ingested URL {} from {}", extra={"doc_id": doc_id, "url": url})
             return doc_id
             
         except Exception as e:
-            logger.error(f"Failed to ingest URL {url}: {e}")
+            logger.error("Failed to ingest URL {}: {}", extra={"url": url, "e": e})
             raise
     
-    def start(self):
+    def start(self) -> None:
         """Start the ingestion service"""
         if self.running:
             logger.warning("Ingestion service already running")
@@ -382,17 +387,17 @@ class KnowledgeIngestionService:
         if self.poll_urls:
             asyncio.create_task(self._poll_urls())
     
-    def stop(self):
+    def stop(self) -> None:
         """Stop the ingestion service"""
         self.running = False
         logger.info("Stopped knowledge ingestion service")
     
-    def _process_directory(self, directory: str):
+    def _process_directory(self, directory: str) -> Any:
         """Process all files in a directory"""
         try:
             dir_path = Path(directory)
             if not dir_path.exists():
-                logger.warning(f"Directory not found: {directory}")
+                logger.warning("Directory not found: {}", extra={"directory": directory})
                 return
             
             for file_path in dir_path.rglob("*"):
@@ -400,9 +405,9 @@ class KnowledgeIngestionService:
                     self.processor.process_file(file_path)
                     
         except Exception as e:
-            logger.error(f"Error processing directory {directory}: {e}")
+            logger.error("Error processing directory {}: {}", extra={"directory": directory, "e": e})
     
-    async def _poll_urls(self):
+    async def _poll_urls(self) -> Any:
         """Poll URLs for updates"""
         while self.running:
             try:
@@ -413,20 +418,20 @@ class KnowledgeIngestionService:
                 await asyncio.sleep(3600)  # Poll every hour
                 
             except Exception as e:
-                logger.error(f"Error polling URLs: {e}")
+                logger.error("Error polling URLs: {}", extra={"e": e})
                 await asyncio.sleep(60)  # Wait before retry
     
-    def add_watch_directory(self, directory: str):
+    def add_watch_directory(self, directory: str) -> Any:
         """Add a directory to watch for new documents"""
         self.watch_directories.append(directory)
-        logger.info(f"Added watch directory: {directory}")
+        logger.info("Added watch directory: {}", extra={"directory": directory})
     
-    def add_poll_url(self, url: str):
+    def add_poll_url(self, url: str) -> Any:
         """Add a URL to poll for updates"""
         self.poll_urls.append(url)
-        logger.info(f"Added poll URL: {url}")
+        logger.info("Added poll URL: {}", extra={"url": url})
 
-def run_ingestion_service(config: Dict[str, Any]):
+def run_ingestion_service(config: Dict[str, Any]) -> Any:
     """Run the knowledge ingestion service with configuration"""
     try:
         # Extract configuration
@@ -449,7 +454,7 @@ def run_ingestion_service(config: Dict[str, Any]):
         return service
         
     except Exception as e:
-        logger.error(f"Failed to run ingestion service: {e}")
+        logger.error("Failed to run ingestion service: {}", extra={"e": e})
         raise
 
 if __name__ == "__main__":

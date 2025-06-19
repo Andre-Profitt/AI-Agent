@@ -21,18 +21,18 @@ class DIContainer:
             raise InfrastructureException(f"Singleton {name} already registered")
         
         self._factories[name] = factory
-        self.logger.debug(f"Registered singleton: {name}")
+        self.logger.debug("Registered singleton: {}", extra={"name": name})
     
     def register_transient(self, name: str, factory: Callable[[], T]) -> None:
         """Register a transient service"""
         self._factories[name] = factory
-        self.logger.debug(f"Registered transient: {name}")
+        self.logger.debug("Registered transient: {}", extra={"name": name})
     
     def register_instance(self, name: str, instance: T) -> None:
         """Register an existing instance"""
         self._services[name] = instance
         self._singletons[name] = instance
-        self.logger.debug(f"Registered instance: {name}")
+        self.logger.debug("Registered instance: {}", extra={"name": name})
     
     def resolve(self, name: str) -> Any:
         """Resolve a service by name"""

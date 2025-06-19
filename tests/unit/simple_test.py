@@ -8,80 +8,84 @@ Run with: python3 simple_test.py
 import sys
 import os
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 def test_imports():
     """Test basic imports"""
-    print("🔍 Testing basic imports...")
+    logger.info("🔍 Testing basic imports...")
     
     try:
         from src.embedding_manager import get_embedding_manager
-        print("✅ Embedding manager import successful")
+        logger.info("✅ Embedding manager import successful")
     except Exception as e:
-        print(f"❌ Embedding manager import failed: {e}")
+        logger.info("❌ Embedding manager import failed: {}", extra={"e": e})
         return False
     
     try:
         from src.integration_hub import get_integration_hub
-        print("✅ Integration hub import successful")
+        logger.info("✅ Integration hub import successful")
     except Exception as e:
-        print(f"❌ Integration hub import failed: {e}")
+        logger.info("❌ Integration hub import failed: {}", extra={"e": e})
         return False
     
     try:
         from src.config.integrations import integration_config
-        print("✅ Config import successful")
+        logger.info("✅ Config import successful")
     except Exception as e:
-        print(f"❌ Config import failed: {e}")
+        logger.info("❌ Config import failed: {}", extra={"e": e})
         return False
     
     return True
 
 def test_embedding_manager():
     """Test embedding manager functionality"""
-    print("\n🔍 Testing embedding manager...")
+    logger.info("\n🔍 Testing embedding manager...")
     
     try:
         from src.embedding_manager import get_embedding_manager
         
         manager = get_embedding_manager()
-        print(f"✅ Embedding manager created: method={manager.get_method()}, dimension={manager.get_dimension()}")
+        logger.info("✅ Embedding manager created: method={}, dimension={}", extra={"manager_get_method__": manager.get_method(), "manager_get_dimension__": manager.get_dimension()})
         
         # Test singleton behavior
         manager2 = get_embedding_manager()
         if manager is manager2:
-            print("✅ Singleton behavior confirmed")
+            logger.info("✅ Singleton behavior confirmed")
         else:
-            print("❌ Singleton behavior failed")
+            logger.info("❌ Singleton behavior failed")
             return False
         
         # Test embedding
         test_text = "Hello world"
         embedding = manager.embed(test_text)
-        print(f"✅ Embedding created: length={len(embedding)}")
+        logger.info("✅ Embedding created: length={}", extra={"len_embedding_": len(embedding)})
         
         # Test batch embedding
         texts = ["Text 1", "Text 2", "Text 3"]
         batch_embeddings = manager.embed_batch(texts)
-        print(f"✅ Batch embedding created: count={len(batch_embeddings)}")
+        logger.info("✅ Batch embedding created: count={}", extra={"len_batch_embeddings_": len(batch_embeddings)})
         
         return True
         
     except Exception as e:
-        print(f"❌ Embedding manager test failed: {e}")
+        logger.info("❌ Embedding manager test failed: {}", extra={"e": e})
         return False
 
 def test_integration_hub():
     """Test integration hub functionality"""
-    print("\n🔍 Testing integration hub...")
+    logger.info("\n🔍 Testing integration hub...")
     
     try:
         from src.integration_hub import get_integration_hub, tool_registry
         
         hub = get_integration_hub()
-        print("✅ Integration hub created")
+        logger.info("✅ Integration hub created")
         
         # Test tool registry
         from src.tools.base_tool import BaseTool
@@ -96,24 +100,24 @@ def test_integration_hub():
         
         tool = TestTool()
         tool_registry.register(tool)
-        print("✅ Tool registered successfully")
+        logger.info("✅ Tool registered successfully")
         
         retrieved_tool = tool_registry.get("test_tool")
         if retrieved_tool is tool:
-            print("✅ Tool retrieval successful")
+            logger.info("✅ Tool retrieval successful")
         else:
-            print("❌ Tool retrieval failed")
+            logger.info("❌ Tool retrieval failed")
             return False
         
         return True
         
     except Exception as e:
-        print(f"❌ Integration hub test failed: {e}")
+        logger.info("❌ Integration hub test failed: {}", extra={"e": e})
         return False
 
 def test_config():
     """Test configuration"""
-    print("\n🔍 Testing configuration...")
+    logger.info("\n🔍 Testing configuration...")
     
     try:
         from src.config.integrations import integration_config
@@ -124,26 +128,26 @@ def test_config():
         assert hasattr(integration_config, 'crewai')
         assert hasattr(integration_config, 'llamaindex')
         assert hasattr(integration_config, 'gaia')
-        print("✅ Configuration structure valid")
+        logger.info("✅ Configuration structure valid")
         
         # Test validation
         is_valid, issues = integration_config.validate()
-        print(f"✅ Configuration validation: valid={is_valid}, issues={len(issues)}")
+        logger.info("✅ Configuration validation: valid={}, issues={}", extra={"is_valid": is_valid, "len_issues_": len(issues)})
         
         # Test to_dict
         config_dict = integration_config.to_dict()
         assert isinstance(config_dict, dict)
-        print("✅ Configuration serialization successful")
+        logger.info("✅ Configuration serialization successful")
         
         return True
         
     except Exception as e:
-        print(f"❌ Configuration test failed: {e}")
+        logger.info("❌ Configuration test failed: {}", extra={"e": e})
         return False
 
 def test_enhanced_components():
     """Test enhanced components"""
-    print("\n🔍 Testing enhanced components...")
+    logger.info("\n🔍 Testing enhanced components...")
     
     components = [
         ("Database Enhanced", "src.database_enhanced", "initialize_supabase_enhanced"),
@@ -157,16 +161,16 @@ def test_enhanced_components():
         try:
             module_obj = __import__(module, fromlist=[function])
             func = getattr(module_obj, function)
-            print(f"✅ {name} import successful")
+            logger.info("✅ {} import successful", extra={"name": name})
         except Exception as e:
-            print(f"⚠️ {name} import failed: {e}")
+            logger.info("⚠️ {} import failed: {}", extra={"name": name, "e": e})
             all_passed = False
     
     return all_passed
 
 def main():
     """Run all tests"""
-    print("🚀 Starting AI Agent Integration Tests")
+    logger.info("🚀 Starting AI Agent Integration Tests")
     print("=" * 50)
     
     tests = [
@@ -184,12 +188,12 @@ def main():
             result = test_func()
             results.append((test_name, result))
         except Exception as e:
-            print(f"❌ {test_name} test crashed: {e}")
+            logger.info("❌ {} test crashed: {}", extra={"test_name": test_name, "e": e})
             results.append((test_name, False))
     
     # Summary
     print("\n" + "=" * 50)
-    print("📊 Test Results Summary:")
+    logger.info("📊 Test Results Summary:")
     print("=" * 50)
     
     passed = 0
@@ -197,16 +201,16 @@ def main():
     
     for test_name, result in results:
         status = "✅ PASS" if result else "❌ FAIL"
-        print(f"{test_name}: {status}")
+        logger.info("{}: {}", extra={"test_name": test_name, "status": status})
         if result:
             passed += 1
     
-    print(f"\nOverall: {passed}/{total} tests passed")
+    logger.info("\nOverall: {}/{} tests passed", extra={"passed": passed, "total": total})
     
     if passed == total:
-        print("🎉 All tests passed! Your AI Agent integration is working correctly.")
+        logger.info("🎉 All tests passed! Your AI Agent integration is working correctly.")
     else:
-        print("⚠️ Some tests failed. Check the output above for details.")
+        logger.info("⚠️ Some tests failed. Check the output above for details.")
     
     return passed == total
 

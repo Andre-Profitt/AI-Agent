@@ -87,7 +87,7 @@ class MultiAgentPlatform:
         # Statistics
         self._stats = PlatformStats()
         
-        self.logger.info(f"MultiAgentPlatform {self.platform_id} initialized")
+        self.logger.info("MultiAgentPlatform {} initialized", extra={"self_platform_id": self.platform_id})
     
     def _initialize_components(self):
         """Initialize all platform components"""
@@ -136,7 +136,7 @@ class MultiAgentPlatform:
             self.logger.info("All platform components initialized successfully")
             
         except Exception as e:
-            self.logger.error(f"Failed to initialize platform components: {e}")
+            self.logger.error("Failed to initialize platform components: {}", extra={"e": e})
             raise
     
     async def start(self):
@@ -161,7 +161,7 @@ class MultiAgentPlatform:
             self.logger.info("MultiAgentPlatform started successfully")
             
         except Exception as e:
-            self.logger.error(f"Failed to start platform: {e}")
+            self.logger.error("Failed to start platform: {}", extra={"e": e})
             raise
     
     async def stop(self):
@@ -191,7 +191,7 @@ class MultiAgentPlatform:
             self.logger.info("MultiAgentPlatform stopped successfully")
             
         except Exception as e:
-            self.logger.error(f"Failed to stop platform: {e}")
+            self.logger.error("Failed to stop platform: {}", extra={"e": e})
             raise
     
     async def _start_background_tasks(self):
@@ -212,7 +212,7 @@ class MultiAgentPlatform:
             self.logger.info("Background tasks started")
             
         except Exception as e:
-            self.logger.error(f"Failed to start background tasks: {e}")
+            self.logger.error("Failed to start background tasks: {}", extra={"e": e})
             raise
     
     async def _initialize_platform_components(self):
@@ -235,7 +235,7 @@ class MultiAgentPlatform:
             self.logger.info("Platform components initialized")
             
         except Exception as e:
-            self.logger.error(f"Failed to initialize platform components: {e}")
+            self.logger.error("Failed to initialize platform components: {}", extra={"e": e})
             raise
     
     async def _stop_platform_components(self):
@@ -255,7 +255,7 @@ class MultiAgentPlatform:
             self.logger.info("Platform components stopped")
             
         except Exception as e:
-            self.logger.error(f"Failed to stop platform components: {e}")
+            self.logger.error("Failed to stop platform components: {}", extra={"e": e})
     
     async def register_agent(self, agent: IUnifiedAgent, metadata: AgentMetadata) -> bool:
         """Register an agent with the platform"""
@@ -282,11 +282,11 @@ class MultiAgentPlatform:
                 "capabilities": [cap.value for cap in metadata.capabilities]
             })
             
-            self.logger.info(f"Agent {metadata.agent_id} registered successfully")
+            self.logger.info("Agent {} registered successfully", extra={"metadata_agent_id": metadata.agent_id})
             return True
             
         except Exception as e:
-            self.logger.error(f"Failed to register agent {metadata.agent_id}: {e}")
+            self.logger.error("Failed to register agent {}: {}", extra={"metadata_agent_id": metadata.agent_id, "e": e})
             return False
     
     async def unregister_agent(self, agent_id: UUID) -> bool:
@@ -310,11 +310,11 @@ class MultiAgentPlatform:
                 "agent_id": str(agent_id)
             })
             
-            self.logger.info(f"Agent {agent_id} unregistered successfully")
+            self.logger.info("Agent {} unregistered successfully", extra={"agent_id": agent_id})
             return True
             
         except Exception as e:
-            self.logger.error(f"Failed to unregister agent {agent_id}: {e}")
+            self.logger.error("Failed to unregister agent {}: {}", extra={"agent_id": agent_id, "e": e})
             return False
     
     async def submit_task(self, task: UnifiedTask) -> UUID:
@@ -342,11 +342,11 @@ class MultiAgentPlatform:
                 "requirements": task.requirements
             })
             
-            self.logger.info(f"Task {task_id} submitted successfully")
+            self.logger.info("Task {} submitted successfully", extra={"task_id": task_id})
             return task_id
             
         except Exception as e:
-            self.logger.error(f"Failed to submit task: {e}")
+            self.logger.error("Failed to submit task: {}", extra={"e": e})
             raise
     
     async def get_task_status(self, task_id: UUID) -> Optional[Dict[str, Any]]:
@@ -354,7 +354,7 @@ class MultiAgentPlatform:
         try:
             return await self.orchestration.get_task_status(task_id)
         except Exception as e:
-            self.logger.error(f"Failed to get task status {task_id}: {e}")
+            self.logger.error("Failed to get task status {}: {}", extra={"task_id": task_id, "e": e})
             return None
     
     async def cancel_task(self, task_id: UUID) -> bool:
@@ -372,7 +372,7 @@ class MultiAgentPlatform:
             return success
             
         except Exception as e:
-            self.logger.error(f"Failed to cancel task {task_id}: {e}")
+            self.logger.error("Failed to cancel task {}: {}", extra={"task_id": task_id, "e": e})
             return False
     
     async def get_platform_stats(self) -> PlatformStats:
@@ -393,7 +393,7 @@ class MultiAgentPlatform:
             return self._stats
             
         except Exception as e:
-            self.logger.error(f"Failed to get platform stats: {e}")
+            self.logger.error("Failed to get platform stats: {}", extra={"e": e})
             return self._stats
     
     async def get_agent_performance(self, agent_id: UUID) -> Optional[Dict[str, Any]]:
@@ -405,7 +405,7 @@ class MultiAgentPlatform:
             return await self.performance_tracker.get_agent_metrics(agent_id)
             
         except Exception as e:
-            self.logger.error(f"Failed to get agent performance {agent_id}: {e}")
+            self.logger.error("Failed to get agent performance {}: {}", extra={"agent_id": agent_id, "e": e})
             return None
     
     async def get_collaboration_network(self) -> Dict[str, Any]:
@@ -417,7 +417,7 @@ class MultiAgentPlatform:
             return await self.dashboard.get_collaboration_network()
             
         except Exception as e:
-            self.logger.error(f"Failed to get collaboration network: {e}")
+            self.logger.error("Failed to get collaboration network: {}", extra={"e": e})
             return {}
     
     async def resolve_conflict(self, conflict: Conflict) -> Optional[Dict[str, Any]]:
@@ -429,7 +429,7 @@ class MultiAgentPlatform:
             return await self.conflict_resolver.resolve_conflict(conflict)
             
         except Exception as e:
-            self.logger.error(f"Failed to resolve conflict: {e}")
+            self.logger.error("Failed to resolve conflict: {}", extra={"e": e})
             return None
     
     async def share_memory(self, entry: MemoryEntry) -> bool:
@@ -447,7 +447,7 @@ class MultiAgentPlatform:
             return success
             
         except Exception as e:
-            self.logger.error(f"Failed to share memory: {e}")
+            self.logger.error("Failed to share memory: {}", extra={"e": e})
             return False
     
     async def search_memory(self, query: str, memory_type: Optional[MemoryType] = None) -> List[MemoryEntry]:
@@ -455,7 +455,7 @@ class MultiAgentPlatform:
         try:
             return await self.shared_memory.search_memory(query, memory_type)
         except Exception as e:
-            self.logger.error(f"Failed to search memory: {e}")
+            self.logger.error("Failed to search memory: {}", extra={"e": e})
             return []
     
     async def send_message(self, message: AgentMessage) -> bool:
@@ -474,7 +474,7 @@ class MultiAgentPlatform:
             return success
             
         except Exception as e:
-            self.logger.error(f"Failed to send message: {e}")
+            self.logger.error("Failed to send message: {}", extra={"e": e})
             return False
     
     async def broadcast_message(self, message: AgentMessage) -> bool:
@@ -492,7 +492,7 @@ class MultiAgentPlatform:
             return success
             
         except Exception as e:
-            self.logger.error(f"Failed to broadcast message: {e}")
+            self.logger.error("Failed to broadcast message: {}", extra={"e": e})
             return False
     
     async def get_available_agents(self, capabilities: Optional[List[AgentCapability]] = None) -> List[AgentMetadata]:
@@ -500,7 +500,7 @@ class MultiAgentPlatform:
         try:
             return await self.registry.get_agents(capabilities)
         except Exception as e:
-            self.logger.error(f"Failed to get available agents: {e}")
+            self.logger.error("Failed to get available agents: {}", extra={"e": e})
             return []
     
     async def allocate_resources(self, requirements: Dict[ResourceType, float]) -> Optional[ResourceAllocation]:
@@ -508,7 +508,7 @@ class MultiAgentPlatform:
         try:
             return await self.resource_manager.allocate_resources(requirements)
         except Exception as e:
-            self.logger.error(f"Failed to allocate resources: {e}")
+            self.logger.error("Failed to allocate resources: {}", extra={"e": e})
             return None
     
     async def release_resources(self, allocation_id: UUID) -> bool:
@@ -516,7 +516,7 @@ class MultiAgentPlatform:
         try:
             return await self.resource_manager.release_resources(allocation_id)
         except Exception as e:
-            self.logger.error(f"Failed to release resources: {e}")
+            self.logger.error("Failed to release resources: {}", extra={"e": e})
             return False
     
     async def _heartbeat_loop(self):
@@ -539,7 +539,7 @@ class MultiAgentPlatform:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                self.logger.error(f"Heartbeat loop error: {e}")
+                self.logger.error("Heartbeat loop error: {}", extra={"e": e})
                 await asyncio.sleep(5)  # Brief pause on error
     
     async def _cleanup_loop(self):
@@ -562,7 +562,7 @@ class MultiAgentPlatform:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                self.logger.error(f"Cleanup loop error: {e}")
+                self.logger.error("Cleanup loop error: {}", extra={"e": e})
                 await asyncio.sleep(60)  # Brief pause on error
     
     async def _stats_update_loop(self):
@@ -582,7 +582,7 @@ class MultiAgentPlatform:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                self.logger.error(f"Stats update loop error: {e}")
+                self.logger.error("Stats update loop error: {}", extra={"e": e})
                 await asyncio.sleep(10)  # Brief pause on error
     
     async def _emit_event(self, event_type: str, data: Dict[str, Any]):
@@ -593,10 +593,10 @@ class MultiAgentPlatform:
                     try:
                         await handler(data)
                     except Exception as e:
-                        self.logger.error(f"Event handler error: {e}")
+                        self.logger.error("Event handler error: {}", extra={"e": e})
                         
         except Exception as e:
-            self.logger.error(f"Failed to emit event {event_type}: {e}")
+            self.logger.error("Failed to emit event {}: {}", extra={"event_type": event_type, "e": e})
     
     def add_event_handler(self, event_type: str, handler: Callable):
         """Add an event handler"""
@@ -679,7 +679,7 @@ class MultiAgentPlatform:
             return health
             
         except Exception as e:
-            self.logger.error(f"Health check failed: {e}")
+            self.logger.error("Health check failed: {}", extra={"e": e})
             return {
                 "platform_status": "error",
                 "error": str(e),

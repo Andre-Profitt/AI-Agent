@@ -6,6 +6,8 @@ import logging
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +40,7 @@ class ReasoningPath:
 class AdvancedReasoning:
     """Enhanced reasoning system with multiple approaches."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.reasoning_history = []
         self.verification_threshold = 0.8
         self.max_verification_steps = 4
@@ -243,7 +245,7 @@ class AdvancedReasoning:
         
         return True
     
-    def record_reasoning(self, path: ReasoningPath):
+    def record_reasoning(self, path: ReasoningPath) -> Any:
         """Record a reasoning path for future reference."""
         self.reasoning_history.append(path)
     

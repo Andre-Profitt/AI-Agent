@@ -63,7 +63,7 @@ try:
     
     # GPU Acceleration for embeddings
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(f"🎮 GPU Acceleration: Using device '{device}' for embeddings")
+    logger.info("🎮 GPU Acceleration: Using device '{}' for embeddings", extra={"device": device})
     
     # Load model with GPU acceleration if available
     embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device=device)
@@ -72,15 +72,15 @@ try:
     if device == 'cuda':
         try:
             # Try loading a larger, more accurate model for better semantic search
-            print("🚀 Loading high-performance embedding model for GPU...")
+            logger.info("🚀 Loading high-performance embedding model for GPU...")
             embedding_model_large = SentenceTransformer('all-mpnet-base-v2', device=device)
             embedding_model = embedding_model_large  # Use the larger model
-            print("✅ High-performance GPU embedding model loaded successfully")
+            logger.info("✅ High-performance GPU embedding model loaded successfully")
         except Exception as e:
-            print(f"⚠️ Could not load large model, using standard model: {e}")
+            logger.info("⚠️ Could not load large model, using standard model: {}", extra={"e": e})
     
     SEMANTIC_SEARCH_AVAILABLE = True
-    print(f"✅ Semantic search initialized with device: {device}")
+    logger.info("✅ Semantic search initialized with device: {}", extra={"device": device})
 except ImportError as e:
     logging.warning(f"Semantic search dependencies not available: {e}")
     SEMANTIC_SEARCH_AVAILABLE = False
@@ -138,7 +138,7 @@ def _exponential_backoff(func, max_retries: int = 4):
             msg = str(e).lower()
             if "429" in msg or "rate limit" in msg:
                 sleep = (2 ** attempt) + random.uniform(0, 1)
-                logger.warning(f"Rate limit encountered. Sleeping {sleep:.1f}s (attempt {attempt+1}/{max_retries})")
+                logger.warning("Rate limit encountered. Sleeping {}s (attempt {}/{})", extra={"sleep": sleep, "attempt_1": attempt+1, "max_retries": max_retries})
                 time.sleep(sleep)
             else:
                 raise
@@ -602,7 +602,7 @@ try:
         knowledge_base_tool = local_kb.search
         logger.info("Knowledge base tool initialized with local fallback")
 except Exception as e:
-    logger.error(f"Failed to initialize Knowledge Base tool: {e}")
+    logger.error("Failed to initialize Knowledge Base tool: {}", extra={"e": e})
     # Create local knowledge tool as fallback
     try:
         from src.knowledge_utils import create_local_knowledge_tool
@@ -610,7 +610,7 @@ except Exception as e:
         knowledge_base_tool = local_kb.search
         logger.info("Knowledge base tool initialized with local fallback after error")
     except Exception as fallback_error:
-        logger.error(f"Failed to create local knowledge fallback: {fallback_error}")
+        logger.error("Failed to create local knowledge fallback: {}", extra={"fallback_error": fallback_error})
         knowledge_base_tool = None
 
 def get_tools() -> List[BaseTool]:

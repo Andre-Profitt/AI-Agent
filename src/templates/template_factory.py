@@ -11,6 +11,10 @@ from collections import defaultdict
 
 # Import base template class
 from src.core.optimized_chain_of_thought import ReasoningTemplate
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 
 class TemplateFactory:
@@ -30,7 +34,7 @@ class TemplateFactory:
                 with open(config_path, 'r') as f:
                     return json.load(f)
             except (json.JSONDecodeError, IOError) as e:
-                print(f"Warning: Could not load domain patterns from {config_path}: {e}")
+                logger.info("Warning: Could not load domain patterns from {}: {}", extra={"config_path": config_path, "e": e})
         
         # Default patterns if config file doesn't exist
         return {
@@ -173,7 +177,7 @@ class TemplateFactory:
         if 'pattern_updates' in performance_data:
             template.pattern.update(performance_data['pattern_updates'])
         
-        print(f"Optimized template '{template_name}' - Success rate: {template.success_rate:.2f}")
+        logger.info("Optimized template '{}' - Success rate: {}", extra={"template_name": template_name, "template_success_rate": template.success_rate})
 
 
 class TemplatePerformanceTracker:
@@ -431,8 +435,8 @@ if __name__ == "__main__":
     technical_template = factory.create_template('technical', 'development')
     
     # Test template creation
-    print("Available domains:", factory.get_available_domains())
-    print("Created templates:", list(factory.template_registry.keys()))
+    logger.info("Available domains:", extra={"data": factory.get_available_domains(}))
+    logger.info("Created templates:", extra={"data": list(factory.template_registry.keys(})))
     
     # Test template applicability
     test_query = "Analyze the experimental results and draw conclusions"
@@ -441,5 +445,5 @@ if __name__ == "__main__":
     scientific_score = scientific_template.is_applicable(test_query, features)
     business_score = business_template.is_applicable(test_query, features)
     
-    print(f"Scientific template score: {scientific_score:.2f}")
-    print(f"Business template score: {business_score:.2f}") 
+    logger.info("Scientific template score: {}", extra={"scientific_score": scientific_score})
+    logger.info("Business template score: {}", extra={"business_score": business_score}) 

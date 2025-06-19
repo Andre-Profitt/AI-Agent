@@ -4,7 +4,7 @@ Enhanced ConfigurationService for the AI Agent system.
 Usage Example:
     service = ConfigurationService()
     config = await service.load_configuration()
-    print(config.model_config.primary_model)
+    logger.info("Value: %s", config.model_config.primary_model)
 """
 
 import os
@@ -160,7 +160,7 @@ class ConfigurationService:
             else:
                 raise ConfigurationException(f"Unsupported config file type: {file_path}")
         except Exception as e:
-            logger.error(f"Failed to read config file {file_path}: {str(e)}")
+            logger.error("Failed to read config file {}: {}", extra={"file_path": file_path, "str_e_": str(e)})
             raise ConfigurationException(f"Failed to read config file {file_path}: {str(e)}")
     
     def _load_from_env(self) -> Dict[str, Any]:
@@ -238,7 +238,7 @@ class ConfigurationService:
                     config["api_keys"] = secrets.get("api_keys", {})
                     config["database"] = {**config.get("database", {}), **secrets.get("database", {})}
             except Exception as e:
-                logger.warning(f"Failed to load secrets: {e}")
+                logger.warning("Failed to load secrets: {}", extra={"e": e})
         return config
     
     def _deep_merge(self, *dicts: Dict[str, Any]) -> Dict[str, Any]:
@@ -345,7 +345,7 @@ class ConfigurationService:
         if config.model_config.temperature < 0 or config.model_config.temperature > 2:
             errors.append(f"Invalid temperature: {config.model_config.temperature}")
         if errors:
-            logger.error(f"Configuration validation failed: {', '.join(errors)}")
+            logger.error("Configuration validation failed: {}", extra={"_____join_errors_": ', '.join(errors)})
             raise ConfigurationException(f"Configuration validation failed: {', '.join(errors)}")
     
     async def _notify_watchers(self, config: SystemConfig) -> None:
@@ -353,7 +353,7 @@ class ConfigurationService:
             try:
                 await watcher(config)
             except Exception as e:
-                logger.error(f"Configuration watcher failed: {str(e)}")
+                logger.error("Configuration watcher failed: {}", extra={"str_e_": str(e)})
     
     def add_watcher(self, watcher: Callable[[SystemConfig], Awaitable[None]]) -> None:
         self._watchers.append(watcher)

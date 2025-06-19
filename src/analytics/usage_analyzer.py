@@ -13,6 +13,8 @@ import logging
 
 # Import the CoT system
 from src.core.optimized_chain_of_thought import ReasoningPath
+from pathlib import Path
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +22,7 @@ logger = logging.getLogger(__name__)
 class UsagePatternAnalyzer:
     """Analyze usage patterns to improve system performance"""
     
-    def __init__(self, max_history: int = 10000):
+    def __init__(self, max_history: int = 10000) -> None:
         self.query_patterns = defaultdict(lambda: {
             'count': 0,
             'avg_complexity': 0,
@@ -44,7 +46,7 @@ class UsagePatternAnalyzer:
                      timestamp: Optional[float] = None,
                      user_id: Optional[str] = None,
                      session_id: Optional[str] = None,
-                     user_feedback: Optional[float] = None):
+                     user_feedback: Optional[float] = None) -> Any:
         """Analyze a query and its result"""
         if timestamp is None:
             timestamp = time.time()
@@ -147,7 +149,7 @@ class UsagePatternAnalyzer:
         
         return insights
     
-    def _get_popular_patterns(self):
+    def _get_popular_patterns(self) -> Any:
         """Identify most common query patterns"""
         sorted_patterns = sorted(
             self.query_patterns.items(),
@@ -166,7 +168,7 @@ class UsagePatternAnalyzer:
             for pattern, data in sorted_patterns[:10]
         ]
     
-    def _get_problem_patterns(self):
+    def _get_problem_patterns(self) -> Any:
         """Identify patterns with low confidence or high errors"""
         problem_patterns = []
         
@@ -196,7 +198,7 @@ class UsagePatternAnalyzer:
         
         return sorted(problem_patterns, key=lambda x: len(x['issues']), reverse=True)
     
-    def _get_time_insights(self):
+    def _get_time_insights(self) -> Any:
         """Analyze time-based usage patterns"""
         if not self.usage_history:
             return {'message': 'No usage data available'}
@@ -221,7 +223,7 @@ class UsagePatternAnalyzer:
             'total_queries': len(self.usage_history)
         }
     
-    def _analyze_template_effectiveness(self):
+    def _analyze_template_effectiveness(self) -> Any:
         """Analyze template effectiveness"""
         template_stats = defaultdict(lambda: {
             'usage_count': 0,
@@ -275,7 +277,7 @@ class UsagePatternAnalyzer:
         
         return sorted(effectiveness, key=lambda x: x['effectiveness_score'], reverse=True)
     
-    def _analyze_sessions(self):
+    def _analyze_sessions(self) -> Any:
         """Analyze user session patterns"""
         session_analysis = []
         
@@ -301,7 +303,7 @@ class UsagePatternAnalyzer:
         
         return session_analysis
     
-    def _analyze_performance_trends(self):
+    def _analyze_performance_trends(self) -> Any:
         """Analyze performance trends over time"""
         if len(self.usage_history) < 10:
             return {'message': 'Insufficient data for trend analysis'}
@@ -348,7 +350,7 @@ class UsagePatternAnalyzer:
             'trend_direction': 'improving' if confidence_trend > 0 else 'declining'
         }
     
-    def _generate_recommendations(self, insights):
+    def _generate_recommendations(self, insights) -> Any:
         """Generate optimization recommendations"""
         recommendations = []
         
@@ -395,7 +397,7 @@ class UsagePatternAnalyzer:
         
         return recommendations
     
-    def save_analytics_report(self, filename: Optional[str] = None):
+    def save_analytics_report(self, filename: Optional[str] = None) -> bool:
         """Save analytics report to file"""
         if filename is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -420,7 +422,7 @@ class UsagePatternAnalyzer:
         with open(filename, 'w') as f:
             json.dump(report, f, indent=2, default=str)
         
-        logger.info(f"Analytics report saved to {filename}")
+        logger.info("Analytics report saved to {}", extra={"filename": filename})
         return filename
     
     def get_realtime_metrics(self) -> Dict[str, Any]:
@@ -453,7 +455,7 @@ class UsagePatternAnalyzer:
 
 
 # Example usage
-def run_usage_analysis():
+def run_usage_analysis() -> Any:
     """Example of running usage analysis"""
     logger.info("Running usage pattern analysis", extra={
         "operation": "usage_analysis",

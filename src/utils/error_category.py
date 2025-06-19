@@ -7,6 +7,7 @@ import logging
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from enum import Enum
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -58,14 +59,14 @@ class ToolExecutionResult:
 class CircuitBreaker:
     """Circuit breaker pattern for fault tolerance."""
     
-    def __init__(self, failure_threshold: int = 5, recovery_timeout: int = 60):
+    def __init__(self, failure_threshold: int = 5, recovery_timeout: int = 60) -> None:
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
         self.failure_count = 0
         self.last_failure_time = None
         self.state = "closed"  # closed, open, half-open
         
-    def call(self, func, *args, **kwargs):
+    def call(self, func, *args, **kwargs) -> Any:
         """Execute function with circuit breaker protection."""
         if self.state == "open":
             if time.time() - self.last_failure_time > self.recovery_timeout:
@@ -86,14 +87,14 @@ class CircuitBreaker:
             
             if self.failure_count >= self.failure_threshold:
                 self.state = "open"
-                logger.error(f"Circuit breaker opened after {self.failure_count} failures")
+                logger.error("Circuit breaker opened after {} failures", extra={"self_failure_count": self.failure_count})
                 
             raise e
 
 class ErrorHandler:
     """Enhanced error handling and recovery system."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.error_counts = {}
         self.recovery_history = {}
         self.circuit_breakers = {}  # Add circuit breakers per tool
@@ -242,7 +243,7 @@ class ErrorHandler:
         }
         return suggestions.get(error_category, ["Retry with modified input"])
     
-    def track_error(self, error_category: ErrorCategory):
+    def track_error(self, error_category: ErrorCategory) -> Any:
         """Track error frequency for adaptive handling."""
         self.error_counts[error_category] = self.error_counts.get(error_category, 0) + 1
     
@@ -250,7 +251,7 @@ class ErrorHandler:
         """Get error statistics for monitoring."""
         return self.error_counts.copy()
     
-    def record_recovery(self, error_category: ErrorCategory, success: bool):
+    def record_recovery(self, error_category: ErrorCategory, success: bool) -> Any:
         """Record recovery attempt success/failure."""
         if error_category not in self.recovery_history:
             self.recovery_history[error_category] = {"success": 0, "failure": 0}

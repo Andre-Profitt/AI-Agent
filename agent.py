@@ -261,7 +261,7 @@ def create_agent():
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     
-    print("Testing GAIA agent wrapper...")
+    logger.info("Testing GAIA agent wrapper...")
     
     # Build the graph
     graph = build_graph()
@@ -270,13 +270,13 @@ if __name__ == "__main__":
     test_question = "What is the capital of France?"
     test_messages = [HumanMessage(content=test_question)]
     
-    print(f"Test question: {test_question}")
+    logger.info("Test question: {}", extra={"test_question": test_question})
     
     try:
         result = graph.invoke({"messages": test_messages})
         answer = result['messages'][-1].content
-        print(f"Answer: {answer}")
+        logger.info("Answer: {}", extra={"answer": answer})
     except Exception as e:
-        print(f"Error during test: {e}")
+        logger.info("Error during test: {}", extra={"e": e})
     
-    print("\nGAIA agent wrapper is ready for use!") 
+    logger.info("\nGAIA agent wrapper is ready for use!") 

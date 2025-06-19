@@ -72,7 +72,7 @@ class TaskDistributor:
         priority = -task.get_priority_score()  # Negative for max-heap behavior
         await self.task_queue.put((priority, task))
         
-        logger.info(f"Task {task.task_id} submitted for distribution (priority: {task.priority})")
+        logger.info("Task {} submitted for distribution (priority: {})", extra={"task_task_id": task.task_id, "task_priority": task.priority})
         return task.task_id
     
     async def distribute_tasks(self):
@@ -86,7 +86,7 @@ class TaskDistributor:
                 suitable_agents = await self._find_suitable_agents(task)
                 
                 if not suitable_agents:
-                    logger.warning(f"No suitable agents for task {task.task_id}")
+                    logger.warning("No suitable agents for task {}", extra={"task_task_id": task.task_id})
                     # Could implement retry logic here
                     self.stats["tasks_failed"] += 1
                     continue
@@ -104,7 +104,7 @@ class TaskDistributor:
                 logger.info("Task distribution loop cancelled")
                 break
             except Exception as e:
-                logger.error(f"Error in task distribution: {e}")
+                logger.error("Error in task distribution: {}", extra={"e": e})
                 self.stats["tasks_failed"] += 1
     
     async def _find_suitable_agents(self, task: UnifiedTask) -> List[AgentMetadata]:
@@ -259,8 +259,8 @@ class TaskDistributor:
             "assigned_at": time.time()
         }
         
-        logger.info(f"Assigned task {task.task_id} to agent {agent.agent_id} "
-                   f"(load: {self.agent_load[agent.agent_id]})")
+        logger.info("Assigned task {} to agent {} "
+                   f"(load: {})", extra={"task_task_id": task.task_id, "agent_agent_id": agent.agent_id, "self_agent_load_agent_agent_id": self.agent_load[agent.agent_id]})
     
     def add_routing_rule(self, rule: Callable):
         """Add a custom routing rule"""
@@ -420,7 +420,7 @@ class TaskDistributor:
     async def set_distribution_strategy(self, strategy: TaskDistributionStrategy):
         """Change the distribution strategy"""
         self.distribution_strategy = strategy
-        logger.info(f"Changed distribution strategy to: {strategy.name}")
+        logger.info("Changed distribution strategy to: {}", extra={"strategy_name": strategy.name})
     
     async def clear_task_history(self):
         """Clear task history"""

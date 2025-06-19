@@ -41,7 +41,7 @@ def video_analyzer_production(video_url: str) -> str:
         str: JSON string containing video metadata and transcript
     """
     try:
-        logger.info(f"Production video analyzer called with URL: {video_url}")
+        logger.info("Production video analyzer called with URL: {}", extra={"video_url": video_url})
         
         # Create temporary directory for downloads
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -97,7 +97,7 @@ def video_analyzer_production(video_url: str) -> str:
                             })
                         
                     except Exception as e:
-                        logger.error(f"yt-dlp download error: {e}")
+                        logger.error("yt-dlp download error: {}", extra={"e": e})
                         return json.dumps({
                             "error": f"Failed to download video: {str(e)}"
                         })
@@ -107,7 +107,7 @@ def video_analyzer_production(video_url: str) -> str:
                 })
                     
     except Exception as e:
-        logger.error(f"Error in production video analyzer: {e}")
+        logger.error("Error in production video analyzer: {}", extra={"e": e})
         return json.dumps({"error": f"Failed to analyze video: {str(e)}"})
 
 @tool
@@ -123,7 +123,7 @@ def chess_analyzer_production(fen_string: str, analysis_time_seconds: float = 3.
         str: The best move in algebraic notation with evaluation
     """
     try:
-        logger.info(f"Production chess analyzer called with FEN: {fen_string}")
+        logger.info("Production chess analyzer called with FEN: {}", extra={"fen_string": fen_string})
         
         # Validate FEN
         try:
@@ -183,7 +183,7 @@ def chess_analyzer_production(fen_string: str, analysis_time_seconds: float = 3.
             return f"Error analyzing with Stockfish: {str(e)}"
                 
     except Exception as e:
-        logger.error(f"Error in production chess analyzer: {e}")
+        logger.error("Error in production chess analyzer: {}", extra={"e": e})
         return f"Error analyzing chess position: {str(e)}"
 
 @tool
@@ -220,7 +220,7 @@ def install_stockfish() -> str:
             return f"Unsupported system: {system}. Please install Stockfish manually."
             
     except Exception as e:
-        logger.error(f"Error installing Stockfish: {e}")
+        logger.error("Error installing Stockfish: {}", extra={"e": e})
         return f"Error installing Stockfish: {str(e)}"
 
 @tool
@@ -235,7 +235,7 @@ def image_analyzer_chess(image_path: str) -> str:
         str: FEN notation of the chess position
     """
     try:
-        logger.info(f"Chess image analyzer called with: {image_path}")
+        logger.info("Chess image analyzer called with: {}", extra={"image_path": image_path})
         
         # This would integrate with a vision model to analyze chess positions
         # For now, return a placeholder
@@ -243,7 +243,7 @@ def image_analyzer_chess(image_path: str) -> str:
                 "The image would be analyzed to extract piece positions and convert to FEN notation.")
                 
     except Exception as e:
-        logger.error(f"Error in chess image analyzer: {e}")
+        logger.error("Error in chess image analyzer: {}", extra={"e": e})
         return f"Error analyzing chess image: {str(e)}"
 
 @tool
@@ -258,7 +258,7 @@ def music_discography_tool(artist_name: str) -> str:
         str: Discography information
     """
     try:
-        logger.info(f"Music discography tool called for: {artist_name}")
+        logger.info("Music discography tool called for: {}", extra={"artist_name": artist_name})
         
         # This would integrate with music APIs like Spotify, Last.fm, or MusicBrainz
         # For now, use web search as fallback
@@ -272,7 +272,7 @@ def music_discography_tool(artist_name: str) -> str:
             return f"Discography search for {artist_name} would be performed here."
             
     except Exception as e:
-        logger.error(f"Error in music discography tool: {e}")
+        logger.error("Error in music discography tool: {}", extra={"e": e})
         return f"Error searching discography: {str(e)}"
 
 @tool
@@ -287,7 +287,7 @@ def sports_data_tool(query: str) -> str:
         str: Sports data and statistics
     """
     try:
-        logger.info(f"Sports data tool called with: {query}")
+        logger.info("Sports data tool called with: {}", extra={"query": query})
         
         # This would integrate with sports APIs
         # For now, use web search as fallback
@@ -298,7 +298,7 @@ def sports_data_tool(query: str) -> str:
             return f"Sports data search for '{query}' would be performed here."
             
     except Exception as e:
-        logger.error(f"Error in sports data tool: {e}")
+        logger.error("Error in sports data tool: {}", extra={"e": e})
         return f"Error searching sports data: {str(e)}"
 
 @tool
@@ -313,7 +313,7 @@ def text_reversal_tool(text: str) -> str:
         str: Reversed text
     """
     try:
-        logger.info(f"Text reversal tool called with: {text[:50]}...")
+        logger.info("Text reversal tool called with: {}...", extra={"text_": text[})
         
         # Simple text reversal
         reversed_text = text[::-1]
@@ -321,7 +321,7 @@ def text_reversal_tool(text: str) -> str:
         return f"Original: {text}\nReversed: {reversed_text}"
         
     except Exception as e:
-        logger.error(f"Error in text reversal tool: {e}")
+        logger.error("Error in text reversal tool: {}", extra={"e": e})
         return f"Error reversing text: {str(e)}"
 
 @tool
@@ -336,7 +336,7 @@ def mathematical_calculator(expression: str) -> str:
         str: Result of the calculation
     """
     try:
-        logger.info(f"Mathematical calculator called with: {expression}")
+        logger.info("Mathematical calculator called with: {}", extra={"expression": expression})
         
         # Use Python's eval with safe math functions
         import math
@@ -366,7 +366,7 @@ def mathematical_calculator(expression: str) -> str:
         return f"Expression: {expression}\nResult: {result}"
         
     except Exception as e:
-        logger.error(f"Error in mathematical calculator: {e}")
+        logger.error("Error in mathematical calculator: {}", extra={"e": e})
         return f"Error calculating expression: {str(e)}"
 
 def get_production_tools() -> List[tool]:

@@ -11,6 +11,10 @@ from unittest.mock import Mock, patch
 
 # Import the CoT system components
 from src.core.optimized_chain_of_thought import (
+import logging
+
+logger = logging.getLogger(__name__)
+
     OptimizedChainOfThought,
     ComplexityAnalyzer,
     TemplateLibrary,
@@ -348,9 +352,9 @@ class TestCoTCompatibility:
             try:
                 module = importlib.import_module(package)
                 version = getattr(module, '__version__', 'unknown')
-                print(f"{package}: {version} (required: >={min_version})")
+                logger.info("{}: {} (required: >={})", extra={"package": package, "version": version, "min_version": min_version})
             except ImportError:
-                print(f"{package}: NOT INSTALLED (required: >={min_version})")
+                logger.info("{}: NOT INSTALLED (required: >={})", extra={"package": package, "min_version": min_version})
     
     async def test_reasoning_path_contract(self):
         """Ensure ReasoningPath maintains expected structure"""

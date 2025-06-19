@@ -656,7 +656,7 @@ class MultiPathReasoning:
             return path
             
         except Exception as e:
-            logger.error(f"Path execution failed: {str(e)}")
+            logger.error("Path execution failed: {}", extra={"str_e_": str(e)})
             return None
     
     async def _generate_step(self, step_num: int, max_depth: int,
@@ -979,16 +979,16 @@ class OptimizedChainOfThought:
         cached_result = self.reasoning_cache.get(query)
         if cached_result:
             self.performance_metrics['cache_hits'] += 1
-            logger.info(f"Cache hit for query: {query[:50]}...")
+            logger.info("Cache hit for query: {}...", extra={"query_": query[})
             return cached_result
         
         # Analyze complexity
         complexity_score, features = self.complexity_analyzer.analyze(query)
-        logger.info(f"Query complexity: {complexity_score:.2f}")
+        logger.info("Query complexity: {}", extra={"complexity_score": complexity_score})
         
         # Select template
         template = self.template_library.select_template(query, features)
-        logger.info(f"Selected template: {template.name}")
+        logger.info("Selected template: {}", extra={"template_name": template.name})
         
         # Explore multiple reasoning paths
         paths = await self.multi_path_engine.explore_paths(
@@ -1100,48 +1100,48 @@ async def example_usage():
         "Solve the equation: 3x^2 + 5x - 2 = 0"
     ]
     
-    print("=== Optimized Chain of Thought Examples ===\n")
+    logger.info("=== Optimized Chain of Thought Examples ===\n")
     
     for query in queries:
-        print(f"Query: {query}")
-        print("-" * 50)
+        logger.info("Query: {}", extra={"query": query})
+        logger.info("-" * 50)
         
         # Execute reasoning
         result = await cot.reason(query)
         
-        print(f"Template used: {result.template_used}")
-        print(f"Complexity: {result.complexity_score:.2f}")
-        print(f"Confidence: {result.total_confidence:.2f}")
-        print(f"Execution time: {result.execution_time:.2f}s")
-        print(f"Number of steps: {len(result.steps)}")
+        logger.info("Template used: {}", extra={"result_template_used": result.template_used})
+        logger.info("Complexity: {}", extra={"result_complexity_score": result.complexity_score})
+        logger.info("Confidence: {}", extra={"result_total_confidence": result.total_confidence})
+        logger.info("Execution time: {}s", extra={"result_execution_time": result.execution_time})
+        logger.info("Number of steps: {}", extra={"len_result_steps_": len(result.steps)})
         
-        print("\nReasoning steps:")
+        logger.info("\nReasoning steps:")
         for step in result.steps:
-            print(f"  Step {step.step_id} ({step.reasoning_type.name}): {step.thought}")
-            print(f"    Confidence: {step.confidence:.2f}")
+            logger.info("  Step {} ({}): {}", extra={"step_step_id": step.step_id, "step_reasoning_type_name": step.reasoning_type.name, "step_thought": step.thought})
+            logger.info("    Confidence: {}", extra={"step_confidence": step.confidence})
         
-        print(f"\nFinal answer: {result.final_answer}")
-        print("\n" + "="*70 + "\n")
+        logger.info("\nFinal answer: {}", extra={"result_final_answer": result.final_answer})
+        logger.info("\n" + str("="*70 + "\n"))
     
     # Test caching
-    print("=== Testing Cache ===")
+    logger.info("=== Testing Cache ===")
     cached_query = queries[1]  # "Explain why the sky is blue."
     
-    print(f"Re-running query: {cached_query}")
+    logger.info("Re-running query: {}", extra={"cached_query": cached_query})
     start = time.time()
     result = await cot.reason(cached_query)
-    print(f"Execution time (should be faster due to cache): {time.time() - start:.4f}s")
+    logger.info("Execution time (should be faster due to cache): {}s", extra={"time_time_____start": time.time() - start})
     
     # Show performance report
-    print("\n=== Performance Report ===")
+    logger.info("\n=== Performance Report ===")
     report = cot.get_performance_report()
     for key, value in report.items():
         if isinstance(value, dict):
-            print(f"{key}:")
+            logger.info("{}:", extra={"key": key})
             for k, v in value.items():
-                print(f"  {k}: {v}")
+                logger.info("  {}: {}", extra={"k": k, "v": v})
         else:
-            print(f"{key}: {value}")
+            logger.info("{}: {}", extra={"key": key, "value": value})
 
 if __name__ == "__main__":
     asyncio.run(example_usage()) 

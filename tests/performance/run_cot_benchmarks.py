@@ -9,6 +9,10 @@ import argparse
 import sys
 import os
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 # Add the project root to the path
 project_root = Path(__file__).parent.parent.parent
@@ -23,7 +27,7 @@ from tests.performance.cot_benchmark_suite import (
 
 async def run_basic_benchmark():
     """Run basic performance benchmark"""
-    print("Running basic performance benchmark...")
+    logger.info("Running basic performance benchmark...")
     benchmark = CoTBenchmark()
     
     # Create CoT system
@@ -35,17 +39,17 @@ async def run_basic_benchmark():
     suite = await benchmark.run_benchmark(cot, queries, "basic_test")
     analysis = benchmark.analyze_results(suite)
     
-    print("\nBasic Benchmark Results:")
-    print(f"Total queries: {analysis['overall']['total_queries']}")
-    print(f"Average execution time: {analysis['overall']['avg_execution_time']:.3f}s")
-    print(f"Average confidence: {analysis['overall']['avg_confidence']:.3f}")
-    print(f"Cache hit rate: {analysis['overall']['cache_hit_rate']:.2%}")
+    logger.info("\nBasic Benchmark Results:")
+    logger.info("Total queries: {}", extra={"analysis__overall___total_queries_": analysis['overall']['total_queries']})
+    logger.info("Average execution time: {}s", extra={"analysis__overall___avg_execution_time_": analysis['overall']['avg_execution_time']})
+    logger.info("Average confidence: {}", extra={"analysis__overall___avg_confidence_": analysis['overall']['avg_confidence']})
+    logger.info("Cache hit rate: {}", extra={"analysis__overall___cache_hit_rate_": analysis['overall']['cache_hit_rate']})
     
     return analysis
 
 async def run_complexity_benchmark():
     """Run benchmark across different complexity levels"""
-    print("Running complexity-based benchmark...")
+    logger.info("Running complexity-based benchmark...")
     benchmark = CoTBenchmark()
     
     from src.core.optimized_chain_of_thought import OptimizedChainOfThought
@@ -61,37 +65,37 @@ async def run_complexity_benchmark():
     suite = await benchmark.run_benchmark(cot, all_queries, "complexity_test")
     analysis = benchmark.analyze_results(suite)
     
-    print("\nComplexity Benchmark Results:")
-    print("By complexity level:")
+    logger.info("\nComplexity Benchmark Results:")
+    logger.info("By complexity level:")
     for level, data in analysis['by_complexity'].items():
         if data:
-            print(f"  {level.capitalize()}:")
-            print(f"    Count: {data['count']}")
-            print(f"    Avg time: {data['avg_execution_time']:.3f}s")
-            print(f"    Avg confidence: {data['avg_confidence']:.3f}")
+            logger.info("  {}:", extra={"level_capitalize__": level.capitalize()})
+            logger.info("    Count: {}", extra={"data__count_": data['count']})
+            logger.info("    Avg time: {}s", extra={"data__avg_execution_time_": data['avg_execution_time']})
+            logger.info("    Avg confidence: {}", extra={"data__avg_confidence_": data['avg_confidence']})
     
     return analysis
 
 async def run_configuration_benchmark():
     """Run benchmark with different configurations"""
-    print("Running configuration comparison benchmark...")
+    logger.info("Running configuration comparison benchmark...")
     benchmark = CoTBenchmark()
     
     comparative_results = await benchmark.run_comparative_benchmark()
     
-    print("\nConfiguration Comparison Results:")
+    logger.info("\nConfiguration Comparison Results:")
     for config_name, suite in comparative_results.items():
         analysis = benchmark.analyze_results(suite)
-        print(f"\n{config_name}:")
-        print(f"  Avg execution time: {analysis['overall']['avg_execution_time']:.3f}s")
-        print(f"  Avg confidence: {analysis['overall']['avg_confidence']:.3f}")
-        print(f"  Avg memory: {analysis['overall']['avg_memory_mb']:.2f} MB")
+        logger.info("\n{}:", extra={"config_name": config_name})
+        logger.info("  Avg execution time: {}s", extra={"analysis__overall___avg_execution_time_": analysis['overall']['avg_execution_time']})
+        logger.info("  Avg confidence: {}", extra={"analysis__overall___avg_confidence_": analysis['overall']['avg_confidence']})
+        logger.info("  Avg memory: {} MB", extra={"analysis__overall___avg_memory_mb_": analysis['overall']['avg_memory_mb']})
     
     return comparative_results
 
 async def run_domain_benchmark():
     """Run benchmark for specific domains"""
-    print("Running domain-specific benchmark...")
+    logger.info("Running domain-specific benchmark...")
     benchmark = CoTBenchmark()
     
     from src.core.optimized_chain_of_thought import OptimizedChainOfThought
@@ -105,21 +109,21 @@ async def run_domain_benchmark():
     
     results = {}
     for domain, queries in domains.items():
-        print(f"\nTesting {domain} domain...")
+        logger.info("\nTesting {} domain...", extra={"domain": domain})
         suite = await benchmark.run_benchmark(cot, queries, f"{domain}_domain")
         analysis = benchmark.analyze_results(suite)
         results[domain] = analysis
         
-        print(f"  {domain.capitalize()} domain results:")
-        print(f"    Avg execution time: {analysis['overall']['avg_execution_time']:.3f}s")
-        print(f"    Avg confidence: {analysis['overall']['avg_confidence']:.3f}")
-        print(f"    Avg steps: {analysis['overall']['avg_steps']:.1f}")
+        logger.info("  {} domain results:", extra={"domain_capitalize__": domain.capitalize()})
+        logger.info("    Avg execution time: {}s", extra={"analysis__overall___avg_execution_time_": analysis['overall']['avg_execution_time']})
+        logger.info("    Avg confidence: {}", extra={"analysis__overall___avg_confidence_": analysis['overall']['avg_confidence']})
+        logger.info("    Avg steps: {}", extra={"analysis__overall___avg_steps_": analysis['overall']['avg_steps']})
     
     return results
 
 async def run_full_benchmark():
     """Run the complete benchmark suite"""
-    print("Running full benchmark suite...")
+    logger.info("Running full benchmark suite...")
     return await run_performance_tests()
 
 def main():
@@ -168,8 +172,8 @@ def main():
         }
         json.dump(serializable_results, f, indent=2)
     
-    print(f"\nBenchmark results saved to '{args.output}'")
-    print("Benchmark completed successfully!")
+    logger.info("\nBenchmark results saved to '{}'", extra={"args_output": args.output})
+    logger.info("Benchmark completed successfully!")
 
 if __name__ == "__main__":
     main() 

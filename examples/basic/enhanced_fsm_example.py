@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     """Main example function"""
-    print("🚀 Enhanced FSM Example")
+    logger.info("🚀 Enhanced FSM Example")
     print("=" * 50)
     
     try:
@@ -34,10 +34,10 @@ def main():
             StateDiscoveryEngine
         )
         
-        print("✅ Successfully imported Enhanced FSM components")
+        logger.info("✅ Successfully imported Enhanced FSM components")
         
         # Step 1: Create a simple FSM
-        print("\n📋 Step 1: Creating Simple FSM")
+        logger.info("\n📋 Step 1: Creating Simple FSM")
         hfsm = HierarchicalFSM("ExampleFSM")
         
         # Create atomic states
@@ -50,10 +50,10 @@ def main():
         hfsm.add_state(execution)
         hfsm.add_state(synthesis)
         
-        print(f"   Created {len(hfsm.states)} states: {list(hfsm.states.keys())}")
+        logger.info("   Created {} states: {}", extra={"len_hfsm_states_": len(hfsm.states), "list_hfsm_states_keys___": list(hfsm.states.keys())})
         
         # Step 2: Add probabilistic transitions
-        print("\n🔄 Step 2: Adding Probabilistic Transitions")
+        logger.info("\n🔄 Step 2: Adding Probabilistic Transitions")
         
         # Create transitions
         plan_to_exec = ProbabilisticTransition("PLANNING", "EXECUTION", 0.9)
@@ -67,10 +67,10 @@ def main():
         hfsm.add_transition(plan_to_exec)
         hfsm.add_transition(exec_to_synth)
         
-        print(f"   Added {len(hfsm.transitions)} transitions")
+        logger.info("   Added {} transitions", extra={"len_hfsm_transitions_": len(hfsm.transitions)})
         
         # Step 3: Test FSM execution
-        print("\n▶️  Step 3: Testing FSM Execution")
+        logger.info("\n▶️  Step 3: Testing FSM Execution")
         
         # Create context
         context = {
@@ -82,29 +82,29 @@ def main():
         
         # Start FSM
         hfsm.start("PLANNING", context)
-        print(f"   Started FSM in state: {hfsm.current_state.name}")
+        logger.info("   Started FSM in state: {}", extra={"hfsm_current_state_name": hfsm.current_state.name})
         
         # Get available transitions
         available = hfsm.get_available_transitions(context)
-        print(f"   Available transitions: {len(available)}")
+        logger.info("   Available transitions: {}", extra={"len_available_": len(available)})
         for transition in available:
-            print(f"     -> {transition['to_state']} (p={transition['probability']:.3f})")
+            logger.info("     -> {} (p={})", extra={"transition__to_state_": transition['to_state'], "transition__probability_": transition['probability']})
         
         # Execute transitions
-        print("\n   Executing transitions...")
+        logger.info("\n   Executing transitions...")
         
         # Transition to execution
         success = hfsm.transition_to("EXECUTION", context)
-        print(f"     PLANNING -> EXECUTION: {'✅' if success else '❌'}")
+        logger.info("     PLANNING -> EXECUTION: {}", extra={"____if_success_else____": '✅' if success else '❌'})
         
         # Transition to synthesis
         success = hfsm.transition_to("SYNTHESIS", context)
-        print(f"     EXECUTION -> SYNTHESIS: {'✅' if success else '❌'}")
+        logger.info("     EXECUTION -> SYNTHESIS: {}", extra={"____if_success_else____": '✅' if success else '❌'})
         
-        print(f"   Final state: {hfsm.current_state.name}")
+        logger.info("   Final state: {}", extra={"hfsm_current_state_name": hfsm.current_state.name})
         
         # Step 4: Test state discovery
-        print("\n🔍 Step 4: Testing State Discovery")
+        logger.info("\n🔍 Step 4: Testing State Discovery")
         
         discovery = StateDiscoveryEngine(similarity_threshold=0.8, min_pattern_frequency=2)
         
@@ -125,49 +125,49 @@ def main():
         ]
         
         for i, test_context in enumerate(test_contexts):
-            print(f"   Analyzing context {i+1}...")
+            logger.info("   Analyzing context {}...", extra={"i_1": i+1})
             pattern = discovery.analyze_context(test_context)
             if pattern:
-                print(f"     ✅ Discovered pattern: {pattern.name}")
+                logger.info("     ✅ Discovered pattern: {}", extra={"pattern_name": pattern.name})
             else:
-                print(f"     ⚠️  No new pattern discovered")
+                logger.info("     ⚠️  No new pattern discovered")
         
         # Step 5: Test metrics and visualization
-        print("\n📊 Step 5: Testing Metrics and Visualization")
+        logger.info("\n📊 Step 5: Testing Metrics and Visualization")
         
         # Get state metrics
         metrics = hfsm.get_state_metrics()
-        print("   State Metrics:")
+        logger.info("   State Metrics:")
         for state_name, state_metrics in metrics.items():
             success_rate = state_metrics.success_count / max(1, state_metrics.exit_count)
-            print(f"     {state_name}: {success_rate:.1%} success rate, {state_metrics.avg_time:.3f}s avg time")
+            logger.info("     {}: {} success rate, {}s avg time", extra={"state_name": state_name, "success_rate": success_rate, "state_metrics_avg_time": state_metrics.avg_time})
         
         # Generate visualization
-        print("\n   FSM Visualization:")
+        logger.info("\n   FSM Visualization:")
         visualization = hfsm.visualize()
-        print(visualization)
+        logger.info("Value", extra={"value": visualization})
         
         # Export comprehensive metrics
         export_data = hfsm.export_metrics()
-        print(f"\n   Export Summary:")
-        print(f"     FSM Name: {export_data['fsm_name']}")
-        print(f"     Total States: {export_data['total_states']}")
-        print(f"     Total Transitions: {export_data['total_transitions']}")
-        print(f"     Transition Log Entries: {len(export_data['transition_log'])}")
+        logger.info("\n   Export Summary:")
+        logger.info("     FSM Name: {}", extra={"export_data__fsm_name_": export_data['fsm_name']})
+        logger.info("     Total States: {}", extra={"export_data__total_states_": export_data['total_states']})
+        logger.info("     Total Transitions: {}", extra={"export_data__total_transitions_": export_data['total_transitions']})
+        logger.info("     Transition Log Entries: {}", extra={"len_export_data__transition_log__": len(export_data['transition_log'])})
         
-        print("\n🎉 Enhanced FSM Example Completed Successfully!")
+        logger.info("\n🎉 Enhanced FSM Example Completed Successfully!")
         print("=" * 50)
         
         return True
         
     except ImportError as e:
-        print(f"❌ Import Error: {e}")
-        print("   Make sure all dependencies are installed:")
-        print("   pip install numpy scikit-learn matplotlib networkx")
+        logger.info("❌ Import Error: {}", extra={"e": e})
+        logger.info("   Make sure all dependencies are installed:")
+        logger.info("   pip install numpy scikit-learn matplotlib networkx")
         return False
         
     except Exception as e:
-        print(f"❌ Error: {e}")
+        logger.info("❌ Error: {}", extra={"e": e})
         logger.exception("Detailed error information:")
         return False
 

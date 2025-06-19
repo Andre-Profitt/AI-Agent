@@ -79,7 +79,7 @@ class ManageSessionUseCase:
             }
             
         except Exception as e:
-            self.logger.error(f"Failed to create session: {str(e)}")
+            self.logger.error("Failed to create session: {}", extra={"str_e_": str(e)})
             await self.logging_service.log_error(
                 "session_creation_failed",
                 str(e),
@@ -116,7 +116,7 @@ class ManageSessionUseCase:
             }
             
         except Exception as e:
-            self.logger.error(f"Failed to get session {session_id}: {str(e)}")
+            self.logger.error("Failed to get session {}: {}", extra={"session_id": session_id, "str_e_": str(e)})
             return {"success": False, "error": str(e)}
     
     async def update_session(
@@ -175,7 +175,7 @@ class ManageSessionUseCase:
             }
             
         except Exception as e:
-            self.logger.error(f"Failed to update session {session_id}: {str(e)}")
+            self.logger.error("Failed to update session {}: {}", extra={"session_id": session_id, "str_e_": str(e)})
             await self.logging_service.log_error(
                 "session_update_failed",
                 str(e),
@@ -219,7 +219,7 @@ class ManageSessionUseCase:
             return {"success": True, "session_id": str(session_id)}
             
         except Exception as e:
-            self.logger.error(f"Failed to delete session {session_id}: {str(e)}")
+            self.logger.error("Failed to delete session {}: {}", extra={"session_id": session_id, "str_e_": str(e)})
             await self.logging_service.log_error(
                 "session_deletion_failed",
                 str(e),
@@ -271,7 +271,7 @@ class ManageSessionUseCase:
             }
             
         except Exception as e:
-            self.logger.error(f"Failed to list sessions: {str(e)}")
+            self.logger.error("Failed to list sessions: {}", extra={"str_e_": str(e)})
             return {"success": False, "error": str(e)}
     
     async def get_session_messages(
@@ -320,7 +320,7 @@ class ManageSessionUseCase:
             }
             
         except Exception as e:
-            self.logger.error(f"Failed to get session messages {session_id}: {str(e)}")
+            self.logger.error("Failed to get session messages {}: {}", extra={"session_id": session_id, "str_e_": str(e)})
             return {"success": False, "error": str(e)}
     
     async def cleanup_expired_sessions(self, max_age_hours: int = 24) -> Dict[str, Any]:
@@ -346,7 +346,7 @@ class ManageSessionUseCase:
                     await self.delete_session(session.id)
                     deleted_count += 1
                 except Exception as e:
-                    self.logger.warning(f"Failed to delete expired session {session.id}: {str(e)}")
+                    self.logger.warning("Failed to delete expired session {}: {}", extra={"session_id": session.id, "str_e_": str(e)})
             
             # Log cleanup
             await self.logging_service.log_info(
@@ -362,7 +362,7 @@ class ManageSessionUseCase:
             }
             
         except Exception as e:
-            self.logger.error(f"Failed to cleanup expired sessions: {str(e)}")
+            self.logger.error("Failed to cleanup expired sessions: {}", extra={"str_e_": str(e)})
             return {"success": False, "error": str(e)}
     
     async def get_session_statistics(self) -> Dict[str, Any]:
@@ -377,5 +377,5 @@ class ManageSessionUseCase:
             return {"success": True, "statistics": stats}
             
         except Exception as e:
-            self.logger.error(f"Failed to get session statistics: {str(e)}")
+            self.logger.error("Failed to get session statistics: {}", extra={"str_e_": str(e)})
             return {"success": False, "error": str(e)} 

@@ -8,9 +8,10 @@ import asyncio
 
 from src.core.entities.message import Message, MessageType
 from src.core.interfaces.message_repository import MessageRepository
+from typing import Optional, Dict, Any, List, Union, Tuple
 
 class InMemoryMessageRepository(MessageRepository):
-    def __init__(self):
+    def __init__(self) -> None:
         self._messages: Dict[UUID, Message] = {}
 
     async def save(self, message: Message) -> Message:

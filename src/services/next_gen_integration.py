@@ -11,6 +11,7 @@ from datetime import datetime
 from src.query_classifier import QueryClassifier, QueryCategory, OperationalParameters
 from src.meta_cognition import MetaCognition, MetaCognitiveRouter
 from src.tools_interactive import (
+from typing import Optional, Dict, Any, List, Union, Tuple
     interactive_state, 
     get_interactive_tools,
     clarification_tracker
@@ -99,14 +100,14 @@ class NextGenFSMAgent(FSMReActAgent):
             f"persistent_learning={use_persistent_learning}"
         )
     
-    def run(self, inputs: dict):
+    def run(self, inputs: dict) -> Any:
         """
         Enhanced run method with all next-gen features
         """
         query = inputs.get("query", "")
         correlation_id = inputs.get("correlation_id", str(datetime.now().timestamp()))
         
-        logger.info(f"NextGen agent processing query: {query[:100]}...")
+        logger.info("NextGen agent processing query: {}...", extra={"query_": query[})
         
         # Step 1: Query Classification (if enabled)
         if self.use_query_classification and self.query_classifier:
@@ -156,30 +157,30 @@ class NextGenFSMAgent(FSMReActAgent):
         
         return result
     
-    def _apply_operational_parameters(self, params: OperationalParameters):
+    def _apply_operational_parameters(self, params: OperationalParameters) -> Any:
         """Apply dynamic operational parameters from query classification"""
         # Update model preference
         if hasattr(params, 'model_preference'):
             self.model_preference = params.model_preference
-            logger.info(f"Updated model preference to: {params.model_preference}")
+            logger.info("Updated model preference to: {}", extra={"params_model_preference": params.model_preference})
         
         # Update verification level
         if hasattr(params, 'verification_level'):
             self.verification_level = params.verification_level
-            logger.info(f"Updated verification level to: {params.verification_level}")
+            logger.info("Updated verification level to: {}", extra={"params_verification_level": params.verification_level})
         
         # Update max reasoning steps
         if hasattr(params, 'max_reasoning_steps'):
             self.max_reasoning_steps = params.max_reasoning_steps
-            logger.info(f"Updated max reasoning steps to: {params.max_reasoning_steps}")
+            logger.info("Updated max reasoning steps to: {}", extra={"params_max_reasoning_steps": params.max_reasoning_steps})
     
-    def _setup_interactive_callbacks(self):
+    def _setup_interactive_callbacks(self) -> Any:
         """Set up callbacks for interactive tools"""
         # This would be connected to the UI layer
         # For now, log that callbacks would be set up
         logger.info("Interactive tool callbacks would be set up here")
     
-    def _track_tool_performance(self, result: dict):
+    def _track_tool_performance(self, result: dict) -> Any:
         """Track tool performance metrics for learning"""
         if not self.extended_db:
             return
@@ -207,7 +208,7 @@ class NextGenFSMAgent(FSMReActAgent):
                 f"success={success}, latency={latency_ms}ms"
             )
     
-    def _learn_from_clarifications(self, original_query: str, result: dict):
+    def _learn_from_clarifications(self, original_query: str, result: dict) -> Any:
         """Learn from clarification patterns"""
         # Check if clarification tool was used
         tool_calls = result.get("tool_calls", [])
@@ -245,7 +246,7 @@ class NextGenFSMAgent(FSMReActAgent):
         if not self.use_tool_introspection or not self.tool_introspector:
             return None
         
-        logger.info(f"Attempting self-correction for tool error: {tool_name}")
+        logger.info("Attempting self-correction for tool error: {}", extra={"tool_name": tool_name})
         
         # Analyze the error
         error_analysis = self.tool_introspector.analyze_tool_error(
@@ -272,7 +273,7 @@ class NextGenFSMAgent(FSMReActAgent):
                 )
                 
                 if corrected_params:
-                    logger.info(f"Self-corrected parameters: {corrected_params}")
+                    logger.info("Self-corrected parameters: {}", extra={"corrected_params": corrected_params})
                     return corrected_params
         
         return None
@@ -360,7 +361,7 @@ class NextGenFSMAgent(FSMReActAgent):
         
         # Return top tools
         recommendations = [tool.tool_name for tool in sorted_tools[:5]]
-        logger.info(f"Tool recommendations: {recommendations}")
+        logger.info("Tool recommendations: {}", extra={"recommendations": recommendations})
         
         return recommendations
 
@@ -394,7 +395,7 @@ def create_next_gen_agent(
         return NextGenFSMAgent(**kwargs)
 
 
-def setup_interactive_ui_callbacks(agent: NextGenFSMAgent, ui_callbacks: dict):
+def setup_interactive_ui_callbacks(agent: NextGenFSMAgent, ui_callbacks: dict) -> None:
     """
     Connect UI callbacks to the agent's interactive tools
     
@@ -428,4 +429,4 @@ if __name__ == "__main__":
         "query": "What is the latest news about AI developments in 2024?"
     })
     
-    print(f"Result: {result.get('final_answer', 'No answer generated')}") 
+    logger.info("Result: {}", extra={"result_get__final_answer____No_answer_generated__": result.get('final_answer', 'No answer generated')}) 

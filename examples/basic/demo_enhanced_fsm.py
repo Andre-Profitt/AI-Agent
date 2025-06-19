@@ -10,6 +10,10 @@ import time
 import random
 from datetime import datetime
 from typing import Dict, List, Any, Optional
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class State:
     """Simple state implementation"""
@@ -25,7 +29,7 @@ class State:
         start_time = time.time()
         self.entry_count += 1
         
-        print(f"    Executing state: {self.name}")
+        logger.info("    Executing state: {}", extra={"self_name": self.name})
         
         # Simulate some work
         time.sleep(0.1)
@@ -92,12 +96,12 @@ class SimpleFSM:
         
         self.current_state = self.states[initial_state]
         self.context = context.copy()
-        print(f"🚀 FSM '{self.name}' started in state '{initial_state}'")
+        logger.info("🚀 FSM '{}' started in state '{}'", extra={"self_name": self.name, "initial_state": initial_state})
     
     def transition_to(self, target_state: str, context: Dict[str, Any]) -> bool:
         """Transition to a target state"""
         if target_state not in self.states:
-            print(f"❌ Target state '{target_state}' not found")
+            logger.info("❌ Target state '{}' not found", extra={"target_state": target_state})
             return False
         
         # Find transition
@@ -108,7 +112,7 @@ class SimpleFSM:
                 break
         
         if not transition:
-            print(f"❌ No transition from '{self.current_state.name}' to '{target_state}'")
+            logger.info("❌ No transition from '{}' to '{}'", extra={"self_current_state_name": self.current_state.name, "target_state": target_state})
             return False
         
         # Check if we should transition
@@ -125,10 +129,10 @@ class SimpleFSM:
                 'probability': transition.probability
             })
             
-            print(f"✅ Transitioned: {old_state} -> {target_state}")
+            logger.info("✅ Transitioned: {} -> {}", extra={"old_state": old_state, "target_state": target_state})
             return True
         else:
-            print(f"❌ Transition rejected: {self.current_state.name} -> {target_state}")
+            logger.info("❌ Transition rejected: {} -> {}", extra={"self_current_state_name": self.current_state.name, "target_state": target_state})
             return False
     
     def execute_current_state(self, context: Dict[str, Any]):
@@ -186,12 +190,12 @@ class SimpleFSM:
 
 def main():
     """Main demo function"""
-    print("🚀 Enhanced FSM Demo")
+    logger.info("🚀 Enhanced FSM Demo")
     print("=" * 50)
     
     try:
         # Step 1: Create FSM
-        print("\n📋 Step 1: Creating FSM")
+        logger.info("\n📋 Step 1: Creating FSM")
         fsm = SimpleFSM("DemoFSM")
         
         # Create states
@@ -203,10 +207,10 @@ def main():
         fsm.add_state(execution)
         fsm.add_state(synthesis)
         
-        print(f"   Created {len(fsm.states)} states: {list(fsm.states.keys())}")
+        logger.info("   Created {} states: {}", extra={"len_fsm_states_": len(fsm.states), "list_fsm_states_keys___": list(fsm.states.keys())})
         
         # Step 2: Add transitions
-        print("\n🔄 Step 2: Adding Transitions")
+        logger.info("\n🔄 Step 2: Adding Transitions")
         
         plan_to_exec = Transition("PLANNING", "EXECUTION", 0.9)
         exec_to_synth = Transition("EXECUTION", "SYNTHESIS", 0.8)
@@ -214,10 +218,10 @@ def main():
         fsm.add_transition(plan_to_exec)
         fsm.add_transition(exec_to_synth)
         
-        print(f"   Added {len(fsm.transitions)} transitions")
+        logger.info("   Added {} transitions", extra={"len_fsm_transitions_": len(fsm.transitions)})
         
         # Step 3: Test execution
-        print("\n▶️  Step 3: Testing Execution")
+        logger.info("\n▶️  Step 3: Testing Execution")
         
         # Create context
         context = {
@@ -233,7 +237,7 @@ def main():
         fsm.execute_current_state(context)
         
         # Try transitions
-        print("\n   Testing transitions...")
+        logger.info("\n   Testing transitions...")
         
         # Transition to execution
         success = fsm.transition_to("EXECUTION", context)
@@ -246,32 +250,32 @@ def main():
             fsm.execute_current_state(context)
         
         # Step 4: Show results
-        print("\n📊 Step 4: Results")
+        logger.info("\n📊 Step 4: Results")
         
         # Show visualization
-        print("\nFSM Visualization:")
+        logger.info("\nFSM Visualization:")
         print(fsm.visualize())
         
         # Show metrics
         metrics = fsm.get_metrics()
-        print(f"\nMetrics Summary:")
-        print(f"  FSM Name: {metrics['fsm_name']}")
-        print(f"  Total States: {metrics['total_states']}")
-        print(f"  Total Transitions: {metrics['total_transitions']}")
-        print(f"  Current State: {metrics['current_state']}")
-        print(f"  Transition Log Entries: {len(metrics['transition_log'])}")
+        logger.info("\nMetrics Summary:")
+        logger.info("  FSM Name: {}", extra={"metrics__fsm_name_": metrics['fsm_name']})
+        logger.info("  Total States: {}", extra={"metrics__total_states_": metrics['total_states']})
+        logger.info("  Total Transitions: {}", extra={"metrics__total_transitions_": metrics['total_transitions']})
+        logger.info("  Current State: {}", extra={"metrics__current_state_": metrics['current_state']})
+        logger.info("  Transition Log Entries: {}", extra={"len_metrics__transition_log__": len(metrics['transition_log'])})
         
-        print("\nState Metrics:")
+        logger.info("\nState Metrics:")
         for state_name, state_metrics in metrics['state_metrics'].items():
-            print(f"  {state_name}: {state_metrics['entry_count']} entries, {state_metrics['avg_time']:.3f}s avg time")
+            logger.info("  {}: {} entries, {}s avg time", extra={"state_name": state_name, "state_metrics__entry_count_": state_metrics['entry_count'], "state_metrics__avg_time_": state_metrics['avg_time']})
         
-        print("\n🎉 Enhanced FSM Demo Completed Successfully!")
+        logger.info("\n🎉 Enhanced FSM Demo Completed Successfully!")
         print("=" * 50)
         
         return True
         
     except Exception as e:
-        print(f"❌ Error: {e}")
+        logger.info("❌ Error: {}", extra={"e": e})
         import traceback
         traceback.print_exc()
         return False
