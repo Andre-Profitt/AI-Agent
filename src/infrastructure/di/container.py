@@ -7,6 +7,15 @@ import logging
 from functools import wraps
 
 from src.shared.exceptions import InfrastructureException
+from src.infrastructure.database.in_memory_message_repository import InMemoryMessageRepository
+from src.infrastructure.database.in_memory_session_repository import InMemorySessionRepository
+from src.infrastructure.database.in_memory_tool_repository import InMemoryToolRepository
+from src.infrastructure.database.in_memory_user_repository import InMemoryUserRepository
+from src.infrastructure.logging.logging_service import LoggingService
+from src.infrastructure.config.configuration_service import ConfigurationService
+from src.application.agents.agent_executor import AgentExecutor
+from src.application.tools.tool_executor import ToolExecutor
+from src.shared.types.config import LoggingConfig
 
 
 class Container:
@@ -162,4 +171,19 @@ def singleton(cls: Type) -> Type:
             instances[cls] = cls(*args, **kwargs)
         return instances[cls]
     
-    return get_instance 
+    return get_instance
+
+
+def setup_container():
+    container = get_container()
+    # Register repositories
+    container.register('message_repository', lambda c: InMemoryMessageRepository())
+    container.register('session_repository', lambda c: InMemorySessionRepository())
+    container.register('tool_repository', lambda c: InMemoryToolRepository())
+    container.register('user_repository', lambda c: InMemoryUserRepository())
+    # Register services
+    container.register('logging_service', lambda c: LoggingService(LoggingConfig()), singleton=True)
+    container.register('configuration_service', lambda c: ConfigurationService(), singleton=True)
+    container.register('agent_executor', lambda c: AgentExecutor(), singleton=True)
+    container.register('tool_executor', lambda c: ToolExecutor(), singleton=True)
+    return container 

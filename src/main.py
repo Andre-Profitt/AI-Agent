@@ -11,7 +11,7 @@ from typing import Optional
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.infrastructure.di.container import get_container, Container
+from src.infrastructure.di.container import get_container, setup_container
 from src.infrastructure.config.configuration_service import ConfigurationService
 from src.infrastructure.logging.logging_service import LoggingService
 from src.presentation.web.gradio_interface import GradioInterface
@@ -32,7 +32,7 @@ class AIAgentApplication:
     """
     
     def __init__(self):
-        self.container: Container = get_container()
+        self.container = None
         self.config: Optional[SystemConfig] = None
         self.logger: Optional[logging.Logger] = None
         self.web_interface: Optional[GradioInterface] = None
@@ -41,14 +41,16 @@ class AIAgentApplication:
     async def initialize(self) -> None:
         """Initialize the application and all its components."""
         try:
+            # 0. Setup DI container
+            setup_container()
+            self.container = get_container()
             # 1. Initialize configuration
             await self._initialize_configuration()
             
             # 2. Initialize logging
             await self._initialize_logging()
             
-            # 3. Register dependencies
-            await self._register_dependencies()
+            # 3. Register dependencies (handled by setup_container)
             
             # 4. Initialize services
             await self._initialize_services()
@@ -82,51 +84,24 @@ class AIAgentApplication:
         self.logger = logging.getLogger(__name__)
         self.container.register_instance("logging_service", logging_service)
     
-    async def _register_dependencies(self) -> None:
-        """Register all dependencies in the container."""
-        from src.infrastructure.di.providers import (
-            AgentRepositoryProvider,
-            MessageRepositoryProvider,
-            ToolRepositoryProvider,
-            SessionRepositoryProvider,
-            AgentExecutorProvider,
-            ToolExecutorProvider
-        )
-        
-        # Register providers
-        self.container.register("agent_repository", AgentRepositoryProvider.create)
-        self.container.register("message_repository", MessageRepositoryProvider.create)
-        self.container.register("tool_repository", ToolRepositoryProvider.create)
-        self.container.register("session_repository", SessionRepositoryProvider.create)
-        self.container.register("agent_executor", AgentExecutorProvider.create)
-        self.container.register("tool_executor", ToolExecutorProvider.create)
-    
     async def _initialize_services(self) -> None:
         """Initialize all application services."""
-        # Initialize repositories
-        agent_repo = self.container.resolve("agent_repository")
+        # Use container to resolve all dependencies
         message_repo = self.container.resolve("message_repository")
         tool_repo = self.container.resolve("tool_repository")
         session_repo = self.container.resolve("session_repository")
-        
-        # Initialize executors
         agent_executor = self.container.resolve("agent_executor")
         tool_executor = self.container.resolve("tool_executor")
-        
-        # Initialize logging service
         logging_service = self.container.resolve("logging_service")
-        
         # Initialize use cases
         process_message_use_case = ProcessMessageUseCase(
-            agent_repository=agent_repo,
+            agent_repository=None,  # TODO: wire up agent repo if needed
             message_repository=message_repo,
             agent_executor=agent_executor,
             logging_service=logging_service,
             config=self.config.agent_config
         )
-        
         self.container.register_instance("process_message_use_case", process_message_use_case)
-        
         self.logger.info("All services initialized successfully")
     
     async def _initialize_interfaces(self) -> None:

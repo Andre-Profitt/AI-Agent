@@ -40,6 +40,7 @@ from ui import (
     export_conversation_to_file
 )
 from gaia_logic import GAIAEvaluator, GAIA_AVAILABLE
+from src.infrastructure.di.container import get_container, setup_container
 
 # Only load .env file if not in a Hugging Face Space
 if config.environment != Environment.HUGGINGFACE_SPACE:
@@ -187,6 +188,12 @@ class AIAgentApp:
 
 def main():
     """Main entry point for the application."""
+    # Setup DI container
+    setup_container()
+    container = get_container()
+    # Resolve use case and other dependencies
+    process_message_use_case = container.resolve("process_message_use_case")
+    # TODO: Refactor Gradio/chat logic to use process_message_use_case and other services from the container
     # Parse command line arguments
     import argparse
     parser = argparse.ArgumentParser(description='AI Agent Application')
