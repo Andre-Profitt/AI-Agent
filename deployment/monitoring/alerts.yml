@@ -45,8 +45,17 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: Redis connection failed
+          summary: Redis connection failure
           description: "Redis is not responding"
+          
+      - alert: APIHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: High API latency
+          description: "95th percentile latency is {{ $value }}s"
           
       - alert: HighTaskLatency
         expr: histogram_quantile(0.95, rate(task_execution_duration_seconds_bucket[5m])) > 30

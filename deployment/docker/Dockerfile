@@ -13,17 +13,17 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Additional requirements for Phase 3
+# Additional requirements for Multi-Agent Platform
 RUN pip install --no-cache-dir \
+    fastapi==0.104.1 \
+    uvicorn[standard]==0.24.0 \
     aioredis==2.0.1 \
     msgpack==1.0.4 \
     psutil==5.9.5 \
     scikit-learn==1.3.0 \
     networkx==3.1 \
     pynvml==11.5.0 \
-    fastapi==0.104.1 \
-    uvicorn[standard]==0.24.0 \
-    websockets==12.0
+    python-multipart==0.0.6
 
 # Copy application code
 COPY . .
