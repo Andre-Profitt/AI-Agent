@@ -42,6 +42,9 @@ from src.gaia_components.adaptive_tool_system import (
 from src.gaia_components.multi_agent_orchestrator import (
     MultiAgentGAIASystem, MultiAgentOrchestrator
 )
+from src.gaia_components.tool_executor import (
+    ProductionToolExecutor, create_production_tool_executor
+)
 
 # Import resilience patterns
 from src.langgraph_resilience_patterns import (
@@ -1822,7 +1825,7 @@ def _validating_plan_node(self, state: EnhancedAgentState) -> EnhancedAgentState
 
 
 def _tool_execution_node(self, state: EnhancedAgentState) -> EnhancedAgentState:
-    """Tool execution node with adaptive tool system"""
+    """Tool execution node with production tool executor"""
     correlation_id = state.get("correlation_id", str(uuid.uuid4()))
     
     with correlation_context(correlation_id):
@@ -1831,8 +1834,22 @@ def _tool_execution_node(self, state: EnhancedAgentState) -> EnhancedAgentState:
             if not plan:
                 raise ValueError("No plan available for execution")
             
+            # Initialize production tool executor if not already done
+            if not hasattr(self, 'tool_executor'):
+                self.tool_executor = create_production_tool_executor(max_workers=10)
+                
+                # Register built-in tools
+                for tool in self.tools:
+                    if hasattr(tool, 'name'):
+                        self.tool_executor.register_tool(
+                            tool.name, 
+                            tool, 
+                            tool_type=getattr(tool, 'tool_type', 'custom')
+                        )
+            
             tool_calls = []
             
+            # Execute tools synchronously within the FSM context
             for step in plan.steps:
                 # Use adaptive tool system if available
                 if self.adaptive_tools:
@@ -1846,48 +1863,80 @@ def _tool_execution_node(self, state: EnhancedAgentState) -> EnhancedAgentState:
                         best_tool, confidence = recommendations[0]
                         
                         if confidence > 0.5:
-                            # Execute tool
-                            result = self.adaptive_tools.execute_with_recovery(
-                                best_tool.id, step.parameters, step.reasoning
+                            # Execute tool with production executor (sync wrapper)
+                            try:
+                                # Create a sync wrapper for async execution
+                                loop = asyncio.get_event_loop()
+                                result = loop.run_until_complete(
+                                    self.tool_executor.execute(best_tool.id, **step.parameters)
+                                )
+                                
+                                tool_calls.append({
+                                    "tool": best_tool.name,
+                                    "input": step.parameters,
+                                    "output": result.result if result.status.value == "success" else None,
+                                    "success": result.status.value == "success",
+                                    "confidence": confidence,
+                                    "execution_time": result.execution_time,
+                                    "error": result.error if result.status.value != "success" else None
+                                })
+                            except Exception as e:
+                                tool_calls.append({
+                                    "tool": best_tool.name,
+                                    "input": step.parameters,
+                                    "output": None,
+                                    "success": False,
+                                    "confidence": confidence,
+                                    "error": str(e)
+                                })
+                else:
+                    # Fallback to direct tool execution
+                    tool_name = step.step_name
+                    if tool_name in [tool.name for tool in self.tools]:
+                        # Execute with production executor (sync wrapper)
+                        try:
+                            loop = asyncio.get_event_loop()
+                            result = loop.run_until_complete(
+                                self.tool_executor.execute(tool_name, **step.parameters)
                             )
                             
                             tool_calls.append({
-                                "tool": best_tool.name,
+                                "tool": tool_name,
                                 "input": step.parameters,
-                                "output": result.get("result"),
-                                "success": result.get("success", False),
-                                "confidence": confidence
-                            })
-                else:
-                    # Fallback to original tool execution
-                    tool = self.select_best_tool(step.reasoning, self.tools)
-                    if tool:
-                        try:
-                            # Execute tool
-                            if hasattr(tool, '__call__'):
-                                result = tool(**step.parameters)
-                            else:
-                                result = str(step.parameters)
-                            
-                            tool_calls.append({
-                                "tool": getattr(tool, 'name', 'unknown'),
-                                "input": step.parameters,
-                                "output": result,
-                                "success": True
+                                "output": result.result if result.status.value == "success" else None,
+                                "success": result.status.value == "success",
+                                "execution_time": result.execution_time,
+                                "error": result.error if result.status.value != "success" else None
                             })
                         except Exception as e:
                             tool_calls.append({
-                                "tool": getattr(tool, 'name', 'unknown'),
+                                "tool": tool_name,
                                 "input": step.parameters,
-                                "output": str(e),
-                                "success": False
+                                "output": None,
+                                "success": False,
+                                "error": str(e)
                             })
+                    else:
+                        # Handle unknown tool
+                        tool_calls.append({
+                            "tool": tool_name,
+                            "input": step.parameters,
+                            "output": None,
+                            "success": False,
+                            "error": f"Tool {tool_name} not found"
+                        })
             
             state["tool_calls"].extend(tool_calls)
             state["current_fsm_state"] = "SYNTHESIZING"
             
-            logger.info(f"Tool execution completed with {len(tool_calls)} calls", 
-                       extra={"correlation_id": correlation_id})
+            # Log execution statistics
+            if hasattr(self.tool_executor, 'get_execution_stats'):
+                stats = self.tool_executor.get_execution_stats()
+                logger.info(f"Tool execution completed with {len(tool_calls)} calls. Stats: {stats}", 
+                           extra={"correlation_id": correlation_id})
+            else:
+                logger.info(f"Tool execution completed with {len(tool_calls)} calls", 
+                           extra={"correlation_id": correlation_id})
             
         except Exception as e:
             logger.error(f"Tool execution failed: {e}", extra={"correlation_id": correlation_id})
