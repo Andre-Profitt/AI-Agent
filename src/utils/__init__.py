@@ -18,7 +18,7 @@ This module contains utility functions including:
 - File readers
 """
 
-from .knowledge_utils import KnowledgeUtils
+from .knowledge_utils import LocalKnowledgeTool, create_local_knowledge_tool
 from .data_quality import DataQuality
 from .tools_production import ToolsProduction
 from .tools_interactive import ToolsInteractive
@@ -35,7 +35,8 @@ from .file_reader import FileReader
 from .advanced_file_reader import AdvancedFileReader
 
 __all__ = [
-    "KnowledgeUtils",
+    "LocalKnowledgeTool",
+    "create_local_knowledge_tool",
     "DataQuality",
     "ToolsProduction",
     "ToolsInteractive",

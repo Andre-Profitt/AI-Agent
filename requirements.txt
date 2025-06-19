@@ -7,12 +7,16 @@
 # Core dependencies
 numpy==1.24.3
 langchain==0.3.25
+langchain-core==0.1.0
+langchain-openai==0.0.5
+langchain-community==0.0.10
 langgraph==0.4.8
 llama-index==0.10.0
 llama-index-core==0.10.0
 llama-index-readers-file==0.1.0
 pydantic==2.5.0
 typing-extensions==4.8.0
+duckduckgo-search==3.9.0
 
 # AI/ML dependencies
 torch==2.7.1
@@ -36,6 +40,7 @@ aiohttp==3.9.1
 pandas==2.1.4
 openpyxl==3.1.2
 pypdf==5.6.0
+PyPDF2==3.0.0
 python-docx==1.1.0
 python-pptx==0.6.23
 unstructured==0.11.0
@@ -59,6 +64,7 @@ beautifulsoup4==4.12.2
 requests-html==0.10.0
 selenium==4.15.2
 wikipedia==1.4.0
+wikipedia-api==0.6.0
 
 # Resilience and monitoring
 circuitbreaker==1.4.0
@@ -68,6 +74,7 @@ opentelemetry-api==1.21.0
 opentelemetry-instrumentation==0.42b0
 opentelemetry-sdk==1.21.0
 prometheus-client==0.19.0
+structlog==23.1.0
 
 # Security
 cryptography==41.0.8
