@@ -1,17 +1,68 @@
+from agent import path
+from agent import query
+from agent import response
+from examples.parallel_execution_example import results
+from migrations.env import config
+
+from src.core.langgraph_resilience_patterns import circuit_breaker
+from src.core.llamaindex_enhanced import csv_files
+from src.core.llamaindex_enhanced import csv_reader
+from src.core.llamaindex_enhanced import directory
+from src.core.llamaindex_enhanced import documents
+from src.core.llamaindex_enhanced import embedding_manager
+from src.core.llamaindex_enhanced import embedding_model
+from src.core.llamaindex_enhanced import enhanced_query
+from src.core.llamaindex_enhanced import enhancements
+from src.core.llamaindex_enhanced import file_count
+from src.core.llamaindex_enhanced import json_files
+from src.core.llamaindex_enhanced import json_reader
+from src.core.llamaindex_enhanced import llm
+from src.core.llamaindex_enhanced import loader
+from src.core.llamaindex_enhanced import node_parser
+from src.core.llamaindex_enhanced import nodes
+from src.core.llamaindex_enhanced import reader
+from src.core.llamaindex_enhanced import response_synthesizer
+from src.core.llamaindex_enhanced import retriever
+from src.core.llamaindex_enhanced import storage_context
+from src.core.llamaindex_enhanced import storage_path
+from src.core.llamaindex_enhanced import text_files
+from src.core.llamaindex_enhanced import text_reader
+from src.core.llamaindex_enhanced import total_size
+from src.core.llamaindex_enhanced import use_supabase
+from src.database.models import vector_store
+from src.infrastructure.embedding_manager import get_embedding_manager
+from src.query_classifier import doc
+from src.unified_architecture.enhanced_platform import task_type
+
+from src.tools.base_tool import Tool
+
+from src.agents.advanced_agent_fsm import Agent
+# TODO: Fix undefined variables: Anthropic, Any, CSVReader, Dict, Groq, HierarchicalNodeParser, HuggingFaceEmbedding, JSONReader, List, OpenAIEmbedding, Optional, Path, RetrieverQueryEngine, SimilarityPostprocessor, SimpleDirectoryReader, Union, VectorIndexRetriever, config, content_path, csv_file, csv_files, csv_reader, directory, directory_path, doc, documents, download_loader, e, embedding_model, enhanced_query, enhancements, f, file_count, get_response_synthesizer, index, json_file, json_files, json_reader, llm, load_index_from_storage, loader, logging, node_parser, nodes, os, path, query, reader, response, response_synthesizer, results, retriever, storage_context, storage_path, task_type, text_files, text_reader, total_size, use_supabase, vector_store
+from tests.integration.test_integration import embedding_manager
+
+from src.infrastructure.resilience.circuit_breaker import circuit_breaker
+from src.services.embedding_manager import get_embedding_manager
+
+
 """
+from typing import Optional
+from src.services.circuit_breaker import CircuitBreakerConfig
+# TODO: Fix undefined variables: Anthropic, CSVReader, Groq, HierarchicalNodeParser, HuggingFaceEmbedding, JSONReader, OpenAIEmbedding, RetrieverQueryEngine, SimilarityPostprocessor, SimpleDirectoryReader, VectorIndexRetriever, circuit_breaker, config, content_path, csv_file, csv_files, csv_reader, directory, directory_path, doc, documents, download_loader, e, embedding_manager, embedding_model, enhanced_query, enhancements, f, file_count, get_embedding_manager, get_response_synthesizer, index, json_file, json_files, json_reader, llm, load_index_from_storage, loader, node_parser, nodes, path, query, reader, response, response_synthesizer, results, retriever, self, storage_context, storage_path, task_type, text_files, text_reader, total_size, use_supabase, vector_store
+
 Enhanced LlamaIndex Integration for GAIA Agent
 Provides advanced knowledge base capabilities with hierarchical indexing,
 multi-modal support, incremental updates, and specialized query engines.
 """
 
+from typing import Dict
+from typing import Any
+from typing import Union
+
 import logging
 from typing import List, Dict, Any, Optional, Union
 from pathlib import Path
-import asyncio
-from datetime import datetime
-import json
+
 import os
-from typing import Optional, Dict, Any, List, Union, Tuple
 
 # Circuit breaker import for config protection
 from src.infrastructure.resilience.circuit_breaker import (
@@ -25,7 +76,7 @@ from src.infrastructure.resilience.circuit_breaker import (
 # LlamaIndex imports with fallback
 try:
     from llama_index import (
-        VectorStoreIndex, Document, ServiceContext, 
+        VectorStoreIndex, Document, ServiceContext,
         StorageContext, load_index_from_storage,
         SimpleDirectoryReader, JSONReader, CSVReader,
         download_loader
@@ -67,25 +118,25 @@ logger = logging.getLogger(__name__)
 
 class EnhancedKnowledgeBase:
     """Advanced knowledge base with hierarchical parsing and multi-modal support"""
-    
+
     def __init__(self, vector_store: Optional[Any] = None) -> None:
         self.vector_store = vector_store
         self.index = None
         self.service_context = None
         self.storage_context = None
         self._setup_service_context()
-    
+
     def _setup_service_context(self) -> Any:
         """Configure service context with best available models"""
         if not LLAMAINDEX_AVAILABLE:
             return
-            
+
         # Use actual config values
         config = integration_config
-        
+
         # Use centralized embedding manager instead of creating separate models
         embedding_manager = get_embedding_manager()
-        
+
         # Create LlamaIndex embedding wrapper
         if embedding_manager.method == "openai":
             embedding_model = OpenAIEmbedding(
@@ -96,7 +147,7 @@ class EnhancedKnowledgeBase:
             embedding_model = HuggingFaceEmbedding(
                 model_name="sentence-transformers/all-MiniLM-L6-v2"
             )
-        
+
         # Choose LLM based on available keys
         if os.getenv("ANTHROPIC_API_KEY"):
             llm = Anthropic(
@@ -110,49 +161,49 @@ class EnhancedKnowledgeBase:
             )
         else:
             llm = None
-        
+
         self.service_context = ServiceContext.from_defaults(
             llm=llm,
             embed_model=embedding_model,
             chunk_size=config.llamaindex.chunk_size if config else 512,  # Use config!
             chunk_overlap=config.llamaindex.chunk_overlap if config else 50
         )
-    
+
     def create_hierarchical_index(self, documents: List[Document]) -> VectorStoreIndex:
         """Create index with hierarchical node parsing for better structure"""
         if not LLAMAINDEX_AVAILABLE:
             raise ImportError("LlamaIndex not available")
-        
+
         # Use hierarchical parser for better document structure
         node_parser = HierarchicalNodeParser.from_defaults(
             chunk_sizes=[2048, 512, 128]
         )
-        
+
         nodes = node_parser.get_nodes_from_documents(documents)
-        
+
         if self.vector_store:
             storage_context = StorageContext.from_defaults(
                 vector_store=self.vector_store
             )
         else:
             storage_context = StorageContext.from_defaults()
-        
+
         self.index = VectorStoreIndex(
             nodes,
             storage_context=storage_context,
             service_context=self.service_context
         )
-        
+
         return self.index
-    
+
     def load_documents_from_directory(self, directory_path: str) -> List[Document]:
         """Load documents from directory with multiple format support"""
         if not LLAMAINDEX_AVAILABLE:
             raise ImportError("LlamaIndex not available")
-        
+
         directory = Path(directory_path)
         documents = []
-        
+
         # Load different file types
         if directory.is_dir():
             # Text files
@@ -162,57 +213,57 @@ class EnhancedKnowledgeBase:
                     input_files=[str(f) for f in text_files]
                 )
                 documents.extend(text_reader.load_data())
-            
+
             # JSON files
             json_files = list(directory.glob("*.json"))
             if json_files:
                 for json_file in json_files:
                     json_reader = JSONReader()
                     documents.extend(json_reader.load_data(str(json_file)))
-            
+
             # CSV files
             csv_files = list(directory.glob("*.csv"))
             if csv_files:
                 for csv_file in csv_files:
                     csv_reader = CSVReader()
                     documents.extend(csv_reader.load_data(str(csv_file)))
-        
+
         return documents
 
 class MultiModalGAIAIndex:
     """Multi-modal index supporting text, images, and tables for GAIA tasks"""
-    
+
     def __init__(self) -> None:
         self.text_index = None
         self.image_index = None
         self.table_index = None
         self._setup_loaders()
-    
+
     def _setup_loaders(self) -> Any:
         """Setup specialized loaders for different content types"""
         if not LLAMAINDEX_AVAILABLE:
             return
-        
+
         try:
             # Download specialized loaders
             self.image_loader = download_loader("ImageReader")
             self.table_loader = download_loader("PandasCSVReader")
         except Exception as e:
             logger.warning("Could not load specialized loaders: {}", extra={"e": e})
-    
+
     def process_gaia_content(self, content_path: str) -> Dict[str, Any]:
         """Process GAIA-specific content (text, images, tables)"""
         if not LLAMAINDEX_AVAILABLE:
             raise ImportError("LlamaIndex not available")
-        
+
         results = {
             "text_documents": [],
             "image_documents": [],
             "table_documents": []
         }
-        
+
         path = Path(content_path)
-        
+
         # Process text content
         if path.is_file() and path.suffix.lower() in ['.txt', '.md', '.json', '.csv']:
             try:
@@ -227,7 +278,7 @@ class MultiModalGAIAIndex:
                     results["text_documents"] = reader.load_data(str(path))
             except Exception as e:
                 logger.error("Failed to process text file {}: {}", extra={"path": path, "e": e})
-        
+
         # Process image content
         elif path.is_file() and path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.gif']:
             try:
@@ -236,23 +287,23 @@ class MultiModalGAIAIndex:
                     results["image_documents"] = loader.load_data(str(path))
             except Exception as e:
                 logger.error("Failed to process image file {}: {}", extra={"path": path, "e": e})
-        
+
         return results
 
 class IncrementalKnowledgeBase:
     """Incremental knowledge base with caching and deduplication"""
-    
+
     def __init__(self, storage_path: str = "./knowledge_cache") -> None:
         self.storage_path = Path(storage_path)
         self.storage_path.mkdir(parents=True, exist_ok=True)
         self.index = None
         self._load_existing_index()
-    
+
     def _load_existing_index(self) -> Any:
         """Load existing index from storage"""
         if not LLAMAINDEX_AVAILABLE:
             return
-        
+
         try:
             storage_context = StorageContext.from_defaults(
                 persist_dir=str(self.storage_path)
@@ -262,12 +313,12 @@ class IncrementalKnowledgeBase:
         except Exception as e:
             logger.info("No existing index found at {}: {}", extra={"self_storage_path": self.storage_path, "e": e})
             self.index = None
-    
+
     def add_documents_incrementally(self, documents: List[Document]) -> bool:
         """Add documents incrementally with deduplication"""
         if not LLAMAINDEX_AVAILABLE:
             return False
-        
+
         try:
             if self.index is None:
                 # Create new index
@@ -281,25 +332,25 @@ class IncrementalKnowledgeBase:
                 # Insert into existing index
                 for doc in documents:
                     self.index.insert(doc)
-            
+
             # Persist index
             self.index.storage_context.persist(persist_dir=str(self.storage_path))
             logger.info("Added {} documents incrementally", extra={"len_documents_": len(documents)})
             return True
-            
+
         except Exception as e:
             logger.error("Failed to add documents incrementally: {}", extra={"e": e})
             return False
-    
+
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get cache statistics"""
         if not self.storage_path.exists():
             return {"status": "not_initialized"}
-        
+
         try:
             file_count = len(list(self.storage_path.glob("*")))
             total_size = sum(f.stat().st_size for f in self.storage_path.glob("*") if f.is_file())
-            
+
             return {
                 "status": "initialized",
                 "file_count": file_count,
@@ -311,17 +362,17 @@ class IncrementalKnowledgeBase:
 
 class GAIAQueryEngine:
     """Specialized query engine for GAIA tasks"""
-    
+
     def __init__(self, index: VectorStoreIndex) -> None:
         self.index = index
         self.query_engine = None
         self._setup_query_engine()
-    
+
     def _setup_query_engine(self) -> Any:
         """Setup specialized query engine for GAIA tasks"""
         if not LLAMAINDEX_AVAILABLE or self.index is None:
             return
-        
+
         try:
             # Create retriever with similarity postprocessor
             retriever = VectorIndexRetriever(
@@ -329,43 +380,43 @@ class GAIAQueryEngine:
                 similarity_top_k=5,
                 similarity_cutoff=0.7
             )
-            
+
             # Create response synthesizer
             response_synthesizer = get_response_synthesizer(
                 response_mode="compact",
                 structured_answer_filtering=True
             )
-            
+
             # Create query engine
             self.query_engine = RetrieverQueryEngine(
                 retriever=retriever,
                 response_synthesizer=response_synthesizer,
                 node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.7)]
             )
-            
+
             logger.info("GAIA query engine setup completed")
-            
+
         except Exception as e:
             logger.error("Failed to setup query engine: {}", extra={"e": e})
-    
+
     def query_gaia_task(self, query: str, task_type: str = "general") -> str:
         """Query the knowledge base for GAIA tasks"""
         if not LLAMAINDEX_AVAILABLE or self.query_engine is None:
             return "Knowledge base not available"
-        
+
         try:
             # Enhance query based on task type
             enhanced_query = self._enhance_query_for_task(query, task_type)
-            
+
             # Execute query
             response = self.query_engine.query(enhanced_query)
-            
+
             return str(response)
-            
+
         except Exception as e:
             logger.error("Query failed: {}", extra={"e": e})
             return f"Query failed: {str(e)}"
-    
+
     def _enhance_query_for_task(self, query: str, task_type: str) -> str:
         """Enhance query based on GAIA task type"""
         enhancements = {
@@ -374,14 +425,14 @@ class GAIAQueryEngine:
             "creative": f"Provide creative and original answer for: {query}",
             "multimodal": f"Consider all available modalities for: {query}"
         }
-        
+
         return enhancements.get(task_type, query)
-    
+
     def get_query_stats(self) -> Dict[str, Any]:
         """Get query engine statistics"""
         if self.query_engine is None:
             return {"status": "not_initialized"}
-        
+
         return {
             "status": "initialized",
             "retriever_type": type(self.query_engine.retriever).__name__,
@@ -389,7 +440,7 @@ class GAIAQueryEngine:
         }
 
 @circuit_breaker("gaia_knowledge_base_creation", CircuitBreakerConfig(
-    failure_threshold=3, 
+    failure_threshold=3,
     recovery_timeout=60
 ))
 def create_gaia_knowledge_base(
@@ -397,17 +448,17 @@ def create_gaia_knowledge_base(
     use_supabase: Optional[bool] = None
 ) -> Union[IncrementalKnowledgeBase, EnhancedKnowledgeBase]:
     """Create GAIA knowledge base with appropriate configuration"""
-    
+
     if not LLAMAINDEX_AVAILABLE:
         raise ImportError("LlamaIndex not available")
-    
+
     # Use config defaults if not provided
     if storage_path is None:
         storage_path = integration_config.llamaindex.storage_path if integration_config else "./knowledge_cache"
-    
+
     if use_supabase is None:
         use_supabase = integration_config.supabase.is_configured() if integration_config else False
-    
+
     try:
         if use_supabase:
             # Create enhanced knowledge base with Supabase vector store
@@ -418,7 +469,7 @@ def create_gaia_knowledge_base(
             # Create incremental knowledge base with local storage
             logger.info("Creating incremental knowledge base at {}", extra={"storage_path": storage_path})
             return IncrementalKnowledgeBase(storage_path)
-            
+
     except Exception as e:
         logger.error("Failed to create knowledge base: {}", extra={"e": e})
-        raise 
+        raise

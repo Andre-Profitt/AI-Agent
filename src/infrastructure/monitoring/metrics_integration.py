@@ -1,4 +1,58 @@
+from benchmarks.cot_performance import duration
+from examples.enhanced_unified_example import metrics
+from examples.enhanced_unified_example import start_time
+from examples.enhanced_unified_example import task
+from examples.enhanced_unified_example import tasks
+from examples.parallel_execution_example import summary
+from tests.load_test import args
+from tests.performance.performance_test import agent_data
+from tests.performance.performance_test import task_data
+from tests.unit.simple_test import func
+
+from src.api_server import resources
+from src.application.tools.tool_executor import operation
+from src.database.models import agent_id
+from src.database.models import agent_type
+from src.database.models import priority
+from src.database.models import status
+from src.gaia_components.multi_agent_orchestrator import task_id
+from src.infrastructure.monitoring.metrics_integration import agent_metadata
+from src.infrastructure.monitoring.metrics_integration import available_resources
+from src.infrastructure.monitoring.metrics_integration import platform_stats
+from src.infrastructure.monitoring.metrics_integration import total_resources
+from src.tools_introspection import error
+from src.tools_introspection import error_type
+from src.unified_architecture.enhanced_platform import task_type
+from src.unified_architecture.resource_management import utilization
+
+from src.agents.advanced_agent_fsm import AgentStatus
+
+from src.agents.advanced_agent_fsm import Agent
+
+from src.agents.advanced_agent_fsm import IUnifiedAgent
+# TODO: Fix undefined variables: Any, Dict, Optional, activity_type, agent_data, agent_id, agent_metadata, agent_type, args, asynccontextmanager, available_resources, datetime, duration, e, error, error_type, func, kwargs, logging, metrics, metrics_integration, operation, operation_type, platform_stats, priority, resources, result, start_time, status, summary, task, task_data, task_id, task_type, tasks, time, total_resources, utilization
+from tests.test_gaia_agent import agent
+
+from src.infrastructure.monitoring.metrics import record_agent_availability
+from src.infrastructure.monitoring.metrics import record_agent_registration
+from src.infrastructure.monitoring.metrics import record_error
+from src.infrastructure.monitoring.metrics import record_task_completion
+from src.infrastructure.monitoring.metrics import record_task_duration
+from src.infrastructure.monitoring.metrics import record_task_execution
+from src.infrastructure.monitoring.metrics import record_task_submission
+from src.infrastructure.monitoring.metrics import update_resource_utilization
+from src.infrastructure.monitoring.metrics import update_task_queue_size
+from src.shared.types.di_types import MetricsCollector
+from src.unified_architecture.enhanced_platform import IUnifiedAgent
+from src.unified_architecture.enhanced_platform import UnifiedTask
+
+
 """
+
+from fastapi import status
+from sqlalchemy import func
+from typing import Any
+from typing import Optional
 Metrics Integration
 
 This module integrates Prometheus metrics with the platform and agents
@@ -12,7 +66,6 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 
 from src.infrastructure.monitoring.metrics import (
-from typing import Optional, Dict, Any, List, Union, Tuple
     MetricsCollector, record_agent_registration, record_task_execution,
     record_task_duration, record_agent_availability, record_task_submission,
     record_task_completion, record_error, update_resource_utilization,

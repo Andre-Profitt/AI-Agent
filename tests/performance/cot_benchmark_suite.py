@@ -1,4 +1,9 @@
+from src.agents.advanced_agent_fsm import Agent
+
 """
+
+from typing import Any
+from typing import List
 Chain of Thought Performance Benchmarks and Testing Suite
 Comprehensive benchmarking for the Optimized CoT System
 """
@@ -186,7 +191,7 @@ class CoTBenchmark:
         print("-" * 50)
         
         for i, query in enumerate(queries):
-            logger.info("Processing query {}/{}: {}...", extra={"i_1": i+1, "len_queries_": len(queries), "query_": query[})
+            logger.info("Processing query {}/{}: {}...", extra={"i_1": i+1, "len_queries": len(queries), "query": query[:50]})
             
             # Measure performance
             result = await self._benchmark_single_query(cot_system, query)

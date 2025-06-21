@@ -1,3 +1,53 @@
+from agent import query
+from examples.parallel_execution_example import results
+from performance_dashboard import stats
+from setup_environment import value
+from tests.load_test import data
+
+from src.application.tools.tool_executor import operation
+from src.core.monitoring import key
+from src.core.optimized_chain_of_thought import similarity
+from src.database.models import agent_id
+from src.database.models import memory_type
+from src.database.models import metadata
+from src.gaia_components.performance_optimization import entry
+from src.gaia_components.performance_optimization import sorted_keys
+from src.gaia_components.production_vector_store import similarities
+from src.services.integration_hub import limit
+from src.unified_architecture.shared_memory import access_counts
+from src.unified_architecture.shared_memory import candidate_vectors
+from src.unified_architecture.shared_memory import candidates
+from src.unified_architecture.shared_memory import ctx_tags
+from src.unified_architecture.shared_memory import ctx_type
+from src.unified_architecture.shared_memory import entries
+from src.unified_architecture.shared_memory import exp_tags
+from src.unified_architecture.shared_memory import exp_type
+from src.unified_architecture.shared_memory import experience_data
+from src.unified_architecture.shared_memory import experiences
+from src.unified_architecture.shared_memory import expired_keys
+from src.unified_architecture.shared_memory import export_data
+from src.unified_architecture.shared_memory import filtered_results
+from src.unified_architecture.shared_memory import imported_count
+from src.unified_architecture.shared_memory import keys_to_remove
+from src.unified_architecture.shared_memory import num_to_remove
+from src.unified_architecture.shared_memory import recent_access
+from src.utils.tools_introspection import field
+
+from src.agents.advanced_agent_fsm import Agent
+
+from src.gaia_components.enhanced_memory_system import MemoryType
+
+from src.gaia_components.enhanced_memory_system import MemoryEntry
+from collections import deque
+from dataclasses import field
+from enum import auto
+from typing import Any
+from typing import List
+from typing import Optional
+from typing import Tuple
+# TODO: Fix undefined variables: Any, Dict, Enum, List, Optional, Tuple, access_counts, agent_id, auto, c, candidate_vectors, candidates, cls, context, ctx_tags, ctx_type, data, dataclass, defaultdict, deque, e, entries, entry, entry_data, exp_tags, exp_type, experience, experience_data, experiences, expired_keys, export_data, field, filtered_results, i, imported_count, key, keys_to_remove, limit, logging, memory_type, metadata, min_similarity, num_to_remove, operation, query, query_vector, recent_access, results, similarities, similarity, sorted_keys, stats, tag, tags, time, top_k, ttl, uuid, value, vector, vector_dim, x
+# TODO: Fix undefined variables: access_counts, agent_id, c, candidate_vectors, candidates, cls, context, ctx_tags, ctx_type, data, e, entries, entry, entry_data, exp_tags, exp_type, experience, experience_data, experiences, expired_keys, export_data, filtered_results, i, imported_count, key, keys_to_remove, limit, memory_type, metadata, min_similarity, num_to_remove, operation, query, query_vector, recent_access, results, self, similarities, similarity, sorted_keys, stats, tag, tags, top_k, ttl, value, vector, vector_dim, x
+
 """
 Shared Memory System for Multi-Agent System
 
@@ -458,5 +508,5 @@ class SharedMemorySystem:
             for key in keys_to_remove:
                 await self.delete(key)
             
-            logger.info("Cleared {} memory entries "
-                       f"({})", extra={"len_keys_to_remove_": len(keys_to_remove), "_all__if_memory_type_is_None_else_memory_type_name": 'all' if memory_type is None else memory_type.name}) 
+            logger.info(f"Cleared {len(keys_to_remove)} memory entries "
+                       f"({'all' if memory_type is None else memory_type.name})") 

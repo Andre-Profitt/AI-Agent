@@ -1,6 +1,67 @@
+from agent import tools
+from examples.enhanced_unified_example import metrics
+from migrations.env import url
+from tests.load_test import data
+
+from src.api_server import message
+from src.collaboration.realtime_collaboration import msg_type
+from src.collaboration.realtime_collaboration import session
+from src.collaboration.realtime_collaboration import session_id
+from src.core.entities.agent import Agent
+from src.core.monitoring import key
+from src.database.models import agent_id
+from src.database.models import agent_type
+from src.database.models import tool_id
+from src.database.models import tool_type
+from src.database.supabase_manager import message_id
+from src.gaia_components.adaptive_tool_system import breaker
+from src.infrastructure.database import client
+from src.infrastructure.monitoring.metrics import time_function
+from src.infrastructure.monitoring.metrics import track_database_operation
+from src.infrastructure.monitoring.metrics import update_db_connections
+from src.infrastructure.session import record_error
+from src.services.health_check import total_count
+from src.tools_introspection import name
+from src.unified_architecture.registry import status_counts
+
+from src.agents.advanced_agent_fsm import AgentType
+
+from src.tools.base_tool import Tool
+
+from src.agents.advanced_agent_fsm import Agent
+
+from src.tools.base_tool import ToolType
+from requests import Session
+from src.core.entities.message import MessageStatus
+from src.gaia_components.adaptive_tool_system import Tool
+from src.gaia_components.adaptive_tool_system import ToolType
+from src.gaia_components.multi_agent_orchestrator import Agent
+from src.infrastructure.agents.agent_factory import AgentType
+from src.unified_architecture.communication import MessageType
+# TODO: Fix undefined variables: UUID, active_count, active_result, agent_id, agent_type, available_count, available_result, breaker, client, cls, completed_count, completed_result, data, enabled_count, enabled_result, get_db_circuit_breaker, key, message, message_id, message_type, metrics, msg_type, name, result, session, session_id, status_counts, tool_id, tool_type, tools, total_count, total_result, track_async_operation, type_counts, url, active_count, active_result, agent, agent_id, agent_type, available_count, available_result, breaker, client, cls, completed_count, completed_result, data, enabled_count, enabled_result, get_db_circuit_breaker, key, message, message_id, message_type, metrics, msg_type, name, record_error, result, self, session, session_id, status_counts, time_function, tool_id, tool_type, tools, total_count, total_result, track_async_operation, track_database_operation, type_counts, update_db_connections, url
+from tests.test_gaia_agent import agent
+
+from src.core.entities.agent import AgentType
+from src.database.models import Session
+from src.infrastructure.monitoring.metrics import record_error
+from src.infrastructure.monitoring.metrics import time_function
+from src.infrastructure.monitoring.metrics import track_database_operation
+from src.infrastructure.monitoring.metrics import update_db_connections
+from src.tools.base_tool import tool
+
+# TODO: Fix undefined variables: UUID, active_count, active_result, agent_id, agent_type, available_count, available_result, breaker, client, cls, completed_count, completed_result, data, enabled_count, enabled_result, get_db_circuit_breaker, key, message, message_id, message_type, metrics, msg_type, name, result, session, session_id, status_counts, tool_id, tool_type, tools, total_count, total_result, track_async_operation, type_counts, url, active_count, active_result, agent, agent_id, agent_type, available_count, available_result, breaker, client, cls, completed_count, completed_result, data, enabled_count, enabled_result, get_db_circuit_breaker, key, message, message_id, message_type, metrics, msg_type, name, record_error, result, self, session, session_id, status_counts, time_function, tool_id, tool_type, tools, total_count, total_result, track_async_operation, track_database_operation, type_counts, update_db_connections, url
+
 """
+
+from fastapi import status
+from langchain.tools import Tool
+from sqlalchemy.orm import Session
 Supabase implementations of repository interfaces with circuit breaker patterns and monitoring.
 """
+
+from typing import Optional
+from typing import Dict
+from typing import Any
 
 import json
 from datetime import datetime
@@ -14,6 +75,21 @@ from src.core.entities.message import Message, MessageType, MessageStatus
 from src.core.interfaces.message_repository import MessageRepository
 from src.shared.exceptions import InfrastructureException
 from src.infrastructure.monitoring import (
+from datetime import datetime
+from math import e
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+import json
+import logging
+
+from fastapi import status
+from supabase import Client
+from supabase import create_client
+
+from src.tools.base_tool import tool
+
     track_database_operation, record_error, update_db_connections,
     time_function, track_async_operation
 )
@@ -47,7 +123,7 @@ class SupabaseClient:
 
 class SupabaseMessageRepository(MessageRepository):
     """Supabase implementation of message repository with monitoring and resilience."""
-    
+
     def __init__(self, client: Client):
         self.client = client
         self.table = "messages"
@@ -65,7 +141,7 @@ class SupabaseMessageRepository(MessageRepository):
         """Save message to database with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _save_operation():
                 data = {
                     "id": str(message.id),
@@ -88,9 +164,9 @@ class SupabaseMessageRepository(MessageRepository):
                     return message
                 else:
                     raise InfrastructureException("Failed to save message")
-                    
+
             return await breaker.call(_save_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "message_repository", "error")
             logger.error("Error saving message: {}", extra={"str_e_": str(e)})
@@ -102,15 +178,15 @@ class SupabaseMessageRepository(MessageRepository):
         """Find message by ID with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _find_operation():
                 result = self.client.table(self.table).select("*").eq("id", str(message_id)).execute()
                 if result.data and len(result.data) > 0:
                     return self._to_entity(result.data[0])
                 return None
-                
+
             return await breaker.call(_find_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "message_repository", "error")
             logger.error("Error finding message: {}", extra={"str_e_": str(e)})
@@ -122,13 +198,13 @@ class SupabaseMessageRepository(MessageRepository):
         """Find messages by session with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _find_operation():
                 result = self.client.table(self.table).select("*").eq("session_id", str(session_id)).order("created_at").execute()
                 return [self._to_entity(data) for data in result.data]
-                
+
             return await breaker.call(_find_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "message_repository", "error")
             logger.error("Error finding messages by session: {}", extra={"str_e_": str(e)})
@@ -140,13 +216,13 @@ class SupabaseMessageRepository(MessageRepository):
         """Find messages by type with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _find_operation():
                 result = self.client.table(self.table).select("*").eq("message_type", message_type.value).execute()
                 return [self._to_entity(data) for data in result.data]
-                
+
             return await breaker.call(_find_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "message_repository", "error")
             logger.error("Error finding messages by type: {}", extra={"str_e_": str(e)})
@@ -158,13 +234,13 @@ class SupabaseMessageRepository(MessageRepository):
         """Delete message with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _delete_operation():
                 result = self.client.table(self.table).delete().eq("id", str(message_id)).execute()
                 return len(result.data) > 0
-                
+
             return await breaker.call(_delete_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "message_repository", "error")
             logger.error("Error deleting message: {}", extra={"str_e_": str(e)})
@@ -176,29 +252,29 @@ class SupabaseMessageRepository(MessageRepository):
         """Get message statistics with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _statistics_operation():
                 total_result = self.client.table(self.table).select("id", count="exact").execute()
                 total_count = total_result.count if total_result else 0
-                
+
                 type_counts = {}
                 for msg_type in MessageType:
                     result = self.client.table(self.table).select("id", count="exact").eq("message_type", msg_type.value).execute()
                     type_counts[msg_type.value] = result.count if result else 0
-                    
+
                 status_counts = {}
                 for status in MessageStatus:
                     result = self.client.table(self.table).select("id", count="exact").eq("status", status.value).execute()
                     status_counts[status.value] = result.count if result else 0
-                    
+
                 return {
                     "total_messages": total_count,
                     "by_type": type_counts,
                     "by_status": status_counts
                 }
-                
+
             return await breaker.call(_statistics_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "message_repository", "error")
             logger.error("Error getting statistics: {}", extra={"str_e_": str(e)})
@@ -239,7 +315,7 @@ from src.core.interfaces.agent_repository import AgentRepository
 
 class SupabaseToolRepository(ToolRepository):
     """Supabase implementation of tool repository with monitoring and resilience."""
-    
+
     def __init__(self, client: Client):
         self.client = client
         self.table = "tools"
@@ -258,7 +334,7 @@ class SupabaseToolRepository(ToolRepository):
         """Save tool to database with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _save_operation():
                 data = {
                     "id": str(tool.id),
@@ -283,9 +359,9 @@ class SupabaseToolRepository(ToolRepository):
                     return tool
                 else:
                     raise InfrastructureException("Failed to save tool")
-                    
+
             return await breaker.call(_save_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "tool_repository", "error")
             logger.error("Error saving tool: {}", extra={"str_e_": str(e)})
@@ -297,7 +373,7 @@ class SupabaseToolRepository(ToolRepository):
         """Find tool by ID with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _find_operation():
                 result = self.client.table(self.table).select("*").eq("id", str(tool_id)).execute()
                 if result.data and len(result.data) > 0:
@@ -305,9 +381,9 @@ class SupabaseToolRepository(ToolRepository):
                     await self._load_metrics(tool)
                     return tool
                 return None
-                
+
             return await breaker.call(_find_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "tool_repository", "error")
             logger.error("Error finding tool: {}", extra={"str_e_": str(e)})
@@ -319,7 +395,7 @@ class SupabaseToolRepository(ToolRepository):
         """Find tool by name with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _find_operation():
                 result = self.client.table(self.table).select("*").eq("name", name).execute()
                 if result.data and len(result.data) > 0:
@@ -327,9 +403,9 @@ class SupabaseToolRepository(ToolRepository):
                     await self._load_metrics(tool)
                     return tool
                 return None
-                
+
             return await breaker.call(_find_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "tool_repository", "error")
             logger.error("Error finding tool by name: {}", extra={"str_e_": str(e)})
@@ -341,16 +417,16 @@ class SupabaseToolRepository(ToolRepository):
         """Find tools by type with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _find_operation():
                 result = self.client.table(self.table).select("*").eq("tool_type", tool_type.value).execute()
                 tools = [self._to_entity(data) for data in result.data]
                 for tool in tools:
                     await self._load_metrics(tool)
                 return tools
-                
+
             return await breaker.call(_find_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "tool_repository", "error")
             logger.error("Error finding tools by type: {}", extra={"str_e_": str(e)})
@@ -362,13 +438,13 @@ class SupabaseToolRepository(ToolRepository):
         """Delete tool with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _delete_operation():
                 result = self.client.table(self.table).delete().eq("id", str(tool_id)).execute()
                 return len(result.data) > 0
-                
+
             return await breaker.call(_delete_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "tool_repository", "error")
             logger.error("Error deleting tool: {}", extra={"str_e_": str(e)})
@@ -380,28 +456,28 @@ class SupabaseToolRepository(ToolRepository):
         """Get tool statistics with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _statistics_operation():
                 total_result = self.client.table(self.table).select("id", count="exact").execute()
                 total_count = total_result.count if total_result else 0
-                
+
                 type_counts = {}
                 for tool_type in ToolType:
                     result = self.client.table(self.table).select("id", count="exact").eq("tool_type", tool_type.value).execute()
                     type_counts[tool_type.value] = result.count if result else 0
-                    
+
                 enabled_result = self.client.table(self.table).select("id", count="exact").eq("is_enabled", True).execute()
                 enabled_count = enabled_result.count if enabled_result else 0
-                
+
                 return {
                     "total_tools": total_count,
                     "by_type": type_counts,
                     "enabled_tools": enabled_count,
                     "disabled_tools": total_count - enabled_count
                 }
-                
+
             return await breaker.call(_statistics_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "tool_repository", "error")
             logger.error("Error getting statistics: {}", extra={"str_e_": str(e)})
@@ -453,7 +529,7 @@ class SupabaseToolRepository(ToolRepository):
 
 class SupabaseSessionRepository(SessionRepository):
     """Supabase implementation of session repository with monitoring and resilience."""
-    
+
     def __init__(self, client: Client):
         self.client = client
         self.table = "sessions"
@@ -471,7 +547,7 @@ class SupabaseSessionRepository(SessionRepository):
         """Save session to database with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _save_operation():
                 data = {
                     "id": str(session.id),
@@ -490,9 +566,9 @@ class SupabaseSessionRepository(SessionRepository):
                     return session
                 else:
                     raise InfrastructureException("Failed to save session")
-                    
+
             return await breaker.call(_save_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "session_repository", "error")
             logger.error("Error saving session: {}", extra={"str_e_": str(e)})
@@ -504,15 +580,15 @@ class SupabaseSessionRepository(SessionRepository):
         """Find session by ID with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _find_operation():
                 result = self.client.table(self.table).select("*").eq("id", str(session_id)).execute()
                 if result.data and len(result.data) > 0:
                     return self._to_entity(result.data[0])
                 return None
-                
+
             return await breaker.call(_find_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "session_repository", "error")
             logger.error("Error finding session: {}", extra={"str_e_": str(e)})
@@ -524,13 +600,13 @@ class SupabaseSessionRepository(SessionRepository):
         """Find active sessions with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _find_operation():
                 result = self.client.table(self.table).select("*").eq("status", "active").execute()
                 return [self._to_entity(data) for data in result.data]
-                
+
             return await breaker.call(_find_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "session_repository", "error")
             logger.error("Error finding active sessions: {}", extra={"str_e_": str(e)})
@@ -542,13 +618,13 @@ class SupabaseSessionRepository(SessionRepository):
         """Delete session with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _delete_operation():
                 result = self.client.table(self.table).delete().eq("id", str(session_id)).execute()
                 return len(result.data) > 0
-                
+
             return await breaker.call(_delete_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "session_repository", "error")
             logger.error("Error deleting session: {}", extra={"str_e_": str(e)})
@@ -560,26 +636,26 @@ class SupabaseSessionRepository(SessionRepository):
         """Get session statistics with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _statistics_operation():
                 total_result = self.client.table(self.table).select("id", count="exact").execute()
                 total_count = total_result.count if total_result else 0
-                
+
                 active_result = self.client.table(self.table).select("id", count="exact").eq("status", "active").execute()
                 active_count = active_result.count if active_result else 0
-                
+
                 completed_result = self.client.table(self.table).select("id", count="exact").eq("status", "completed").execute()
                 completed_count = completed_result.count if completed_result else 0
-                
+
                 return {
                     "total_sessions": total_count,
                     "active_sessions": active_count,
                     "completed_sessions": completed_count,
                     "terminated_sessions": total_count - active_count - completed_count
                 }
-                
+
             return await breaker.call(_statistics_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "session_repository", "error")
             logger.error("Error getting statistics: {}", extra={"str_e_": str(e)})
@@ -607,7 +683,7 @@ class SupabaseSessionRepository(SessionRepository):
 
 class SupabaseAgentRepository(AgentRepository):
     """Supabase implementation of agent repository with monitoring and resilience."""
-    
+
     def __init__(self, client: Client):
         self.client = client
         self.table = "agents"
@@ -625,7 +701,7 @@ class SupabaseAgentRepository(AgentRepository):
         """Save agent to database with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _save_operation():
                 data = {
                     "id": str(agent.id),
@@ -645,9 +721,9 @@ class SupabaseAgentRepository(AgentRepository):
                     return agent
                 else:
                     raise InfrastructureException("Failed to save agent")
-                    
+
             return await breaker.call(_save_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "agent_repository", "error")
             logger.error("Error saving agent: {}", extra={"str_e_": str(e)})
@@ -659,15 +735,15 @@ class SupabaseAgentRepository(AgentRepository):
         """Find agent by ID with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _find_operation():
                 result = self.client.table(self.table).select("*").eq("id", str(agent_id)).execute()
                 if result.data and len(result.data) > 0:
                     return self._to_entity(result.data[0])
                 return None
-                
+
             return await breaker.call(_find_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "agent_repository", "error")
             logger.error("Error finding agent: {}", extra={"str_e_": str(e)})
@@ -679,13 +755,13 @@ class SupabaseAgentRepository(AgentRepository):
         """Find agents by type with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _find_operation():
                 result = self.client.table(self.table).select("*").eq("agent_type", agent_type.value).execute()
                 return [self._to_entity(data) for data in result.data]
-                
+
             return await breaker.call(_find_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "agent_repository", "error")
             logger.error("Error finding agents by type: {}", extra={"str_e_": str(e)})
@@ -697,13 +773,13 @@ class SupabaseAgentRepository(AgentRepository):
         """Find available agents with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _find_operation():
                 result = self.client.table(self.table).select("*").eq("is_available", True).execute()
                 return [self._to_entity(data) for data in result.data]
-                
+
             return await breaker.call(_find_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "agent_repository", "error")
             logger.error("Error finding available agents: {}", extra={"str_e_": str(e)})
@@ -715,13 +791,13 @@ class SupabaseAgentRepository(AgentRepository):
         """Delete agent with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _delete_operation():
                 result = self.client.table(self.table).delete().eq("id", str(agent_id)).execute()
                 return len(result.data) > 0
-                
+
             return await breaker.call(_delete_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "agent_repository", "error")
             logger.error("Error deleting agent: {}", extra={"str_e_": str(e)})
@@ -733,14 +809,14 @@ class SupabaseAgentRepository(AgentRepository):
         """Update agent performance metrics with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _update_operation():
                 data = {"performance_metrics": json.dumps(metrics), "updated_at": datetime.now().isoformat()}
                 result = self.client.table(self.table).update(data).eq("id", str(agent_id)).execute()
                 return len(result.data) > 0
-                
+
             return await breaker.call(_update_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "agent_repository", "error")
             logger.error("Error updating performance metrics: {}", extra={"str_e_": str(e)})
@@ -752,28 +828,28 @@ class SupabaseAgentRepository(AgentRepository):
         """Get agent statistics with circuit breaker protection."""
         try:
             breaker = await self._get_circuit_breaker()
-            
+
             async def _statistics_operation():
                 total_result = self.client.table(self.table).select("id", count="exact").execute()
                 total_count = total_result.count if total_result else 0
-                
+
                 type_counts = {}
                 for agent_type in AgentType:
                     result = self.client.table(self.table).select("id", count="exact").eq("agent_type", agent_type.value).execute()
                     type_counts[agent_type.value] = result.count if result else 0
-                    
+
                 available_result = self.client.table(self.table).select("id", count="exact").eq("is_available", True).execute()
                 available_count = available_result.count if available_result else 0
-                
+
                 return {
                     "total_agents": total_count,
                     "by_type": type_counts,
                     "available_agents": available_count,
                     "unavailable_agents": total_count - available_count
                 }
-                
+
             return await breaker.call(_statistics_operation)
-            
+
         except Exception as e:
             record_error(type(e).__name__, "agent_repository", "error")
             logger.error("Error getting statistics: {}", extra={"str_e_": str(e)})
@@ -799,4 +875,4 @@ class SupabaseAgentRepository(AgentRepository):
         except Exception as e:
             record_error(type(e).__name__, "agent_repository", "error")
             logger.error("Error converting data to entity: {}", extra={"str_e_": str(e)})
-            raise InfrastructureException(f"Data conversion error: {str(e)}") 
+            raise InfrastructureException(f"Data conversion error: {str(e)}")

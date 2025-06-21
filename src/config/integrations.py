@@ -1,12 +1,34 @@
+from setup_environment import value
+
+from src.config.integrations import api_key
+from src.config.integrations import enabled
+from src.config.integrations import service_map
+from src.config.integrations import validation_results
+from src.core.langgraph_resilience_patterns import circuit_breaker
+from src.core.monitoring import key
+from src.utils.structured_logging import get_structured_logger
+
+from src.tools.base_tool import Tool
+from dataclasses import dataclass
+from src.services.circuit_breaker import CircuitBreakerConfig
+# TODO: Fix undefined variables: Any, Dict, List, Optional, api_key, dataclass, default, e, enabled, key, os, prefix, service, service_map, validation_results, value
+from src.infrastructure.resilience.circuit_breaker import circuit_breaker
+
+# TODO: Fix undefined variables: api_key, circuit_breaker, default, e, enabled, get_structured_logger, key, prefix, self, service, service_map, validation_results, value
+
 """
 Integration configuration for external services with full circuit breaker protection
 """
+
+from typing import Optional
+from typing import Any
+from typing import List
 
 import os
 import asyncio
 import logging
 from typing import Dict, Any, Optional, List
-from dataclasses import dataclass, field
+
 from src.infrastructure.resilience.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
@@ -184,7 +206,7 @@ class IntegrationConfig:
             if key.endswith("_URL") and value and value != default:
                 if not any(value.startswith(prefix) for prefix in ["http://", "https://", "ws://", "wss://"]):
                     logger.warning("Invalid URL format", extra={
-                        "key": key, 
+                        "key": key,
                         "value_preview": value[:20] + "..." if len(value) > 20 else value
                     })
                     value = default

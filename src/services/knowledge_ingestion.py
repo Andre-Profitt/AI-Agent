@@ -1,3 +1,26 @@
+from agent import line
+from agent import lines
+from agent import response
+from fix_import_hierarchy import file_path
+from fix_security_issues import content
+from migrations.env import url
+from setup_environment import dir_path
+from tests.load_test import success
+
+from src.core.llamaindex_enhanced import Document
+from src.core.llamaindex_enhanced import VectorStoreIndex
+from src.core.llamaindex_enhanced import directory
+from src.core.llamaindex_enhanced import documents
+from src.core.llamaindex_enhanced import reader
+from src.database.models import metadata
+from src.database.models import text
+from src.query_classifier import doc
+from src.services.integration_hub import db_client
+from src.utils.knowledge_utils import doc_id
+
+from typing import Dict
+from typing import Any
+
 import os
 import logging
 import asyncio
@@ -10,15 +33,22 @@ import requests
 from bs4 import BeautifulSoup
 
 from llama_index.core import Document, VectorStoreIndex
-from llama_index.core.node_parser import SimpleNodeParser
+
 from llama_index.readers.file import PDFReader, DocxReader, UnstructuredReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 # Import database for vector store access
-from src.database import get_vector_store, get_embedding_model
-from typing import Optional, Dict, Any, List, Union, Tuple
+# from src.database import get_vector_store, get_embedding_model  # Circular import - commented out
+
+# TODO: Fix undefined variables: Any, Dict, Document, DocxReader, List, Optional, PDFReader, Path, RecursiveCharacterTextSplitter, UnstructuredReader, VectorStoreIndex, cache, chunk, chunks, content, content_hash, datetime, db_client, dir_path, directory, doc, doc_count, doc_id, doc_metadata, doc_path, docs, documents, e, file_path, force, i, line, lines, logging, metadata, os, phrase, poll_urls, reader, response, result, script, service, soup, success, suffix, text, time, url, watch_directories, watch_dirs
+
 from src.shared.types.di_types import (
+
+from langchain.schema import Document
+from typing import Optional
     ConfigurationService, DatabaseClient, CacheClient, LoggingService
+)
+from src.agents.advanced_agent_fsm import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +56,8 @@ class DocumentProcessor:
     """Handles document processing and embedding generation."""
     
     def __init__(self) -> None:
-        self.vector_store = get_vector_store()
-        self.embedding_model = get_embedding_model()
+        # self.vector_store = get_vector_store()
+        # self.embedding_model = get_embedding_model()
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=200,
@@ -83,8 +113,8 @@ class DocumentProcessor:
             # Add to vector store
             index = VectorStoreIndex.from_documents(
                 documents,
-                vector_store=self.vector_store,
-                embed_model=self.embedding_model,
+                # vector_store=self.vector_store,
+                # embed_model=self.embedding_model,
                 show_progress=True
             )
             
@@ -183,8 +213,8 @@ class DocumentProcessor:
             # Add to vector store
             index = VectorStoreIndex.from_documents(
                 documents,
-                vector_store=self.vector_store,
-                embed_model=self.embedding_model
+                # vector_store=self.vector_store,
+                # embed_model=self.embedding_model
             )
             
             self.processed_hashes.add(content_hash)
@@ -287,10 +317,11 @@ class KnowledgeLifecycleManager:
 class KnowledgeIngestionService:
     """Enhanced knowledge ingestion service with lifecycle management."""
     
-    def __init__(self, ,
-
-    
-            watch_directories: List[str] = None        poll_urls: List[str] = None        db_client: Optional[DatabaseClient] = None        cache: Optional[CacheClient] = None) -> None:
+    def __init__(self,
+                 watch_directories: List[str] = None,
+                 poll_urls: List[str] = None,
+                 db_client: Optional[DatabaseClient] = None,
+                 cache: Optional[CacheClient] = None) -> None:
         self.processor = DocumentProcessor()
         self.lifecycle_manager = KnowledgeLifecycleManager(db_client, cache)
         self.watch_directories = watch_directories or []

@@ -1,4 +1,11 @@
 """
+
+from fastapi import status
+from sqlalchemy import func
+from typing import Any
+from typing import Callable
+from typing import Tuple
+from typing import TypeVar
 HTTP retry logic with configurable decorators
 """
 
@@ -347,10 +354,7 @@ def requests_with_retry(
 class RetryContext:
     """Context manager for retry operations"""
     
-    def __init__(self, ,
-
-    
-            max_attempts: int = 3        exceptions: Optional[Tuple[type        ...]]: Optional[Any] = None        operation_name: str = "operation") -> None:
+    def __init__(self, max_attempts: int = 3, exceptions: Optional[Tuple[type, ...]] = None, operation_name: str = "operation") -> None:
         self.max_attempts = max_attempts
         self.exceptions = exceptions or DEFAULT_EXCEPTIONS
         self.operation_name = operation_name

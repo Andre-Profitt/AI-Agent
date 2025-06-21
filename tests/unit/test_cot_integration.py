@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
+from src.agents.advanced_agent_fsm import Agent
+
 """
+
+from fastapi import status
 Test script for Optimized Chain of Thought integration
 Verifies that the CoT system works correctly with the hybrid architecture
 """
@@ -71,7 +75,7 @@ async def test_cot_integration():
             path = result['reasoning_path']
             logger.info("   CoT Steps: {}", extra={"len_path_steps_": len(path.steps)})
             logger.info("   Template: {}", extra={"path_template_used": path.template_used})
-            logger.info("   Final Answer: {}...", extra={"path_final_answer_": path.final_answer[})
+            logger.info("   Final Answer: {}...", extra={"path_final_answer": path.final_answer[:100]})
         
         return True
         
@@ -170,7 +174,7 @@ async def test_template_system():
             complexity, features = analyzer.analyze(query)
             template = library.select_template(query, features)
             
-            logger.info("   Query: {}...", extra={"query_": query[})
+            logger.info("   Query: {}...", extra={"query": query[:50]})
             logger.info("   Selected: {}", extra={"template_name": template.name})
             logger.info("   Expected: {}", extra={"expected_type": expected_type})
             logger.info("   Match: {}", extra={"____if_template_name____expected_type_else____": '✅' if template.name == expected_type else '❌'})

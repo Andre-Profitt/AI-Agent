@@ -1,9 +1,18 @@
+from src.tools.base_tool import Tool
+
+from src.agents.advanced_agent_fsm import Agent
+
 """
+
+from typing import Optional
 GAIA Logic Module
 =================
 
 This module handles GAIA benchmark evaluation logic.
 """
+
+from typing import Dict
+from typing import Any
 
 import os
 import time
@@ -18,7 +27,7 @@ from .config import config
 from src.agents.advanced_agent_fsm import FSMReActAgent
 from src.utils.tools_enhanced import get_enhanced_tools
 from .database import get_supabase_client, SupabaseLogHandler
-from typing import Optional, Dict, Any, List, Union, Tuple
+
 
 logger = logging.getLogger(__name__)
 
@@ -312,8 +321,11 @@ class GAIAEvaluator:
                 })
         
         total_time = time.time() - start_time
-        logger.info("Completed processing in {}s "
-                   f"(avg: {}s per question)", extra={"total_time": total_time, "total_time_len_questions_data_": total_time/len(questions_data)})
+        avg_time = total_time / len(questions_data) if questions_data else 0
+        logger.info(
+            "Completed processing in {}s (avg: {:.2f}s per question)".format(total_time, avg_time),
+            extra={"total_time": total_time, "total_time_len_questions_data_": avg_time}
+        )
         
         return results_log, answers_payload
     

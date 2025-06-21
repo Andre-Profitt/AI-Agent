@@ -1,3 +1,27 @@
+from agent import query
+from examples.parallel_execution_example import results
+from migrations.env import config
+from migrations.env import url
+
+from src.core.langgraph_compatibility import batch
+from src.core.llamaindex_enhanced import Document
+from src.core.llamaindex_enhanced import documents
+from src.core.monitoring import key
+from src.database.models import text
+from src.gaia_components.advanced_reasoning_engine import embedding
+from src.gaia_components.performance_optimization import batch_size
+from src.gaia_components.production_vector_store import query_embedding
+from src.infrastructure.database import client
+from src.infrastructure.database_enhanced import batch_data
+from src.infrastructure.database_enhanced import connector
+from src.infrastructure.database_enhanced import metadata_boost
+from src.infrastructure.database_enhanced import pool
+from src.infrastructure.database_enhanced import realtime_manager
+from src.infrastructure.database_enhanced import subscription
+from src.query_classifier import doc
+from src.tools_introspection import name
+from src.utils.tools_enhanced import search_results
+
 from supabase import create_client, Client
 from contextlib import asynccontextmanager
 import asyncio
@@ -11,13 +35,14 @@ import os
 from functools import lru_cache
 
 # Import circuit breaker protection
-from src.infrastructure.resilience.circuit_breaker import (
-from typing import Optional, Dict, Any, List, Union, Tuple
-    CircuitBreaker,
-    CircuitBreakerConfig,
-    circuit_breaker
-)
+# TODO: Fix undefined variables: Any, Client, Dict, Document, List, Optional, asynccontextmanager, batch, batch_data, batch_size, callback, client, config, connector, create_client, dataclass, doc, documents, e, embedding, i, key, logging, lru_cache, metadata_boost, metadata_filter, name, os, pool, pool_size, query, query_embedding, realtime_manager, rerank, result, results, search_results, subscription, text, top_k, url, x
+from src.infrastructure.resilience.circuit_breaker import circuit_breaker, CircuitBreaker
+from src.services.circuit_breaker import CircuitBreakerConfig
+from src.services.embedding_manager import get_embedding_manager
 
+from typing import Any
+from typing import Dict
+from typing import List
 try:
     from .config.integrations import integration_config
 except ImportError:

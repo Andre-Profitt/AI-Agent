@@ -1,9 +1,20 @@
+from benchmarks.cot_performance import insights
+from performance_dashboard import stats
+
+from src.agents.advanced_agent_fsm import Agent
+
+from src.agents.advanced_agent_fsm import FSMReActAgent
+# TODO: Fix undefined variables: insights, result, stats
+from src.agents.gaiaenhancedagent import GAIAEnhancedAgent
+
+# TODO: Fix undefined variables: GAIAEnhancedAgent, insights, result, stats
+
 """
 Basic tests for GAIA-Enhanced FSMReActAgent
 """
 
 import pytest
-import asyncio
+
 from examples.gaia_usage_example import GAIAEnhancedAgent
 
 @pytest.fixture

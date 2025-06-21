@@ -1,4 +1,63 @@
+from agent import graph
+from examples.enhanced_unified_example import execution_time
+from examples.enhanced_unified_example import health
+from examples.enhanced_unified_example import metrics
+from examples.enhanced_unified_example import start_time
+from examples.enhanced_unified_example import task
+from examples.enhanced_unified_example import tasks
+from examples.parallel_execution_example import results
+from migrations.env import config
+from performance_dashboard import stats
+from tests.load_test import success
+
+from src.config.integrations import is_valid
+from src.core.optimized_chain_of_thought import avg_performance
+from src.database.models import agent_id
+from src.database.models import metadata
+from src.gaia_components.multi_agent_orchestrator import available_agents
+from src.gaia_components.multi_agent_orchestrator import current_load
+from src.gaia_components.multi_agent_orchestrator import load_score
+from src.infrastructure.database.in_memory_agent_repository import total_agents
+from src.meta_cognition import score
+from src.tools_introspection import error
+from src.unified_architecture.enhanced_platform import alpha
+from src.unified_architecture.enhanced_platform import eligible_agents
+from src.unified_architecture.enhanced_platform import new_value
+from src.unified_architecture.performance import resource_usage
+from src.unified_architecture.registry import health_results
+from src.unified_architecture.task_distribution import capability_overlap
+from src.unified_architecture.task_distribution import capability_score
+from src.unified_architecture.task_distribution import task_type_performance
+from src.workflow.workflow_automation import timeout
+
+from src.agents.advanced_agent_fsm import AgentCapability
+
+from src.agents.advanced_agent_fsm import AgentStatus
+
+from src.agents.advanced_agent_fsm import Agent
+
+from src.agents.advanced_agent_fsm import IUnifiedAgent
+
+from src.agents.advanced_agent_fsm import AgentMetadata
+# TODO: Fix undefined variables: agent_id, alpha, available_agents, avg_performance, cap, capability_overlap, capability_score, config, current_load, current_score, dep, dep_graph, dep_id, eligible_agents, error, execution_order, execution_time, graph, health, health_results, is_valid, load_score, m, metadata, metrics, new_value, resource_usage, result, results, score, selected_agent_id, start_time, stats, subtask, subtask_id, subtasks, success, t, task, task_type_performance, tasks, timeout, total_agents, total_completed, type_success_rate
+from tests.test_gaia_agent import agent
+
+from src.core.entities.agent import AgentMetadata
+from src.infrastructure.monitoring.decorators import agent_metrics
+from src.infrastructure.monitoring.metrics import PerformanceTracker
+from src.unified_architecture.enhanced_platform import AgentStatus
+from src.unified_architecture.enhanced_platform import IUnifiedAgent
+from src.unified_architecture.enhanced_platform import TaskResult
+from src.unified_architecture.enhanced_platform import UnifiedTask
+
+
 """
+
+from collections import deque
+from fastapi import status
+from typing import Any
+from typing import List
+from typing import Optional
 Orchestration Engine for Multi-Agent System
 
 This module provides intelligent agent selection and task coordination:
@@ -19,6 +78,19 @@ from datetime import datetime, timedelta
 import logging
 
 from .core import (
+from collections import defaultdict
+from collections import deque
+from datetime import datetime
+from math import e
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+import logging
+import time
+
+from fastapi import status
+
     IUnifiedAgent, AgentMetadata, UnifiedTask, TaskResult, 
     AgentStatus, AgentCapability
 )
@@ -96,8 +168,8 @@ class OrchestrationEngine:
                 "last_activity": datetime.utcnow()
             }
             
-            logger.info("Registered agent: {} ({}) "
-                       f"with capabilities: {}", extra={"metadata_name": metadata.name, "metadata_agent_id": metadata.agent_id, "_cap_name_for_cap_in_metadata_capabilities": [cap.name for cap in metadata.capabilities]})
+            logger.info(f"Registered agent: {metadata.name} ({metadata.agent_id}) "
+                       f"with capabilities: {[cap.name for cap in metadata.capabilities]}")
             return True
             
         except Exception as e:
@@ -171,7 +243,7 @@ class OrchestrationEngine:
             selected_agent_id = eligible_agents[0][1]
             
             logger.debug("Selected agent {} for task {} "
-                        f"(score: {})", extra={"selected_agent_id": selected_agent_id, "task_task_id": task.task_id, "eligible_agents_0_0": eligible_agents[0][0]})
+                        "(score: )", extra={"selected_agent_id": selected_agent_id, "task_task_id": task.task_id, "eligible_agents_0_0": eligible_agents[0][0]})
             
             return selected_agent_id
             

@@ -1,4 +1,10 @@
 """
+
+from dataclasses import field
+from typing import Any
+from typing import List
+from typing import Optional
+from typing import TYPE_CHECKING
 Shared type definitions for the AI Agent system.
 
 This module contains common type definitions, configurations, and data structures
@@ -6,11 +12,14 @@ that are used across different layers of the application.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, Any, List, Union, Tuple
 
+# Avoid circular imports
+if TYPE_CHECKING:
+    from src.tools.base_tool import Tool
+    from src.agents.advanced_agent_fsm import Agent
 
 class LogLevel(str, Enum):
     """Logging levels"""
@@ -19,7 +28,6 @@ class LogLevel(str, Enum):
     WARNING = "WARNING"
     ERROR = "ERROR"
     CRITICAL = "CRITICAL"
-
 
 @dataclass
 class ModelConfig:
@@ -34,7 +42,6 @@ class ModelConfig:
     api_base: Optional[str] = None
     timeout: int = 30
     retry_attempts: int = 3
-
 
 @dataclass
 class AgentConfig:
@@ -53,7 +60,6 @@ class AgentConfig:
     capabilities: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-
 @dataclass
 class LoggingConfig:
     """Configuration for logging"""
@@ -65,7 +71,6 @@ class LoggingConfig:
     enable_console: bool = True
     enable_file: bool = False
     enable_structured_logging: bool = True
-
 
 @dataclass
 class DatabaseConfig:
@@ -82,7 +87,6 @@ class DatabaseConfig:
     echo: bool = False
     ssl_mode: Optional[str] = None
 
-
 @dataclass
 class SystemConfig:
     """Main system configuration"""
@@ -96,51 +100,50 @@ class SystemConfig:
     secret_key: Optional[str] = None
     session_timeout: int = 3600  # 1 hour
     max_request_size: int = 10 * 1024 * 1024  # 10MB
-    
+
     # Component configurations
     agent_config: AgentConfig = field(default_factory=AgentConfig)
     model_config: ModelConfig = field(default_factory=ModelConfig)
     logging_config: LoggingConfig = field(default_factory=LoggingConfig)
     database_config: DatabaseConfig = field(default_factory=DatabaseConfig)
-    
+
     # Feature flags
     enable_monitoring: bool = True
     enable_metrics: bool = True
     enable_health_checks: bool = True
     enable_rate_limiting: bool = False
     enable_caching: bool = True
-    
+
     # Performance settings
     max_concurrent_requests: int = 100
     request_timeout: int = 30
     cache_ttl: int = 300  # 5 minutes
-    
+
     # Security settings
     enable_authentication: bool = False
     enable_authorization: bool = False
     jwt_secret: Optional[str] = None
     jwt_expiration: int = 3600  # 1 hour
-    
+
     # External service configurations
     external_apis: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    
+
     def __post_init__(self) -> Any:
         """Validate configuration after initialization"""
         if self.environment not in ["development", "staging", "production"]:
             raise ValueError("Environment must be one of: development, staging, production")
-        
+
         if self.port < 1 or self.port > 65535:
             raise ValueError("Port must be between 1 and 65535")
-        
+
         if self.workers < 1:
             raise ValueError("Workers must be at least 1")
-        
+
         if self.session_timeout < 0:
             raise ValueError("Session timeout must be non-negative")
-        
+
         if self.max_request_size < 0:
             raise ValueError("Max request size must be non-negative")
-
 
 @dataclass
 class TaskConfig:
@@ -154,7 +157,6 @@ class TaskConfig:
     requires_approval: bool = False
     notification_on_completion: bool = False
     metadata: Dict[str, Any] = field(default_factory=dict)
-
 
 @dataclass
 class ToolConfig:
@@ -170,7 +172,6 @@ class ToolConfig:
     parameters: Dict[str, Any] = field(default_factory=dict)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-
 @dataclass
 class PerformanceMetrics:
     """Performance metrics for agents and tasks"""
@@ -182,21 +183,20 @@ class PerformanceMetrics:
     memory_usage: float = 0.0
     cpu_usage: float = 0.0
     last_updated: datetime = field(default_factory=datetime.now)
-    
+
     @property
     def success_rate(self) -> float:
         """Calculate success rate"""
         if self.total_requests == 0:
             return 0.0
         return self.successful_requests / self.total_requests
-    
+
     @property
     def failure_rate(self) -> float:
         """Calculate failure rate"""
         if self.total_requests == 0:
             return 0.0
         return self.failed_requests / self.total_requests
-
 
 @dataclass
 class HealthStatus:
@@ -209,9 +209,8 @@ class HealthStatus:
     metrics: PerformanceMetrics = field(default_factory=PerformanceMetrics)
     details: Dict[str, Any] = field(default_factory=dict)
 
-
 # Type aliases for common use cases
 ConfigDict = Dict[str, Any]
 MetadataDict = Dict[str, Any]
 ResultDict = Dict[str, Any]
-ErrorDict = Dict[str, Any] 
+ErrorDict = Dict[str, Any]

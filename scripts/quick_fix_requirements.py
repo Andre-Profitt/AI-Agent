@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+from src.tools.base_tool import Tool
+# TODO: Fix undefined variables: backup_filename, changes_made, f, filename, fix, fixed, fixed_lines, latest, line, line_stripped, lines, logging, new_line, original_line, package_match, package_name, problem, re, result, stable_versions, sys, v, versions, x
+# TODO: Fix undefined variables: backup_filename, changes_made, f, filename, fix, fixed, fixed_lines, latest, line, line_stripped, lines, new_line, original_line, package_match, package_name, problem, result, stable_versions, subprocess, v, versions, x
+
 """
 Quick Fix for Common Requirements Issues
 This script automatically fixes common version problems in requirements.txt
@@ -10,7 +14,6 @@ import re
 import logging
 
 logger = logging.getLogger(__name__)
-
 
 # Known problematic packages and their fixes
 KNOWN_FIXES = {
@@ -26,7 +29,7 @@ KNOWN_FIXES = {
     "llama-index-vector-stores-supabase==0.1.0": "llama-index-vector-stores-supabase==0.4.0",
 }
 
-def get_latest_version(package_name):
+def get_latest_version(self, package_name):
     """Get the latest version of a package from PyPI."""
     try:
         result = subprocess.run(
@@ -35,7 +38,7 @@ def get_latest_version(package_name):
             text=True,
             timeout=10
         )
-        
+
         if result.returncode == 0:
             # Parse the output to find available versions
             lines = result.stdout.strip().split('\n')
@@ -52,35 +55,35 @@ def get_latest_version(package_name):
     except Exception:
         return None
 
-def fix_requirements_file(filename):
+def fix_requirements_file(self, filename):
     """Fix common issues in requirements.txt file."""
     logger.info("Fixing requirements in {}...", extra={"filename": filename})
-    
+
     try:
         with open(filename, 'r') as f:
             lines = f.readlines()
     except FileNotFoundError:
         logger.info("Error: File '{}' not found", extra={"filename": filename})
         return False
-    
+
     # Backup original file
     backup_filename = filename + '.backup'
     with open(backup_filename, 'w') as f:
         f.writelines(lines)
     logger.info("Created backup: {}", extra={"backup_filename": backup_filename})
-    
+
     fixed_lines = []
     changes_made = 0
-    
+
     for line in lines:
         original_line = line
         line_stripped = line.strip()
-        
+
         # Skip comments and empty lines
         if not line_stripped or line_stripped.startswith('#'):
             fixed_lines.append(original_line)
             continue
-        
+
         # Check if line matches any known problematic package
         fixed = False
         for problem, fix in KNOWN_FIXES.items():
@@ -90,7 +93,7 @@ def fix_requirements_file(filename):
                 changes_made += 1
                 fixed = True
                 break
-        
+
         if not fixed:
             # Check for LangChain 0.1.x to 0.3.x migration
             if 'langchain' in line_stripped and '==0.0.' in line_stripped:
@@ -105,7 +108,7 @@ def fix_requirements_file(filename):
                         logger.info("  Updated: {} → {}=={}", extra={"line_stripped": line_stripped, "package_name": package_name, "latest": latest})
                         changes_made += 1
                         fixed = True
-            
+
             # Check for llama-index version consistency
             elif line_stripped.startswith('llama-index=='):
                 fixed_lines.append('llama-index==0.12.42\n')
@@ -119,16 +122,16 @@ def fix_requirements_file(filename):
                     logger.info("  Updated: {} → llama-index-core==0.12.42", extra={"line_stripped": line_stripped})
                     changes_made += 1
                 fixed = True
-        
+
         if not fixed:
             fixed_lines.append(original_line)
-    
+
     # Write fixed file
     with open(filename, 'w') as f:
         f.writelines(fixed_lines)
-    
+
     logger.info("\nTotal changes made: {}", extra={"changes_made": changes_made})
-    
+
     if changes_made > 0:
         logger.info("\n✅ Fixed {} successfully!", extra={"filename": filename})
         logger.info("Backup saved as {}", extra={"backup_filename": backup_filename})
@@ -142,11 +145,11 @@ def main():
     filename = 'requirements.txt'
     if len(sys.argv) > 1:
         filename = sys.argv[1]
-    
+
     logger.info("Requirements Quick Fix Tool")
     logger.info("==========================")
     logger.info("This tool fixes common version issues in requirements.txt\n")
-    
+
     if fix_requirements_file(filename):
         logger.info("\nNext steps:")
         logger.info("1. Review the changes")
@@ -154,4 +157,4 @@ def main():
         logger.info("3. If issues persist, use the verify script to check all versions")
 
 if __name__ == "__main__":
-    main() 
+    main()

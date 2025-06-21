@@ -1,4 +1,50 @@
+from examples.enhanced_unified_example import adapter
+from examples.enhanced_unified_example import agent_configs
+from examples.enhanced_unified_example import bridge
+from examples.enhanced_unified_example import computation_agent
+from examples.enhanced_unified_example import computation_tools
+from examples.enhanced_unified_example import execution_time
+from examples.enhanced_unified_example import final_answer
+from examples.enhanced_unified_example import fsm_agents
+from examples.enhanced_unified_example import general_agent
+from examples.enhanced_unified_example import general_tools
+from examples.enhanced_unified_example import health
+from examples.enhanced_unified_example import health_after
+from examples.enhanced_unified_example import metrics
+from examples.enhanced_unified_example import output
+from examples.enhanced_unified_example import registered_agents
+from examples.enhanced_unified_example import research_agent
+from examples.enhanced_unified_example import research_tools
+from examples.enhanced_unified_example import start_time
+from examples.enhanced_unified_example import task
+from examples.enhanced_unified_example import task_breakdown
+from examples.enhanced_unified_example import tasks
+from migrations.env import config
+from performance_dashboard import stats
+from tests.load_test import success
+
+from src.database.models import agent_id
+from src.unified_architecture.enhanced_platform import task_type
+
+from src.tools.base_tool import Tool
+
+from src.agents.advanced_agent_fsm import Agent
+# TODO: Fix undefined variables: Dict, adapter, agent_configs, agent_id, bridge, computation_agent, computation_tools, config, datetime, e, execution_time, final_answer, fsm_agents, general_agent, general_tools, health, health_after, i, logging, metrics, os, output, registered_agents, research_agent, research_tools, result, start_time, stats, success, sys, task, task_breakdown, task_config, task_type, tasks
+from langchain_experimental.tools import PythonREPLTool
+
+from src.tools.base_tool import tool
+from src.utils.advanced_file_reader import advanced_file_reader
+from src.utils.base_tool import file_reader
+from src.utils.base_tool import get_weather
+from src.utils.base_tool import semantic_search_tool
+from src.utils.base_tool import tavily_search_backoff
+from src.utils.tools_enhanced import web_researcher
+from src.utilsthon_interpreter import python_interpreter
+
+
 """
+
+from typing import Dict
 Enhanced Unified Architecture Example
 
 This example demonstrates how to integrate the existing FSM agents
@@ -12,7 +58,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import asyncio
 import logging
 from datetime import datetime
-from typing import Dict, Any
+
 
 from src.adapters.fsm_unified_adapter import UnifiedArchitectureBridge
 from src.agents.advanced_agent_fsm import FSMReActAgent
@@ -206,7 +252,7 @@ async def demonstrate_enhanced_architecture():
                     logger.info("  Task breakdown:")
                     for task_type, stats in task_breakdown.items():
                         logger.info(f"    {task_type}: {stats['count']} tasks, "
-                                  f"{stats['success_rate']:.2%} success rate")
+                                    f"{stats['success_rate']:.2%} success rate")
         
         logger.info("\n=== Demo Completed Successfully ===")
         

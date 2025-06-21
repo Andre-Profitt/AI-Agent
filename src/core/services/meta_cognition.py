@@ -1,20 +1,52 @@
+from examples.parallel_execution_example import tool_name
+from fix_security_issues import patterns
+
+from src.agents.enhanced_fsm import recommended_tools
+from src.api_server import domains
+from src.core.optimized_chain_of_thought import base_confidence
+from src.core.optimized_chain_of_thought import total_confidence
+from src.core.services.meta_cognition import adjusted_confidence
+from src.core.services.meta_cognition import domain_names
+from src.core.services.meta_cognition import needed_tools
+from src.core.services.meta_cognition import reasoning_parts
+from src.core.services.meta_cognition import temporal_indicators
+from src.core.services.meta_cognition import tool_boosts
+from src.core.services.meta_cognition import tool_needs
+from src.core.services.meta_cognition import uncertainty_areas
+from src.database.models import tool
+from src.infrastructure.config.configuration_service import d
+from src.meta_cognition import query_lower
+from src.templates.template_factory import pattern
+from src.utils.tools_enhanced import reasoning
+
+from src.tools.base_tool import Tool
+# TODO: Fix undefined variables: Dict, List, Tuple, adjusted_confidence, base_confidence, confidence_threshold, d, dataclass, domain_name, domain_names, domains, indicator, indicators, logging, meta_cognition, needed_tools, patterns, query_lower, reasoning, reasoning_parts, recommended_tools, temporal_indicators, threshold, tool_boosts, tool_name, tool_needs, total_confidence, uncertainty_areas
+import pattern
+
+from pydantic import Field
+
+from src.tools.base_tool import tool
+
+
 """
+from typing import Dict
+# TODO: Fix undefined variables: BaseModel, Field, adjusted_confidence, base_confidence, confidence_threshold, d, domain_name, domain_names, domains, indicator, indicators, meta_cognition, needed_tools, pattern, patterns, query_lower, reasoning, reasoning_parts, recommended_tools, self, temporal_indicators, threshold, tool, tool_boosts, tool_name, tool_needs, total_confidence, uncertainty_areas
+
 Meta-Cognition Module for Tool Use Decisions
 Implements MeCo-inspired self-awareness of agent capabilities
 """
 
+from typing import Tuple
+from typing import List
+
 import numpy as np
-from typing import Dict, List, Optional, Tuple
+
 from dataclasses import dataclass
-import json
 
 from pydantic import BaseModel, Field
 import logging
-from typing import Optional, Dict, Any, List, Union, Tuple
 
 logger = logging.getLogger(__name__)
-
-
 
 class MetaCognitiveScore(BaseModel):
     """Meta-cognitive assessment of capability"""
@@ -23,8 +55,7 @@ class MetaCognitiveScore(BaseModel):
     recommended_tools: List[str] = Field(default_factory=list, description="Tools that could help")
     reasoning: str = Field(description="Explanation of assessment")
 
-
-@dataclass 
+@dataclass
 class KnowledgeDomain:
     """Represents a knowledge domain with confidence levels"""
     name: str
@@ -32,13 +63,12 @@ class KnowledgeDomain:
     decay_rate: float = 0.1  # How quickly knowledge becomes outdated
     last_updated: str = "2024-04"  # Training cutoff approximation
 
-
 class MetaCognition:
     """
     Assesses agent's self-awareness of its capabilities
     Helps decide when to rely on internal knowledge vs external tools
     """
-    
+
     # Knowledge domains with base confidence levels
     KNOWLEDGE_DOMAINS = {
         "general_facts": KnowledgeDomain("general_facts", 0.9),
@@ -51,7 +81,7 @@ class MetaCognition:
         "personal_context": KnowledgeDomain("personal_context", 0.0),  # User-specific
         "local_files": KnowledgeDomain("local_files", 0.0),  # Needs file access
     }
-    
+
     # Patterns that indicate need for external tools
     TOOL_INDICATORS = {
         "web_search": [
@@ -74,75 +104,75 @@ class MetaCognition:
             "database", "query", "sql", "records", "stored", "retrieve"
         ]
     }
-    
+
     def __init__(self) -> None:
         """Initialize meta-cognition module"""
         self.domain_patterns = self._compile_domain_patterns()
-    
+
     def assess_capability(self, query: str, available_tools: List[str]) -> MetaCognitiveScore:
         """
         Assess confidence in answering query with internal knowledge
-        
+
         Args:
             query: User query to assess
             available_tools: List of available tool names
-            
+
         Returns:
             MetaCognitiveScore with confidence and recommendations
         """
         query_lower = query.lower()
-        
+
         # Identify relevant knowledge domains
         domains = self._identify_domains(query_lower)
-        
+
         # Calculate base confidence
         base_confidence = self._calculate_base_confidence(domains)
-        
+
         # Check for tool indicators
         tool_needs = self._identify_tool_needs(query_lower)
-        
+
         # Adjust confidence based on tool needs
         adjusted_confidence = base_confidence
         uncertainty_areas = []
-        
+
         if tool_needs:
             # Reduce confidence if tools are needed
             adjusted_confidence *= 0.5
             uncertainty_areas.extend([f"Requires {tool}" for tool in tool_needs])
-        
+
         # Check temporal sensitivity
         if self._is_temporally_sensitive(query_lower):
             adjusted_confidence *= 0.3
             uncertainty_areas.append("Time-sensitive information")
-        
+
         # Generate reasoning
         reasoning = self._generate_reasoning(
             domains, base_confidence, adjusted_confidence, tool_needs
         )
-        
+
         # Filter to available tools
         recommended_tools = [tool for tool in tool_needs if tool in available_tools]
-        
+
         return MetaCognitiveScore(
             confidence=adjusted_confidence,
             uncertainty_areas=uncertainty_areas,
             recommended_tools=recommended_tools,
             reasoning=reasoning
         )
-    
+
     def should_use_tools(self, score: MetaCognitiveScore, threshold: float = 0.7) -> bool:
         """
         Decide whether to use tools based on meta-cognitive assessment
-        
+
         Args:
             score: Meta-cognitive assessment
             threshold: Confidence threshold below which tools should be used
-            
+
         Returns:
             True if tools should be used, False otherwise
         """
         return score.confidence < threshold or len(score.recommended_tools) > 0
-    
+
     def _compile_domain_patterns(self) -> Dict[str, List[str]]:
         """Compile patterns for identifying knowledge domains"""
         return {
@@ -156,41 +186,41 @@ class MetaCognition:
             "personal_context": ["my", "i", "remember when", "last time"],
             "local_files": ["file", "document", "folder", "directory"]
         }
-    
+
     def _identify_domains(self, query: str) -> List[KnowledgeDomain]:
         """Identify relevant knowledge domains for the query"""
         domains = []
-        
+
         for domain_name, patterns in self.domain_patterns.items():
             if any(pattern in query for pattern in patterns):
                 if domain_name in self.KNOWLEDGE_DOMAINS:
                     domains.append(self.KNOWLEDGE_DOMAINS[domain_name])
-        
+
         # Default to general facts if no specific domain identified
         if not domains:
             domains.append(self.KNOWLEDGE_DOMAINS["general_facts"])
-        
+
         return domains
-    
+
     def _calculate_base_confidence(self, domains: List[KnowledgeDomain]) -> float:
         """Calculate base confidence from identified domains"""
         if not domains:
             return 0.5
-        
+
         # Weighted average of domain confidences
         total_confidence = sum(d.base_confidence for d in domains)
         return total_confidence / len(domains)
-    
+
     def _identify_tool_needs(self, query: str) -> List[str]:
         """Identify which tools might be needed"""
         needed_tools = []
-        
+
         for tool, indicators in self.TOOL_INDICATORS.items():
             if any(indicator in query for indicator in indicators):
                 needed_tools.append(tool)
-        
+
         return needed_tools
-    
+
     def _is_temporally_sensitive(self, query: str) -> bool:
         """Check if query is about time-sensitive information"""
         temporal_indicators = [
@@ -199,9 +229,9 @@ class MetaCognition:
             "recent", "2024", "2025"
         ]
         return any(indicator in query for indicator in temporal_indicators)
-    
+
     def _generate_reasoning(
-        self, 
+        self,
         domains: List[KnowledgeDomain],
         base_confidence: float,
         adjusted_confidence: float,
@@ -209,83 +239,81 @@ class MetaCognition:
     ) -> str:
         """Generate human-readable reasoning for the assessment"""
         domain_names = [d.name for d in domains]
-        
+
         reasoning_parts = [
             f"Query relates to domains: {', '.join(domain_names)}.",
             f"Base confidence: {base_confidence:.2f}."
         ]
-        
+
         if tool_needs:
             reasoning_parts.append(
                 f"Tools recommended: {', '.join(tool_needs)} would provide more accurate results."
             )
-        
+
         if adjusted_confidence < base_confidence:
             reasoning_parts.append(
                 f"Confidence adjusted to {adjusted_confidence:.2f} due to external data needs."
             )
-        
+
         return " ".join(reasoning_parts)
-    
+
     def get_tool_confidence_boost(self, tool_name: str) -> float:
         """
         Get confidence boost from using a specific tool
-        
+
         Args:
             tool_name: Name of the tool
-            
+
         Returns:
             Confidence boost factor (multiplier)
         """
         tool_boosts = {
             "web_search": 2.0,  # Doubles confidence for current info
-            "calculator": 1.5,  # Improves calculation confidence  
+            "calculator": 1.5,  # Improves calculation confidence
             "file_access": 3.0,  # Essential for file-based queries
             "code_execution": 2.5,  # Critical for data analysis
             "database": 2.0  # Important for stored data
         }
         return tool_boosts.get(tool_name, 1.0)
 
-
 # Integration helper for FSM
 class MetaCognitiveRouter:
     """Routes decisions based on meta-cognitive assessment"""
-    
+
     def __init__(self, meta_cognition: MetaCognition, confidence_threshold: float = 0.7) -> None:
         self.meta_cognition = meta_cognition
         self.confidence_threshold = confidence_threshold
-    
+
     def should_enter_tool_loop(
-        self, 
-        query: str, 
+        self,
+        query: str,
         available_tools: List[str]
     ) -> Tuple[bool, MetaCognitiveScore]:
         """
         Determine if agent should enter tool-using loop
-        
+
         Returns:
             Tuple of (should_use_tools, meta_cognitive_score)
         """
         score = self.meta_cognition.assess_capability(query, available_tools)
         should_use = self.meta_cognition.should_use_tools(score, self.confidence_threshold)
-        
-        return should_use, score
 
+        return should_use, score
 
 # Example usage
 if __name__ == "__main__":
     mc = MetaCognition()
     router = MetaCognitiveRouter(mc)
-    
+
     test_queries = [
         "What is the capital of France?",
         "What's the latest news about AI developments?",
         "Calculate the integral of x^2 from 0 to 10",
         "Analyze the data in sales.csv and create a visualization"
     ]
-    
+
     available_tools = ["web_search", "calculator", "file_access", "code_execution"]
-    
+
     for query in test_queries:
         should_use, score = router.should_enter_tool_loop(query, available_tools)
         logger.info("\nQuery: {}", extra={"query": query})
@@ -293,4 +321,4 @@ if __name__ == "__main__":
         logger.info("Should use tools: {}", extra={"should_use": should_use})
         logger.info("Reasoning: {}", extra={"score_reasoning": score.reasoning})
         if score.recommended_tools:
-            logger.info("Recommended tools: {}", extra={"_____join_score_recommended_tools_": ', '.join(score.recommended_tools)}) 
+            logger.info("Recommended tools: {}", extra={"_____join_score_recommended_tools_": ', '.join(score.recommended_tools)})

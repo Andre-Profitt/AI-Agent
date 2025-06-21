@@ -1,15 +1,34 @@
+from fix_import_hierarchy import file_path
+from setup_environment import value
+
+from src.collaboration.realtime_collaboration import updates
+from src.core.monitoring import key
+from src.gaia_components.monitoring import values
+from src.infrastructure.config_cli import config_dict
+from src.infrastructure.integrations import section_config
+from src.utils.tools_introspection import field
+
 """
+from typing import Dict
+# TODO: Fix undefined variables: Any, Dict, List, Path, config_dict, dataclass, e, f, field, file_path, json, key, logging, os, section, section_config, updates, value, values
+# TODO: Fix undefined variables: config_dict, e, f, file_path, key, section, section_config, self, updates, value, values
+
 Centralized Integration Configuration
 Manages all integration settings for Supabase, LangChain, CrewAI, LlamaIndex, and GAIA
 """
 
+from dataclasses import field
+from typing import Any
+from typing import List
+
 import os
-from typing import Dict, Any, Optional, List
+
 from dataclasses import dataclass, field
 from pathlib import Path
 import json
 import logging
-from typing import Optional, Dict, Any, List, Union, Tuple
+
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +43,10 @@ class SupabaseConfig:
     enable_realtime: bool = True
     connection_pool_size: int = 10
     batch_size: int = 100
-    
+
     def is_configured(self) -> bool:
         return bool(self.url and self.key)
-    
+
     def get_connection_string(self) -> str:
         if not self.is_configured():
             return ""
@@ -45,7 +64,7 @@ class LangChainConfig:
     tracing_enabled: bool = False
     langsmith_project: str = ""
     langsmith_api_key: str = ""
-    
+
     def is_tracing_configured(self) -> bool:
         return bool(self.langsmith_api_key and self.langsmith_project)
 
@@ -83,7 +102,7 @@ class GAIAConfig:
     enable_gaia_metrics: bool = True
     enable_gaia_caching: bool = True
     gaia_test_patterns: List[str] = field(default_factory=lambda: [
-        "video_analysis", "text_processing", "mathematical", 
+        "video_analysis", "text_processing", "mathematical",
         "factual", "creative", "multimodal"
     ])
     gaia_timeout: int = 600
@@ -91,7 +110,7 @@ class GAIAConfig:
 
 class IntegrationConfig:
     """Centralized configuration for all integrations"""
-    
+
     def __init__(self) -> None:
         self.supabase = SupabaseConfig()
         self.langchain = LangChainConfig()
@@ -99,33 +118,33 @@ class IntegrationConfig:
         self.llamaindex = LlamaIndexConfig()
         self.gaia = GAIAConfig()
         self._load_from_environment()
-    
+
     def _load_from_environment(self) -> Any:
         """Load configuration from environment variables"""
-        
+
         # Supabase
         self.supabase.url = os.getenv("SUPABASE_URL", "")
         self.supabase.key = os.getenv("SUPABASE_KEY", "")
         self.supabase.service_key = os.getenv("SUPABASE_SERVICE_KEY", "")
         self.supabase.db_password = os.getenv("SUPABASE_DB_PASSWORD", "")
-        
+
         # LangChain
         self.langchain.tracing_enabled = os.getenv("LANGSMITH_TRACING", "").lower() == "true"
         self.langchain.langsmith_project = os.getenv("LANGSMITH_PROJECT", "")
         self.langchain.langsmith_api_key = os.getenv("LANGSMITH_API_KEY", "")
-        
+
         # CrewAI
         self.crewai.enable_multi_agent = os.getenv("CREWAI_ENABLED", "true").lower() == "true"
         self.crewai.max_agents = int(os.getenv("CREWAI_MAX_AGENTS", "5"))
-        
+
         # LlamaIndex
         self.llamaindex.storage_path = os.getenv("LLAMAINDEX_STORAGE_PATH", "./knowledge_cache")
         self.llamaindex.chunk_size = int(os.getenv("LLAMAINDEX_CHUNK_SIZE", "512"))
-        
+
         # GAIA
         self.gaia.enable_gaia_tools = os.getenv("GAIA_TOOLS_ENABLED", "true").lower() == "true"
         self.gaia.gaia_timeout = int(os.getenv("GAIA_TIMEOUT", "600"))
-    
+
     def update_config(self, updates: Dict[str, Any]) -> bool:
         """Update configuration with new values"""
         try:
@@ -135,37 +154,37 @@ class IntegrationConfig:
                     for key, value in values.items():
                         if hasattr(section_config, key):
                             setattr(section_config, key, value)
-            
+
             logger.info("Configuration updated successfully")
             return True
-            
+
         except Exception as e:
             logger.error("Failed to update configuration: {}", extra={"e": e})
             return False
-    
+
     async def validate(self) -> tuple[bool, List[str]]:
         """Validate configuration and return issues"""
         issues = []
-        
+
         # Validate Supabase if enabled
-        if await self.supabase.is_configured_safe():
+        if self.supabase.is_configured():
             if not self.supabase.url.startswith("https://"):
                 issues.append("Supabase URL must start with https://")
-        
+
         # Validate LangChain tracing
         if self.langchain.tracing_enabled and not self.langchain.is_tracing_configured():
             issues.append("LangSmith tracing enabled but not configured")
-        
+
         # Validate CrewAI
         if self.crewai.max_agents < 1:
             issues.append("CrewAI max_agents must be at least 1")
-        
+
         # Validate LlamaIndex
         if self.llamaindex.chunk_size < 100:
             issues.append("LlamaIndex chunk_size must be at least 100")
-        
+
         return len(issues) == 0, issues
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert configuration to dictionary"""
         return {
@@ -196,7 +215,7 @@ class IntegrationConfig:
                 "gaia_timeout": self.gaia.gaia_timeout
             }
         }
-    
+
     def save_to_file(self, file_path: str) -> bool:
         """Save configuration to file"""
         try:
@@ -208,22 +227,22 @@ class IntegrationConfig:
         except Exception as e:
             logger.error("Failed to save configuration: {}", extra={"e": e})
             return False
-    
+
     def load_from_file(self, file_path: str) -> bool:
         """Load configuration from file"""
         try:
             if not Path(file_path).exists():
                 logger.warning("Configuration file {} not found", extra={"file_path": file_path})
                 return False
-            
+
             with open(file_path, 'r') as f:
                 config_dict = json.load(f)
-            
+
             # Update configuration with loaded values
             self.update_config(config_dict)
             logger.info("Configuration loaded from {}", extra={"file_path": file_path})
             return True
-            
+
         except Exception as e:
             logger.error("Failed to load configuration: {}", extra={"e": e})
             return False
@@ -232,7 +251,7 @@ class IntegrationConfig:
 integration_config = IntegrationConfig()
 
 # Validate on import
-is_valid, issues = integration_config.validate()
+is_valid, issues = asyncio.run(integration_config.validate())
 if not is_valid:
     for issue in issues:
-        logger.warning("Integration config issue: {}", extra={"issue": issue}) 
+        logger.warning("Integration config issue: {}", extra={"issue": issue})

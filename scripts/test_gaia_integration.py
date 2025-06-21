@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
+from src.agents.advanced_agent_fsm import Agent
+
 """
+
+from fastapi import status
+from langchain.schema import HumanMessage
 Quick test script to verify GAIA integration is working correctly.
 Run this before attempting full GAIA evaluation.
 """
@@ -98,7 +103,7 @@ def test_agent_wrapper():
             try:
                 result = graph.invoke({"messages": [HumanMessage(content=question)]})
                 answer = result['messages'][-1].content
-                logger.info("✅ Got answer: {}...", extra={"answer_": answer[})
+                logger.info("✅ Got answer: {}...", extra={"answer": answer[:100]})
                 
                 # Check if answer is in GAIA format
                 if "<<<" in answer and ">>>" in answer:
@@ -145,7 +150,7 @@ def test_gaia_api():
                 sample = questions[0]
                 logger.info("\n📋 Sample question structure:")
                 logger.info("   - task_id: {}", extra={"sample_get__task_id____N_A__": sample.get('task_id', 'N/A')})
-                logger.info("   - question: {}...", extra={"sample_get__question____N_A___": sample.get('question', 'N/A')[})
+                logger.info("   - question: {}...", extra={"sample_get__question____N_A___": sample.get('question', 'N/A')[:50]})
             
             return True
         else:

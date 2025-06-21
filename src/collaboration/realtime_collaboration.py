@@ -1,7 +1,41 @@
 # Real-time Collaboration System for AI Agent Platform
 # src/collaboration/realtime_collaboration.py
 
-import asyncio
+from app import app
+from examples.basic.simple_hybrid_demo import reason
+from examples.parallel_execution_example import agents
+from fix_security_issues import content
+from setup_environment import value
+from tests.load_test import data
+
+from src.api_server import disconnected
+from src.api_server import message
+from src.api_server import redis_url
+from src.collaboration.realtime_collaboration import event
+from src.collaboration.realtime_collaboration import handler
+from src.collaboration.realtime_collaboration import handoff
+from src.collaboration.realtime_collaboration import handoff_data
+from src.collaboration.realtime_collaboration import handoff_dict
+from src.collaboration.realtime_collaboration import msg_type
+from src.collaboration.realtime_collaboration import progress_key
+from src.collaboration.realtime_collaboration import session
+from src.collaboration.realtime_collaboration import session_id
+from src.collaboration.realtime_collaboration import session_key
+from src.collaboration.realtime_collaboration import updates
+from src.core.monitoring import key
+from src.database.models import agent_id
+from src.database.models import details
+from src.database.models import metadata
+from src.database.models import user_id
+from src.gaia_components.multi_agent_orchestrator import task_id
+from src.tools_introspection import name
+
+from typing import Set
+from typing import Optional
+from dataclasses import field
+from typing import Any
+from typing import List
+
 import json
 import uuid
 from datetime import datetime
@@ -11,7 +45,35 @@ from enum import Enum
 import redis.asyncio as redis
 from fastapi import WebSocket, WebSocketDisconnect
 import logging
-from contextlib import asynccontextmanager
+
+import websocket
+
+from src.agents.advanced_agent_fsm import Agent
+# TODO: Fix undefined variables: actor_id, agent_id, agents, app, collaboration_manager, content, context, creator_id, data, details, disconnected, document_id, edit_type, event, from_agent, handler, handoff, handoff_data, handoff_dict, handoff_id, key, message, metadata, msg_type, name, participants, position, progress, progress_key, reason, redis_url, session, session_id, session_key, task_id, to_agent, updates, user_id, value, actor_id, agent_id, agents, app, collaboration_manager, content, context, creator_id, data, details, disconnected, document_id, edit_type, event, from_agent, handler, handoff, handoff_data, handoff_dict, handoff_id, key, message, metadata, msg_type, name, participants, position, progress, progress_key, reason, redis_url, self, session, session_id, session_key, task_id, to_agent, updates, user_id, value
+from fastapi import WebSocketDisconnect
+
+# TODO: Fix undefined variables: actor_id, agent_id, agents, app, collaboration_manager, content, context, creator_id, data, details, disconnected, document_id, edit_type, event, from_agent, handler, handoff, handoff_data, handoff_dict, handoff_id, key, message, metadata, msg_type, name, participants, position, progress, progress_key, reason, redis_url, session, session_id, session_key, task_id, to_agent, updates, user_id, value, actor_id, agent_id, agents, app, collaboration_manager, content, context, creator_id, data, details, disconnected, document_id, edit_type, event, from_agent, handler, handoff, handoff_data, handoff_dict, handoff_id, key, message, metadata, msg_type, name, participants, position, progress, progress_key, reason, redis_url, self, session, session_id, session_key, task_id, to_agent, updates, user_id, value
+
+from fastapi import status
+from dataclasses import dataclass
+from dataclasses import field
+from datetime import datetime
+from enum import Enum
+from math import e
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Set
+import json
+import logging
+import uuid
+import websocket
+
+from fastapi import WebSocket
+from fastapi import WebSocketDisconnect
+from fastapi import status
+import redis
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +102,7 @@ class CollaborationSession:
     status: SessionStatus
     metadata: Dict[str, Any] = field(default_factory=dict)
     shared_context: Dict[str, Any] = field(default_factory=dict)
-    
+
 @dataclass
 class CollaborationEvent:
     """Event in a collaboration session"""
@@ -50,7 +112,7 @@ class CollaborationEvent:
     actor_id: str  # User or Agent ID
     timestamp: datetime
     data: Dict[str, Any]
-    
+
 @dataclass
 class AgentHandoff:
     """Agent handoff protocol"""
@@ -66,7 +128,7 @@ class AgentHandoff:
 # WebSocket Connection Manager
 class CollaborationManager:
     """Manages real-time collaboration sessions and WebSocket connections"""
-    
+
     def __init__(self, redis_url: str = "redis://localhost:6379"):
         self.redis_url = redis_url
         self.redis_client: Optional[redis.Redis] = None
@@ -75,19 +137,19 @@ class CollaborationManager:
         self.connections: Dict[str, Set[WebSocket]] = {}  # session_id -> websockets
         self.user_sessions: Dict[str, str] = {}  # user_id -> session_id
         self.agent_sessions: Dict[str, str] = {}  # agent_id -> session_id
-        
+
     async def initialize(self):
         """Initialize Redis connection and pubsub"""
         self.redis_client = await redis.from_url(self.redis_url, decode_responses=True)
         self.pubsub = self.redis_client.pubsub()
-        
+
     async def cleanup(self):
         """Cleanup resources"""
         if self.pubsub:
             await self.pubsub.close()
         if self.redis_client:
             await self.redis_client.close()
-            
+
     # Session Management
     async def create_session(
         self,
@@ -108,19 +170,19 @@ class CollaborationManager:
             status=SessionStatus.ACTIVE,
             metadata=metadata or {}
         )
-        
+
         # Store in memory and Redis
         self.sessions[session_id] = session
         await self._save_session_to_redis(session)
-        
+
         # Update user mapping
         for user_id in session.participants:
             self.user_sessions[user_id] = session_id
-            
+
         # Update agent mapping
         for agent_id in session.agents:
             self.agent_sessions[agent_id] = session_id
-            
+
         # Broadcast session creation
         await self._broadcast_event(CollaborationEvent(
             event_id=str(uuid.uuid4()),
@@ -130,10 +192,10 @@ class CollaborationManager:
             timestamp=datetime.utcnow(),
             data={"session": self._session_to_dict(session)}
         ))
-        
+
         logger.info(f"Created collaboration session {session_id}")
         return session
-        
+
     async def join_session(
         self,
         session_id: str,
@@ -143,25 +205,25 @@ class CollaborationManager:
         """Join a collaboration session"""
         if session_id not in self.sessions:
             raise ValueError(f"Session {session_id} not found")
-            
+
         session = self.sessions[session_id]
-        
+
         # Add user to session if not already present
         if user_id not in session.participants:
             session.participants.append(user_id)
             await self._save_session_to_redis(session)
-            
+
         # Update mappings
         self.user_sessions[user_id] = session_id
-        
+
         # Add WebSocket connection
         if session_id not in self.connections:
             self.connections[session_id] = set()
         self.connections[session_id].add(websocket)
-        
+
         # Subscribe to session channel
         await self.pubsub.subscribe(f"session:{session_id}")
-        
+
         # Send session state to new participant
         await websocket.send_json({
             "type": "session_state",
@@ -170,7 +232,7 @@ class CollaborationManager:
                 "shared_context": session.shared_context
             }
         })
-        
+
         # Broadcast join event
         await self._broadcast_event(CollaborationEvent(
             event_id=str(uuid.uuid4()),
@@ -180,20 +242,20 @@ class CollaborationManager:
             timestamp=datetime.utcnow(),
             data={"user_id": user_id}
         ))
-        
+
     async def leave_session(self, session_id: str, user_id: str, websocket: WebSocket):
         """Leave a collaboration session"""
         if session_id in self.connections and websocket in self.connections[session_id]:
             self.connections[session_id].remove(websocket)
-            
+
             # Clean up empty connection sets
             if not self.connections[session_id]:
                 del self.connections[session_id]
-                
+
         # Remove user mapping
         if user_id in self.user_sessions:
             del self.user_sessions[user_id]
-            
+
         # Broadcast leave event
         await self._broadcast_event(CollaborationEvent(
             event_id=str(uuid.uuid4()),
@@ -203,7 +265,7 @@ class CollaborationManager:
             timestamp=datetime.utcnow(),
             data={"user_id": user_id}
         ))
-        
+
     # Agent Handoff Protocol
     async def initiate_handoff(
         self,
@@ -223,14 +285,14 @@ class CollaborationManager:
             reason=reason,
             timestamp=datetime.utcnow()
         )
-        
+
         # Store handoff in Redis
         await self.redis_client.setex(
             f"handoff:{handoff.handoff_id}",
             300,  # 5 minute TTL
             json.dumps(self._handoff_to_dict(handoff))
         )
-        
+
         # Broadcast handoff request
         await self._broadcast_event(CollaborationEvent(
             event_id=str(uuid.uuid4()),
@@ -240,22 +302,22 @@ class CollaborationManager:
             timestamp=datetime.utcnow(),
             data=self._handoff_to_dict(handoff)
         ))
-        
+
         return handoff
-        
+
     async def accept_handoff(self, handoff_id: str, agent_id: str):
         """Accept agent handoff"""
         # Retrieve handoff from Redis
         handoff_data = await self.redis_client.get(f"handoff:{handoff_id}")
         if not handoff_data:
             raise ValueError(f"Handoff {handoff_id} not found or expired")
-            
+
         handoff_dict = json.loads(handoff_data)
-        
+
         # Verify the accepting agent
         if handoff_dict["to_agent"] != agent_id:
             raise ValueError(f"Agent {agent_id} is not the target of this handoff")
-            
+
         # Update handoff status
         handoff_dict["accepted"] = True
         await self.redis_client.setex(
@@ -263,25 +325,25 @@ class CollaborationManager:
             300,
             json.dumps(handoff_dict)
         )
-        
+
         # Update agent sessions
         session_id = handoff_dict["session_id"]
         if session_id in self.sessions:
             session = self.sessions[session_id]
-            
+
             # Remove from_agent and add to_agent
             if handoff_dict["from_agent"] in session.agents:
                 session.agents.remove(handoff_dict["from_agent"])
             if agent_id not in session.agents:
                 session.agents.append(agent_id)
-                
+
             await self._save_session_to_redis(session)
-            
+
             # Update agent mappings
             if handoff_dict["from_agent"] in self.agent_sessions:
                 del self.agent_sessions[handoff_dict["from_agent"]]
             self.agent_sessions[agent_id] = session_id
-            
+
         # Broadcast handoff acceptance
         await self._broadcast_event(CollaborationEvent(
             event_id=str(uuid.uuid4()),
@@ -291,7 +353,7 @@ class CollaborationManager:
             timestamp=datetime.utcnow(),
             data=handoff_dict
         ))
-        
+
     # Shared Context Management
     async def update_shared_context(
         self,
@@ -302,20 +364,20 @@ class CollaborationManager:
         """Update shared context for collaboration"""
         if session_id not in self.sessions:
             raise ValueError(f"Session {session_id} not found")
-            
+
         session = self.sessions[session_id]
-        
+
         # Apply updates with conflict resolution
         for key, value in updates.items():
             if key in session.shared_context:
                 # Simple last-write-wins for now
                 # TODO: Implement more sophisticated conflict resolution
                 logger.warning(f"Overwriting shared context key: {key}")
-                
+
             session.shared_context[key] = value
-            
+
         await self._save_session_to_redis(session)
-        
+
         # Broadcast context update
         await self._broadcast_event(CollaborationEvent(
             event_id=str(uuid.uuid4()),
@@ -325,7 +387,7 @@ class CollaborationManager:
             timestamp=datetime.utcnow(),
             data={"updates": updates}
         ))
-        
+
     # Live Progress Tracking
     async def report_progress(
         self,
@@ -350,9 +412,9 @@ class CollaborationManager:
                 "details": details or {}
             }
         )
-        
+
         await self._broadcast_event(event)
-        
+
         # Store progress in Redis for persistence
         progress_key = f"progress:{session_id}:{task_id}"
         await self.redis_client.setex(
@@ -360,7 +422,7 @@ class CollaborationManager:
             3600,  # 1 hour TTL
             json.dumps(event.data)
         )
-        
+
     # Collaborative Editing
     async def submit_edit(
         self,
@@ -385,12 +447,12 @@ class CollaborationManager:
                 "content": content
             }
         )
-        
+
         # Apply Operational Transformation if needed
         # TODO: Implement OT for conflict-free collaborative editing
-        
+
         await self._broadcast_event(event)
-        
+
     # Helper Methods
     async def _broadcast_event(self, event: CollaborationEvent):
         """Broadcast event to all session participants"""
@@ -399,14 +461,14 @@ class CollaborationManager:
             f"session:{event.session_id}",
             json.dumps(self._event_to_dict(event))
         )
-        
+
         # Send to WebSocket connections
         if event.session_id in self.connections:
             message = json.dumps({
                 "type": "collaboration_event",
                 "event": self._event_to_dict(event)
             })
-            
+
             disconnected = set()
             for websocket in self.connections[event.session_id]:
                 try:
@@ -414,10 +476,10 @@ class CollaborationManager:
                 except Exception as e:
                     logger.error(f"Failed to send to websocket: {e}")
                     disconnected.add(websocket)
-                    
+
             # Remove disconnected websockets
             self.connections[event.session_id] -= disconnected
-            
+
     async def _save_session_to_redis(self, session: CollaborationSession):
         """Save session state to Redis"""
         session_key = f"session:{session.session_id}"
@@ -426,7 +488,7 @@ class CollaborationManager:
             86400,  # 24 hour TTL
             json.dumps(self._session_to_dict(session))
         )
-        
+
     def _session_to_dict(self, session: CollaborationSession) -> Dict[str, Any]:
         """Convert session to dictionary"""
         return {
@@ -439,7 +501,7 @@ class CollaborationManager:
             "metadata": session.metadata,
             "shared_context": session.shared_context
         }
-        
+
     def _event_to_dict(self, event: CollaborationEvent) -> Dict[str, Any]:
         """Convert event to dictionary"""
         return {
@@ -450,7 +512,7 @@ class CollaborationManager:
             "timestamp": event.timestamp.isoformat(),
             "data": event.data
         }
-        
+
     def _handoff_to_dict(self, handoff: AgentHandoff) -> Dict[str, Any]:
         """Convert handoff to dictionary"""
         return {
@@ -467,49 +529,49 @@ class CollaborationManager:
 # WebSocket Handler for Real-time Collaboration
 class CollaborationWebSocketHandler:
     """Handles WebSocket connections for collaboration"""
-    
+
     def __init__(self, collaboration_manager: CollaborationManager):
         self.manager = collaboration_manager
-        
+
     async def handle_connection(self, websocket: WebSocket, user_id: str):
         """Handle a WebSocket connection"""
         await websocket.accept()
-        
+
         try:
             while True:
                 # Receive message from client
                 data = await websocket.receive_text()
                 message = json.loads(data)
-                
+
                 await self._handle_message(websocket, user_id, message)
-                
+
         except WebSocketDisconnect:
             # Handle disconnection
             session_id = self.manager.user_sessions.get(user_id)
             if session_id:
                 await self.manager.leave_session(session_id, user_id, websocket)
-                
+
         except Exception as e:
             logger.error(f"WebSocket error for user {user_id}: {e}")
             await websocket.close()
-            
+
     async def _handle_message(self, websocket: WebSocket, user_id: str, message: Dict[str, Any]):
         """Handle incoming WebSocket message"""
         msg_type = message.get("type")
-        
+
         if msg_type == "join_session":
             session_id = message["session_id"]
             await self.manager.join_session(session_id, user_id, websocket)
-            
+
         elif msg_type == "leave_session":
             session_id = message["session_id"]
             await self.manager.leave_session(session_id, user_id, websocket)
-            
+
         elif msg_type == "update_context":
             session_id = message["session_id"]
             updates = message["updates"]
             await self.manager.update_shared_context(session_id, user_id, updates)
-            
+
         elif msg_type == "submit_edit":
             await self.manager.submit_edit(
                 session_id=message["session_id"],
@@ -519,7 +581,7 @@ class CollaborationWebSocketHandler:
                 position=message["position"],
                 content=message["content"]
             )
-            
+
         elif msg_type == "report_progress":
             # For agents reporting progress
             await self.manager.report_progress(
@@ -530,14 +592,14 @@ class CollaborationWebSocketHandler:
                 status=message["status"],
                 details=message.get("details")
             )
-            
+
         else:
             logger.warning(f"Unknown message type: {msg_type}")
-            
+
 # Integration with existing API server
 def setup_collaboration_routes(app, collaboration_manager: CollaborationManager):
     """Setup collaboration routes on FastAPI app"""
-    
+
     @app.post("/api/v1/collaboration/sessions")
     async def create_collaboration_session(
         name: str,
@@ -555,13 +617,13 @@ def setup_collaboration_routes(app, collaboration_manager: CollaborationManager)
             metadata=metadata
         )
         return {"session": collaboration_manager._session_to_dict(session)}
-        
+
     @app.websocket("/ws/collaboration/{user_id}")
     async def collaboration_websocket(websocket: WebSocket, user_id: str):
         """WebSocket endpoint for collaboration"""
         handler = CollaborationWebSocketHandler(collaboration_manager)
         await handler.handle_connection(websocket, user_id)
-        
+
     @app.post("/api/v1/collaboration/handoff")
     async def initiate_agent_handoff(
         session_id: str,
@@ -579,9 +641,9 @@ def setup_collaboration_routes(app, collaboration_manager: CollaborationManager)
             reason=reason
         )
         return {"handoff": collaboration_manager._handoff_to_dict(handoff)}
-        
+
     @app.post("/api/v1/collaboration/handoff/{handoff_id}/accept")
     async def accept_agent_handoff(handoff_id: str, agent_id: str):
         """Accept agent handoff"""
         await collaboration_manager.accept_handoff(handoff_id, agent_id)
-        return {"status": "accepted"} 
+        return {"status": "accepted"}

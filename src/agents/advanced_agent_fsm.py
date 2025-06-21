@@ -1,53 +1,172 @@
+from typing import Dict, List, Any, Optional, Union, Callable
+from dataclasses import dataclass, field
+
+# Remove problematic imports
+from app import error_msg
+from benchmarks.cot_performance import duration
+from benchmarks.cot_performance import recommendations
+from examples.advanced.multiagent_api_deployment import capability_filter
+from examples.enhanced_unified_example import adapter
+from examples.enhanced_unified_example import final_answer
+from examples.enhanced_unified_example import health
+from examples.enhanced_unified_example import task
+from examples.integration.unified_architecture_example import requirements
+from examples.parallel_execution_example import results
+from examples.parallel_execution_example import tool_calls
+from examples.parallel_execution_example import tool_name
+from examples.parallel_execution_example import total_time
+from fix_security_issues import content
+from fix_security_issues import patterns
+from migrations.env import config
+from performance_dashboard import metric
+from performance_dashboard import stats
+from tests.e2e.gaia_testing_framework import extracted
+from tests.e2e.gaia_testing_framework import system_prompt
+from tests.load_test import args
+from tests.load_test import headers
+from tests.load_test import success
+from tests.unit.simple_test import func
+
+from src.agents.crew_enhanced import orchestrator
+from src.agents.enhanced_fsm import state
+from src.agents.multi_agent_system import reliable_tools
+from src.analytics.usage_analyzer import confidence_score
+from src.api.auth import payload
+from src.api.rate_limiter_enhanced import now
+from src.api_server import execution
+from src.application.tools.tool_executor import operation
+from src.application.tools.tool_executor import validation_result
+from src.collaboration.realtime_collaboration import session
+from src.config.integrations import api_key
+from src.config.integrations import is_valid
+from src.config.settings import issues
+from src.core.langchain_enhanced import groups
+from src.core.langgraph_compatibility import loop
+from src.core.monitoring import memory
+from src.core.optimized_chain_of_thought import base_confidence
+from src.core.optimized_chain_of_thought import n
+from src.core.optimized_chain_of_thought import reasoning_type
+from src.core.optimized_chain_of_thought import step
+from src.core.optimized_chain_of_thought import strategies
+from src.core.optimized_chain_of_thought import words
+from src.core.services.working_memory import combined_text
+from src.core.services.working_memory import dates
+from src.database.models import input_data
+from src.database.models import model_name
+from src.database.models import reasoning_path
+from src.database.models import text
+from src.database.models import tool
+from src.database_extended import error_counts
+from src.database_extended import success_rate
+from src.gaia_components.adaptive_tool_system import available_tools
+from src.gaia_components.advanced_reasoning_engine import overlap
+from src.gaia_components.advanced_reasoning_engine import prompt
+from src.gaia_components.enhanced_memory_system import current_time
+from src.gaia_components.multi_agent_orchestrator import avg_response_time
+from src.gaia_components.multi_agent_orchestrator import workflow_id
+from src.gaia_components.production_vector_store import model
+from src.gaia_components.tool_executor import create_production_tool_executor
+from src.infrastructure.gaia_logic import date_patterns
+from src.infrastructure.workflow.workflow_engine import current_step
+from src.infrastructure.workflow.workflow_engine import initial_state
+from src.infrastructure.workflow.workflow_engine import next_step
+from src.infrastructure.workflow.workflow_engine import retry_count
+from src.meta_cognition import complexity
+from src.meta_cognition import confidence
+from src.meta_cognition import keywords
+from src.meta_cognition import query_lower
+from src.meta_cognition import score
+from src.query_classifier import entities
+from src.query_classifier import sentences
+from src.services.integration_hub import get_error_handler
+from src.services.integration_hub import get_tool_orchestrator
+from src.services.integration_hub import get_unified_registry
+from src.services.integration_hub import tool_doc
+from src.services.next_gen_integration import correlation_id
+from src.services.next_gen_integration import question
+from src.templates.template_factory import pattern
+from src.tools_introspection import error
+from src.unified_architecture.dashboard import total_successes
+from src.unified_architecture.enhanced_platform import task_type
+from src.utils.error_category import call
+from src.utils.error_category import suggestions
+from src.utils.knowledge_utils import word
+from src.utils.tools_enhanced import numbers
+from src.utils.tools_introspection import tool_introspector
+from src.workflow.workflow_automation import errors
+
+from dataclasses import field
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import TypedDict
+from typing import Any
+
 import operator
 import logging
 import time
-import random
+
 import json
 import re
 import uuid
 import requests
 import os
-import hashlib
+
 import asyncio
 from typing import Annotated, List, TypedDict, Dict, Any, Optional
-from uuid import UUID
+
 from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum
 from contextlib import contextmanager
 from collections import defaultdict
 from pathlib import Path
-import aiofiles
 
-from langchain_core.messages import AnyMessage, BaseMessage, SystemMessage, HumanMessage, AIMessage, ToolMessage
-from langchain_groq import ChatGroq
-from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolNode
-from pydantic import BaseModel, Field, ValidationError, field_validator
+
+
+
+
+
+
 from src.tools.base_tool import BaseTool
-from src.reasoning.reasoning_path import ReasoningPath, ReasoningType, AdvancedReasoning
+
 from src.errors.error_category import ErrorCategory, ErrorHandler
-from src.data_quality import DataQualityLevel, DataQualityValidator, ValidationResult, ValidatedQuery
+
 
 # Import GAIA components
+from src.gaia_components.advanced_reasoning_engine import AdvancedReasoningEngine
+from src.core.exceptions import ValidationError
+from src.gaia_components.adaptive_tool_system import AdaptiveToolSystem
+from src.gaia_components.enhanced_memory_system import EnhancedMemorySystem, MemoryPriority
+from src.gaia_components.multi_agent_orchestrator import MultiAgentOrchestrator
+from src.infrastructure.workflow.workflow_engine import WorkflowStatus
+from src.reasoning.reasoning_path import ReasoningPath, ReasoningType
+from src.shared.types.di_types import BaseTool
+from src.utils.data_quality import DataQualityLevel
+from src.utils.data_quality import ValidatedQuery
+from src.utils.error_category import ErrorCategory
+from src.utils.error_category import ErrorHandler
+from src.utils.error_category import ToolExecutionResult
+# TODO: Fix undefined variables: Annotated, AnyMessage, BaseModel, FUNCTION_CALLING_MODELS, Field, HTTPAdapter, REASONING_MODELS, Retry, StateGraph, TEXT_GENERATION_MODELS, VERIFICATION_MODELS, adapter, announcement, answer, answer_terms, api_client, api_key, args, available_tools, avg_response_time, base_confidence, base_url, best_tool, burst_allowance, c, call, cap, capability_filter, char, cls, combined_text, common_entities, complexity, conclusion, conclusions, confidence, confidence_score, config, consistent_count, content, control_chars, correlation_id, create_production_tool_executor, current_step, current_text, current_time, date_matches, date_patterns, dates, duration, e, enforce_json, entities, entities1, entities2, error, error_counts, error_msg, errors, evidence_count, execution, extracted, fact, fact1, fact2, facts, factual_indicators, final_answer, found_control_chars, func, get_error_handler, get_tool_orchestrator, get_unified_registry, grouped_facts, groups, headers, health, i, indicator, initial_state, input_data, is_valid, issues, key_terms, keyword, keywords, kwargs, largest_group, log_handler, loop, max_requests_per_minute, memory, memory_context, memory_path, messages, metric, model, model_name, model_preference, n, name_matches, names, neg, negations, next_step, next_text, now, number_matches, numbers, operation, operator, orchestrator, original_request, other_fact, overall_success_rate, overlap, path, pattern, patterns, payload, plan, plan_json, plan_response, plan_steps, pos, primary_term, problematic_patterns, prompt, qtype, quality_level, query, query_lower, question, question_analysis, question_lower, question_terms, reasoning_path, reasoning_type, recommendations, record, relevant_memories, reliable_tools, req_time, requirements, response, result, results, retry_count, retry_strategy, risk_level, sanitized, score, scored_tools, selected_strategy, self, sentence, sentence_lower, sentences, session, sleep_time, state, statements, stats, step, stmt1, stmt2, strategies, stripped, success, success_rate, successful_calls, suggestions, synthesis_input, system_prompt, task, task_type, text, text1, text1_lower, text2, text2_lower, tool, tool_calls, tool_doc, tool_introspector, tool_learning_path, tool_name, tools, top_k, total_checks, total_operations, total_successes, total_time, url_patterns, use_crew, validation_result, verified_facts, word, words, workflow, workflow_id, workflow_steps, x
 from src.gaia_components.advanced_reasoning_engine import (
     AdvancedReasoningEngine, ReasoningPath, ReasoningStep
 )
-from src.gaia_components.enhanced_memory_system import (
-    EnhancedMemorySystem, MemoryType, MemoryPriority
-)
-from src.gaia_components.adaptive_tool_system import (
-    AdaptiveToolSystem, ToolType
-)
-from src.gaia_components.multi_agent_orchestrator import (
-    MultiAgentGAIASystem, MultiAgentOrchestrator
-)
+
+from langchain.tools import BaseTool
+from pydantic import BaseModel
+from pydantic import Field
+from pydantic import ValidationError
+from sqlalchemy import func
+from unittest.mock import call
+from src.gaia_components.enhanced_memory_system import MemoryType, MemoryPriority
+from src.gaia_components.adaptive_tool_system import ToolType
+from src.gaia_components.multi_agent_orchestrator import MultiAgentGAIASystem, MultiAgentOrchestrator
 from src.gaia_components.tool_executor import (
     ProductionToolExecutor, create_production_tool_executor
 )
 
 # Import resilience patterns
-from src.langgraph_resilience_patterns import (
+from src.core.langgraph_resilience_patterns import (
     LoopPreventionState,
     calculate_state_hash,
     check_for_stagnation,
@@ -588,7 +707,7 @@ class ResilientAPIClient:
         correlation_id = correlation_id or str(uuid.uuid4())
         
         with correlation_context(correlation_id):
-            logger.info("Initiating API call to {}/chat/completions", 
+            logger.info("Initiating API call to {}/chat/completions", self.base_url,
                        extra={})
             
             # Apply rate limiting
@@ -625,14 +744,12 @@ class ResilientAPIClient:
                 result = response.json()
                 
                 logger.info("API call successful", 
-                           extra={'status_code': response.status_code, 
-                                 'response_time': response.elapsed.total_seconds()})
+                           extra={'status_code': response.status_code, 'response_time': response.elapsed.total_seconds()})
                 
                 return result
                 
             except requests.exceptions.HTTPError as http_err:
-                logger.error("HTTP error occurred: {}", 
-                           extra={})
+                logger.error("HTTP error occurred: {}", extra={})
                 raise
             except requests.exceptions.ConnectionError as conn_err:
                 logger.error("Connection error occurred: {}", extra={})
@@ -660,7 +777,7 @@ class EnhancedPlanner:
             logger.info("Creating structured plan", extra={})
         
             # Create the prompt with explicit JSON requirement
-            system_prompt = """You are a strategic planning engine. You MUST respond with a valid JSON object.
+            system_prompt = """You are a strategic planning engine. You MUST respond with a valid JSON object."
 
 Create a step-by-step plan to answer the user's query. Your response must be a JSON object with this exact structure:
 
@@ -709,8 +826,7 @@ Use EXACT parameter names. Respond ONLY with the JSON object, no markdown or exp
                 # Parse and validate using Pydantic
                 try:
                     plan_response = PlanResponse.model_validate_json(plan_json)
-                    logger.info("Plan validation successful", 
-                               extra={"correlation_id": correlation_id})
+                    logger.info("Plan validation successful", extra={"correlation_id": correlation_id})
                     return plan_response
                     
                 except ValidationError as e:
@@ -2226,14 +2342,12 @@ async def run(self, query: str, correlation_id: str = None) -> Dict[str, Any]:
                     )
                 )
             
-            logger.info("GAIA agent execution completed", 
-                       extra={"correlation_id": correlation_id, "confidence": confidence})
+            logger.info("GAIA agent execution completed", extra={"correlation_id": correlation_id, "confidence": confidence})
             
             return response
             
         except Exception as e:
-            logger.error(f"GAIA agent execution failed: {e}", 
-                        extra={"correlation_id": correlation_id})
+            logger.error(f"GAIA agent execution failed: {e}", extra={"correlation_id": correlation_id})
             
             return {
                 "success": False,

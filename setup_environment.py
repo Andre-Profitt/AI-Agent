@@ -1,3 +1,7 @@
+from src.tools.base_tool import Tool
+
+from src.agents.advanced_agent_fsm import Agent
+
 """
 Environment Setup Script for GAIA System
 Handles environment configuration and validation

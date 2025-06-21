@@ -1,3 +1,11 @@
+from src.agents.advanced_agent_fsm import AgentCapability
+
+from src.agents.advanced_agent_fsm import AgentStatus
+
+from src.agents.advanced_agent_fsm import Agent
+
+from src.agents.advanced_agent_fsm import AgentMetadata
+
 """
 Task Distribution for Multi-Agent System
 
@@ -259,8 +267,8 @@ class TaskDistributor:
             "assigned_at": time.time()
         }
         
-        logger.info("Assigned task {} to agent {} "
-                   f"(load: {})", extra={"task_task_id": task.task_id, "agent_agent_id": agent.agent_id, "self_agent_load_agent_agent_id": self.agent_load[agent.agent_id]})
+        logger.info(f"Assigned task {task.task_id} to agent {agent.agent_id} "
+                   f"(load: {self.agent_load[agent.agent_id]})")
     
     def add_routing_rule(self, rule: Callable):
         """Add a custom routing rule"""

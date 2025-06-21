@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
+import operator
+# TODO: Fix undefined variables: Dict, List, Tuple, available, available_versions, data, e, error, error_info, errors, f, filename, json, line, logging, match, package, package_name, packages, parts, re, requested_version, requirements_text, response, result, results, stable_versions, sys, v, version, version_check, x
+# TODO: Fix undefined variables: available, available_versions, data, e, error, error_info, errors, f, filename, line, match, operator, package, package_name, packages, parts, requested_version, requirements_text, response, result, results, stable_versions, v, version, version_check, x
+
 """
 Requirements Version Verifier
 This script checks if all packages and versions in a requirements.txt file actually exist on PyPI.
 It helps prevent runtime errors from non-existent package versions.
 """
+
+from typing import Tuple
+from typing import Dict
 
 import sys
 import requests
@@ -14,8 +21,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
-def parse_requirements(requirements_text: str) -> List[Tuple[str, str]]:
+def parse_requirements(self, requirements_text: str) -> List[Tuple[str, str]]:
     """Parse requirements.txt content and extract package names and versions."""
     packages = []
     for line in requirements_text.strip().split('\n'):
@@ -23,7 +29,7 @@ def parse_requirements(requirements_text: str) -> List[Tuple[str, str]]:
         # Skip comments and empty lines
         if not line or line.startswith('#') or line.startswith('=='):
             continue
-        
+
         # Extract package name and version
         if '==' in line:
             parts = line.split('==')
@@ -39,38 +45,38 @@ def parse_requirements(requirements_text: str) -> List[Tuple[str, str]]:
                 operator = match.group(2)
                 version = match.group(3)
                 packages.append((package_name, f"{operator}{version}"))
-    
+
     return packages
 
-def check_package_version(package_name: str, version: str) -> Dict[str, any]:
+def check_package_version(self, package_name: str, version: str) -> Dict[str, any]:
     """Check if a specific package version exists on PyPI."""
     try:
         # Get package info from PyPI
         response = requests.get(f"https://pypi.org/pypi/{package_name}/json", timeout=10)
-        
+
         if response.status_code == 404:
             return {
                 "exists": False,
                 "error": "Package not found on PyPI",
                 "available_versions": []
             }
-        
+
         if response.status_code != 200:
             return {
                 "exists": False,
                 "error": f"HTTP {response.status_code}: {response.reason}",
                 "available_versions": []
             }
-        
+
         data = response.json()
         available_versions = list(data.get("releases", {}).keys())
-        
+
         # Check if the specific version exists
         if version.startswith('=='):
             version_check = version[2:]
         else:
             version_check = version
-            
+
         if version_check in available_versions:
             return {
                 "exists": True,
@@ -82,7 +88,7 @@ def check_package_version(package_name: str, version: str) -> Dict[str, any]:
                 "error": f"Version {version_check} not found",
                 "available_versions": sorted(available_versions, reverse=True)[:10]
             }
-            
+
     except requests.exceptions.RequestException as e:
         return {
             "exists": False,
@@ -96,7 +102,7 @@ def check_package_version(package_name: str, version: str) -> Dict[str, any]:
             "available_versions": []
         }
 
-def verify_requirements(requirements_text: str) -> Dict[str, any]:
+def verify_requirements(self, requirements_text: str) -> Dict[str, any]:
     """Verify all packages in requirements text."""
     packages = parse_requirements(requirements_text)
     results = {
@@ -105,13 +111,13 @@ def verify_requirements(requirements_text: str) -> Dict[str, any]:
         "invalid": 0,
         "errors": []
     }
-    
+
     logger.info("Checking {} packages...", extra={"len_packages_": len(packages)})
     print("-" * 70)
-    
+
     for package_name, version in packages:
         result = check_package_version(package_name, version)
-        
+
         if result["exists"]:
             results["valid"] += 1
             logger.info("✅ {}=={}", extra={"package_name": package_name, "version": version})
@@ -124,31 +130,31 @@ def verify_requirements(requirements_text: str) -> Dict[str, any]:
                 "available_versions": result["available_versions"][:5]  # Show top 5
             }
             results["errors"].append(error_info)
-            
+
             logger.info("❌ {}=={}", extra={"package_name": package_name, "version": version})
             logger.info("   Error: {}", extra={"result__error_": result['error']})
             if result["available_versions"]:
-                logger.info("   Available versions: {}", extra={"_____join_result__available_versions__": ', '.join(result['available_versions'][})
+                logger.info("   Available versions: {}", extra={"_____join_result__available_versions__": ', '.join(result['available_versions'][:5])})
             logger.info("")
-    
+
     return results
 
-def suggest_fixes(errors: List[Dict]) -> None:
+def suggest_fixes(self, errors: List[Dict]) -> None:
     """Suggest fixes for invalid packages."""
     if not errors:
         return
-        
+
     print("\n" + "=" * 70)
     logger.info("SUGGESTED FIXES:")
     print("=" * 70)
-    
+
     for error in errors:
         package = error["package"]
         requested_version = error["version"]
         available = error["available_versions"]
-        
+
         logger.info("\n{}=={}", extra={"package": package, "requested_version": requested_version})
-        
+
         if available:
             # Find the closest available version
             if requested_version.replace('==', '') in [v.split('rc')[0].split('b')[0].split('a')[0] for v in available]:
@@ -183,16 +189,16 @@ def main():
         except KeyboardInterrupt:
             logger.info("\nCancelled")
             sys.exit(0)
-    
+
     results = verify_requirements(requirements_text)
-    
+
     print("\n" + "=" * 70)
     logger.info("SUMMARY:")
     print("=" * 70)
     logger.info("Total packages: {}", extra={"results__total_": results['total']})
     logger.info("Valid packages: {} ✅", extra={"results__valid_": results['valid']})
     logger.info("Invalid packages: {} ❌", extra={"results__invalid_": results['invalid']})
-    
+
     if results["errors"]:
         suggest_fixes(results["errors"])
         sys.exit(1)
@@ -201,4 +207,4 @@ def main():
         sys.exit(0)
 
 if __name__ == "__main__":
-    main() 
+    main()

@@ -1,14 +1,32 @@
+from src.database.models import tool
+from src.database.models import tool_id
+from src.database.models import tool_type
+from src.tools_introspection import name
+
+from src.tools.base_tool import Tool
+
+from src.tools.base_tool import ToolType
+# TODO: Fix undefined variables: Dict, List, Optional, UUID, name, t, tool_id, tool_type
+from src.tools.base_tool import tool
+
+
 """
+from typing import Optional
+from src.gaia_components.adaptive_tool_system import Tool
+from src.gaia_components.adaptive_tool_system import ToolType
+# TODO: Fix undefined variables: name, self, t, tool, tool_id, tool_type
+
+from langchain.tools import Tool
 In-memory implementation of the ToolRepository interface.
 """
 
+from typing import Dict
+
 from typing import List, Optional, Dict
 from uuid import UUID
-import asyncio
 
 from src.core.entities.tool import Tool, ToolType
 from src.core.interfaces.tool_repository import ToolRepository
-from typing import Optional, Dict, Any, List, Union, Tuple
 
 class InMemoryToolRepository(ToolRepository):
     def __init__(self) -> None:
@@ -42,4 +60,4 @@ class InMemoryToolRepository(ToolRepository):
         return {
             "total_tools": len(self._tools),
             "enabled_tools": len([t for t in self._tools.values() if t.is_enabled]),
-        } 
+        }

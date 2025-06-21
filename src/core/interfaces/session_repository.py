@@ -1,6 +1,15 @@
 """
+from abc import abstractmethod
+from requests import Session
+# TODO: Fix undefined variables: ABC, List, Optional, UUID, abstractmethod
+from src.database.models import Session
+
+
+from sqlalchemy.orm import Session
 Session repository interface defining the contract for session persistence.
 """
+
+from typing import Optional
 
 from abc import ABC, abstractmethod
 from typing import List, Optional
@@ -30,4 +39,4 @@ class SessionRepository(ABC):
 
     @abstractmethod
     async def get_statistics(self) -> dict:
-        pass 
+        pass

@@ -1,3 +1,42 @@
+from agent import path
+from agent import query
+from agent import tools
+from examples.enhanced_unified_example import metrics
+from examples.enhanced_unified_example import start_time
+from examples.enhanced_unified_example import tasks
+from examples.gaia_usage_example import result1
+from examples.gaia_usage_example import result2
+from examples.parallel_execution_example import end_time
+from examples.parallel_execution_example import results
+from migrations.env import config
+from tests.load_test import complex_query
+from tests.load_test import queries
+from tests.load_test import simple_query
+from tests.performance.cot_benchmark_suite import reasoning_types
+
+from src.core.langgraph_compatibility import version
+from src.core.optimized_chain_of_thought import cache_stats
+from src.core.optimized_chain_of_thought import configs
+from src.core.optimized_chain_of_thought import step
+from src.tools.registry import module
+
+from src.tools.base_tool import Tool
+
+from src.agents.advanced_agent_fsm import Agent
+# TODO: Fix undefined variables: analysis_applicability, analysis_features, analysis_template, analytical_query, cache_hits_2, cache_stats, complex_complexity, complex_features, complex_query, complex_result, config, configs, end_time, i, invalid_query, large_query, latest_entry, logging, long_query, math_applicability, math_features, math_template, mathematical_query, metrics, metrics1, metrics2, min_version, module, package, path, python_tool_used, queries, query, reasoning_types, required_versions, result, result1, result2, results, simple_complexity, simple_features, simple_query, simple_result, start_time, step, tasks, time, tools, unique_types, version
+from src.core.optimized_chain_of_thought import ComplexityAnalyzer
+from src.core.optimized_chain_of_thought import MetacognitiveLayer
+from src.core.optimized_chain_of_thought import MultiPathReasoning
+from src.core.optimized_chain_of_thought import OptimizedChainOfThought
+from src.core.optimized_chain_of_thought import ReasoningCache
+from src.core.optimized_chain_of_thought import TemplateLibrary
+from src.reasoning.reasoning_path import ReasoningPath
+from src.reasoning.reasoning_path import ReasoningStep
+from src.tools.base_tool import tool
+from src.utils.base_tool import semantic_search_tool
+from src.utilsthon_interpreter import python_interpreter
+
+
 """
 Integration tests for Chain of Thought system
 Comprehensive testing of all CoT components working together
@@ -10,11 +49,11 @@ from typing import Dict, List, Any
 from unittest.mock import Mock, patch
 
 # Import the CoT system components
-from src.core.optimized_chain_of_thought import (
 import logging
 
 logger = logging.getLogger(__name__)
 
+from src.core.optimized_chain_of_thought import (
     OptimizedChainOfThought,
     ComplexityAnalyzer,
     TemplateLibrary,

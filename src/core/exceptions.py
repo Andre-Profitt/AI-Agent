@@ -6,6 +6,14 @@ class AIAgentException(Exception):
     """Base exception for AI Agent system"""
     pass
 
+class AgentError(AIAgentException):
+    """Base agent error"""
+    pass
+
+class ToolError(AIAgentException):
+    """Tool execution error"""
+    pass
+
 class ToolExecutionError(AIAgentException):
     """Raised when tool execution fails"""
     pass
@@ -16,6 +24,10 @@ class CircuitBreakerOpenError(AIAgentException):
 
 class MaxRetriesExceededError(AIAgentException):
     """Raised when maximum retries are exceeded"""
+    pass
+
+class ConfigurationError(AIAgentException):
+    """Configuration error"""
     pass
 
 class DatabaseConnectionError(AIAgentException):

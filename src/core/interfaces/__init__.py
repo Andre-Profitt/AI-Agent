@@ -1,3 +1,7 @@
+from src.tools.base_tool import Tool
+
+from src.agents.advanced_agent_fsm import Agent
+
 """
 Core interfaces (abstractions) for the AI Agent system.
 These define contracts that implementations must follow.

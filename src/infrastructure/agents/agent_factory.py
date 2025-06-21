@@ -1,4 +1,62 @@
+from examples.parallel_execution_example import agents
+from migrations.env import config
+from performance_dashboard import stats
+from tests.load_test import success
+
+from src.api_server import crew_agent
+from src.api_server import domains
+from src.api_server import fsm_agent
+from src.api_server import next_gen_agent
+from src.api_server import specialized_agent
+from src.database.models import agent_id
+from src.database.models import agent_type
+from src.database.models import status
+from src.gaia_components.multi_agent_orchestrator import agent_scores
+from src.gaia_components.multi_agent_orchestrator import default_agents
+from src.infrastructure.agents.agent_factory import agent_class
+from src.infrastructure.agents.agent_factory import agent_kwargs
+from src.infrastructure.agents.agent_factory import best_agent_type
+from src.infrastructure.agents.agent_factory import domain
+from src.infrastructure.agents.agent_factory import temp_agent
+from src.meta_cognition import score
+from src.unified_architecture.core import agent_capabilities
+from src.unified_architecture.registry import agent_ids
+
+from src.agents.advanced_agent_fsm import AgentCapability
+
+from src.agents.advanced_agent_fsm import AgentType
+
+from src.agents.advanced_agent_fsm import Agent
+
+from src.agents.advanced_agent_fsm import IUnifiedAgent
+
+from src.agents.advanced_agent_fsm import AgentMetadata
+
+from src.agents.advanced_agent_fsm import FSMReactAgentImpl
+
+from src.agents.advanced_agent_fsm import AgentConfig
+
+from src.agents.advanced_agent_fsm import AgentFactory
+# TODO: Fix undefined variables: Any, Dict, Enum, List, Optional, Type, agent_capabilities, agent_class, agent_id, agent_ids, agent_kwargs, agent_scores, agent_spec, agent_type, agents, best_agent_type, config, crew_agent, default_agents, domain, domains, e, fsm_agent, kwargs, logging, next_gen_agent, required_cap, required_capabilities, score, specialized_agent, stats, status, success, team_config, temp_agent, x
+from tests.test_gaia_agent import agent
+import factory
+
+from src.core.entities.agent import AgentCapability
+from src.infrastructure.agents.concrete_agents import CrewAgentImpl
+from src.infrastructure.agents.concrete_agents import FSMReactAgentImpl
+from src.infrastructure.agents.concrete_agents import NextGenAgentImpl
+from src.infrastructure.agents.concrete_agents import SpecializedAgentImpl
+from src.infrastructure.config import AgentConfig
+from src.unified_architecture.enhanced_platform import IUnifiedAgent
+
+
 """
+
+from fastapi import status
+from typing import Any
+from typing import List
+from typing import Optional
+from typing import Type
 Agent Factory
 
 This module provides a factory for creating different types of agents
@@ -12,7 +70,6 @@ from enum import Enum
 
 from src.unified_architecture.core import IUnifiedAgent, AgentCapability, AgentMetadata
 from src.infrastructure.agents.concrete_agents import (
-from typing import Optional, Dict, Any, List, Union, Tuple
     FSMReactAgentImpl, NextGenAgentImpl, CrewAgentImpl, SpecializedAgentImpl,
     AgentConfig
 )

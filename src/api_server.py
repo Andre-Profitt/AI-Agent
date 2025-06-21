@@ -1,39 +1,130 @@
+from agent import workflow
+from examples.advanced.multiagent_api_deployment import capability_filter
+from examples.advanced.multiagent_api_deployment import status_filter
+from examples.enhanced_unified_example import metrics
+from examples.enhanced_unified_example import task
+from examples.enhanced_unified_example import tasks
+from examples.parallel_execution_example import agents
+from setup_environment import components
+from tests.load_test import credentials
+from tests.load_test import data
+
+from src.api_server import activities
+from src.api_server import agent_metrics
+from src.api_server import client_id
+from src.api_server import conflict
+from src.api_server import conflicts
+from src.api_server import crew_agent
+from src.api_server import disconnected
+from src.api_server import domains
+from src.api_server import execution
+from src.api_server import fsm_agent
+from src.api_server import message
+from src.api_server import next_gen_agent
+from src.api_server import platform_config
+from src.api_server import redis_url
+from src.api_server import resource
+from src.api_server import resources
+from src.api_server import specialized_agent
+from src.api_server import subscriptions
+from src.api_server import token
+from src.core.entities.agent import Agent
+from src.core.langgraph_resilience_patterns import request
+from src.database.connection_pool import connection
+from src.database.models import agent_id
+from src.database.models import metadata
+from src.database.models import status
+from src.gaia_components.multi_agent_orchestrator import task_id
+from src.gaia_components.multi_agent_orchestrator import workflow_id
+from src.infrastructure.agents.agent_factory import domain
+from src.infrastructure.di.container import get_container
+from src.services.integration_hub import limit
+from src.unified_architecture.state_management import aioredis
+
+from src.tools.base_tool import Tool
+
+from src.agents.advanced_agent_fsm import Agent
+
+from src.agents.advanced_agent_fsm import MultiAgentPlatform
+
+from src.agents.advanced_agent_fsm import FSMReactAgentImpl
+
+from src.agents.advanced_agent_fsm import AgentFactory
+# TODO: Fix undefined variables: Any, Dict, List, Optional, Resource, _initialize_default_agents, a, activities, agent_id, agents, aioredis, asynccontextmanager, c, capability_filter, client_id, components, conflict, conflicts, connection, credentials, crew_agent, data, datetime, disconnected, domain, domains, e, exclude, execution, fsm_agent, json, limit, logging, message, metadata, metrics, next_gen_agent, os, platform_config, priority_filter, r, redis_url, request, resource, resources, severity_filter, specialized_agent, status, status_filter, subscriptions, t, task, task_id, tasks, token, type_filter, uuid, uvicorn, v, workflow, workflow_id, x
+from tests.test_gaia_agent import agent
+
+from fastapi import APIRouter
+from fastapi import Depends
+from fastapi import FastAPI
+from fastapi import HTTPException
+from fastapi import WebSocket
+from fastapi import WebSocketDisconnect
+from fastapi.security import HTTPAuthorizationCredentials
+from pydantic import BaseModel
+from pydantic import Field
+
+from src.infrastructure.monitoring.decorators import agent_metrics
+
+
 """
+import datetime
+import websocket
+from typing import Any
+from datetime import datetime
+from multiprocessing import connection
+from src.gaia_components.multi_agent_orchestrator import Agent
+from src.gaia_components.multi_agent_orchestrator import Task
+from src.infrastructure.agents.agent_factory import AgentFactory
+from src.infrastructure.agents.concrete_agents import CrewAgentImpl
+from src.infrastructure.agents.concrete_agents import FSMReactAgentImpl
+from src.infrastructure.agents.concrete_agents import NextGenAgentImpl
+from src.infrastructure.agents.concrete_agents import SpecializedAgentImpl
+from src.infrastructure.resilience.circuit_breaker import CircuitBreakerRegistry
+from src.infrastructure.workflow.workflow_engine import WorkflowDefinition
+from src.infrastructure.workflow.workflow_engine import WorkflowExecution
+from src.shared.types.di_types import MetricsCollector
+from src.shared.types.di_types import Query
+from src.unified_architecture.conflict_resolution import Conflict
+from src.unified_architecture.platform import MultiAgentPlatform
+# TODO: Fix undefined variables: APIRouter, BaseModel, CORSMiddleware, Depends, FastAPI, Field, HTTPAuthorizationCredentials, HTTPBearer, HTTPException, Resource, WebSocket, WebSocketDisconnect, _initialize_default_agents, a, activities, agent, agent_id, agent_metrics, agents, aioredis, c, capability_filter, client_id, components, conflict, conflicts, credentials, crew_agent, data, disconnected, domain, domains, e, exclude, execution, fsm_agent, get_container, limit, message, metadata, metrics, next_gen_agent, platform_config, priority_filter, r, redis_url, request, resource, resources, self, severity_filter, specialized_agent, status, status_filter, subscriptions, t, task, task_id, tasks, token, type_filter, uvicorn, v, websocket, workflow, workflow_id, x
+
+from fastapi import Query
+from fastapi import status
 Multi-Agent Platform API Server
 FastAPI server providing REST APIs and WebSocket support for the unified architecture
 """
 
-import asyncio
+from typing import Dict
+from typing import List
+from typing import Optional
+
 import json
 import logging
-import time
+
 import uuid
 import os
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Union
+
 from contextlib import asynccontextmanager
 
 import aioredis
 from fastapi import (
-from typing import Optional, Dict, Any, List, Union, Tuple
-    APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, 
+    APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException,
     Query, WebSocket, WebSocketDisconnect, WebSocketException, status
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, Field, validator
+
 import uvicorn
 
 from src.unified_architecture import (
-    MultiAgentPlatform, Agent, Task, Resource, Conflict, 
+    MultiAgentPlatform, Agent, Task, Resource, Conflict,
     PerformanceMetrics, WorkflowDefinition, WorkflowExecution
 )
 from src.unified_architecture.platform import PlatformConfig
-from src.unified_architecture.enhanced_platform import AgentMetadata
-from src.core.entities.agent import AgentType
+
 from src.application.agents.agent_factory import AgentFactory
 from src.infrastructure.database.supabase_repositories import (
-    SupabaseAgentRepository, SupabaseTaskRepository, 
+    SupabaseAgentRepository, SupabaseTaskRepository,
     SupabaseSessionRepository, SupabaseToolRepository
 )
 from src.infrastructure.monitoring.metrics import MetricsCollector
@@ -221,7 +312,7 @@ class ConnectionManager:
                 except Exception as e:
                     logger.error("Error broadcasting message: {}", extra={"e": e})
                     disconnected.append(connection)
-        
+
         # Clean up disconnected connections
         for connection in disconnected:
             self.disconnect(connection)
@@ -253,13 +344,13 @@ async def health_check() -> Any:
             "redis": "healthy" if redis_client else "unhealthy",
             "database": "healthy"  # Add actual DB health check
         }
-        
+
         metrics = {
             "active_agents": len(platform.agents) if platform else 0,
             "active_tasks": len(platform.tasks) if platform else 0,
             "active_connections": manager.get_connection_info()["active_connections"]
         }
-        
+
         return SystemHealthResponse(
             status="healthy" if all(v == "healthy" for v in components.values()) else "degraded",
             components=components,
@@ -277,10 +368,10 @@ agent_factory = None
 async def lifespan(app: FastAPI) -> Any:
     """Application lifespan manager with proper platform initialization"""
     global platform, redis_client, agent_factory
-    
+
     # Initialize DI container
     container = get_container()
-    
+
     # Initialize Redis connection
     try:
         redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
@@ -291,7 +382,7 @@ async def lifespan(app: FastAPI) -> Any:
     except Exception as e:
         logger.warning("Redis connection failed: {}", extra={"e": e})
         redis_client = None
-    
+
     # Initialize platform with configuration
     try:
         # Create platform configuration
@@ -307,46 +398,46 @@ async def lifespan(app: FastAPI) -> Any:
             storage_backend="redis" if redis_client else "memory",
             log_level="INFO"
         )
-        
+
         # Create and initialize platform
         global platform
         platform = MultiAgentPlatform(platform_config)
-        
+
         # Start platform services
         await platform.start()
-        
+
         # Initialize agent factory
         global agent_factory
         agent_factory = AgentFactory()
-        
+
         # Pre-create some default agents
         await _initialize_default_agents(platform, agent_factory)
-        
+
         logger.info("Multi-Agent Platform initialized successfully")
-        
+
     except Exception as e:
         logger.error("Failed to initialize platform: {}", extra={"e": e})
         raise
-    
+
     yield
-    
+
     # Cleanup on shutdown
     try:
         # Shutdown platform
         if platform:
             await platform.stop()
             logger.info("Platform stopped")
-        
+
         # Shutdown all agents
         if agent_factory:
             await agent_factory.shutdown_all()
             logger.info("All agents shut down")
-        
+
         # Close Redis connection
         if redis_client:
             await redis_client.close()
             logger.info("Redis connection closed")
-            
+
     except Exception as e:
         logger.error("Error during shutdown: {}", extra={"e": e})
 
@@ -366,9 +457,9 @@ async def register_agent(
             resources=request.resources,
             metadata=request.metadata
         )
-        
+
         platform.register_agent(agent)
-        
+
         # Broadcast agent registration
         await manager.broadcast(
             WebSocketMessage(
@@ -376,7 +467,7 @@ async def register_agent(
                 data={"agent_id": agent.id, "name": agent.name}
             ).json()
         )
-        
+
         return AgentResponse(
             id=agent.id,
             name=agent.name,
@@ -401,13 +492,13 @@ async def list_agents(
     """List all agents with optional filtering"""
     try:
         agents = platform.agents.values()
-        
+
         if status_filter:
             agents = [a for a in agents if a.status == status_filter]
-        
+
         if capability_filter:
             agents = [a for a in agents if capability_filter in a.capabilities]
-        
+
         return [
             AgentResponse(
                 id=agent.id,
@@ -436,7 +527,7 @@ async def get_agent(
         agent = platform.agents.get(agent_id)
         if not agent:
             raise HTTPException(status_code=404, detail="Agent not found")
-        
+
         return AgentResponse(
             id=agent.id,
             name=agent.name,
@@ -463,9 +554,9 @@ async def deregister_agent(
     try:
         if agent_id not in platform.agents:
             raise HTTPException(status_code=404, detail="Agent not found")
-        
+
         platform.deregister_agent(agent_id)
-        
+
         # Broadcast agent deregistration
         await manager.broadcast(
             WebSocketMessage(
@@ -473,7 +564,7 @@ async def deregister_agent(
                 data={"agent_id": agent_id}
             ).json()
         )
-        
+
         return {"message": "Agent deregistered successfully"}
     except HTTPException:
         raise
@@ -500,9 +591,9 @@ async def submit_task(
             metadata=request.metadata,
             deadline=request.deadline
         )
-        
+
         platform.submit_task(task)
-        
+
         # Broadcast task submission
         await manager.broadcast(
             WebSocketMessage(
@@ -510,7 +601,7 @@ async def submit_task(
                 data={"task_id": task.id, "title": task.title}
             ).json()
         )
-        
+
         return TaskResponse(
             id=task.id,
             title=task.title,
@@ -539,13 +630,13 @@ async def list_tasks(
     """List all tasks with optional filtering"""
     try:
         tasks = platform.tasks.values()
-        
+
         if status_filter:
             tasks = [t for t in tasks if t.status == status_filter]
-        
+
         if priority_filter:
             tasks = [t for t in tasks if t.priority == priority_filter]
-        
+
         return [
             TaskResponse(
                 id=task.id,
@@ -578,7 +669,7 @@ async def get_task(
         task = platform.tasks.get(task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
-        
+
         return TaskResponse(
             id=task.id,
             title=task.title,
@@ -615,9 +706,9 @@ async def register_resource(
             capacity=request.capacity,
             metadata=request.metadata
         )
-        
+
         platform.register_resource(resource)
-        
+
         return ResourceResponse(
             id=resource.id,
             name=resource.name,
@@ -640,10 +731,10 @@ async def list_resources(
     """List all resources with optional filtering"""
     try:
         resources = platform.resources.values()
-        
+
         if type_filter:
             resources = [r for r in resources if r.type == type_filter]
-        
+
         return [
             ResourceResponse(
                 id=resource.id,
@@ -678,9 +769,9 @@ async def report_conflict(
             severity=request.severity,
             metadata=request.metadata
         )
-        
+
         platform.report_conflict(conflict)
-        
+
         # Broadcast conflict report
         await manager.broadcast(
             WebSocketMessage(
@@ -693,7 +784,7 @@ async def report_conflict(
                 }
             ).json()
         )
-        
+
         return ConflictResponse(
             id=conflict.id,
             agent_id=conflict.agent_id,
@@ -720,13 +811,13 @@ async def list_conflicts(
     """List all conflicts with optional filtering"""
     try:
         conflicts = platform.conflicts.values()
-        
+
         if status_filter:
             conflicts = [c for c in conflicts if c.status == status_filter]
-        
+
         if severity_filter:
             conflicts = [c for c in conflicts if c.severity == severity_filter]
-        
+
         return [
             ConflictResponse(
                 id=conflict.id,
@@ -762,9 +853,9 @@ async def create_workflow(
             steps=request.steps,
             metadata=request.metadata
         )
-        
+
         platform.create_workflow(workflow)
-        
+
         return {
             "id": workflow.id,
             "name": workflow.name,
@@ -790,9 +881,9 @@ async def execute_workflow(
             parameters=request.parameters,
             metadata=request.metadata
         )
-        
+
         platform.execute_workflow(execution)
-        
+
         return {
             "execution_id": execution.id,
             "workflow_id": workflow_id,
@@ -816,7 +907,7 @@ async def get_performance_metrics(
         for agent in platform.agents.values():
             if agent_id and agent.id != agent_id:
                 continue
-            
+
             agent_metrics = platform.get_agent_metrics(agent.id)
             if agent_metrics:
                 metrics.append(PerformanceMetricsResponse(
@@ -824,7 +915,7 @@ async def get_performance_metrics(
                     metrics=agent_metrics,
                     timestamp=datetime.utcnow()
                 ))
-        
+
         return metrics
     except Exception as e:
         logger.error("Failed to get performance metrics: {}", extra={"e": e})
@@ -835,18 +926,18 @@ async def get_performance_metrics(
 async def websocket_endpoint(websocket: WebSocket, client_id: str) -> Any:
     """WebSocket endpoint for real-time monitoring"""
     await manager.connect(websocket, client_id)
-    
+
     try:
         while True:
             # Keep connection alive and handle incoming messages
             data = await websocket.receive_text()
             message = json.loads(data)
-            
+
             # Handle subscription requests
             if message.get("type") == "subscribe":
                 subscriptions = message.get("subscriptions", [])
                 manager.connection_metadata[websocket]["subscriptions"].update(subscriptions)
-                
+
                 await manager.send_personal_message(
                     json.dumps({
                         "type": "subscription_confirmed",
@@ -854,12 +945,12 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> Any:
                     }),
                     websocket
                 )
-            
+
             # Handle unsubscribe requests
             elif message.get("type") == "unsubscribe":
                 subscriptions = message.get("subscriptions", [])
                 manager.connection_metadata[websocket]["subscriptions"].difference_update(subscriptions)
-                
+
                 await manager.send_personal_message(
                     json.dumps({
                         "type": "unsubscription_confirmed",
@@ -867,7 +958,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> Any:
                     }),
                     websocket
                 )
-    
+
     except WebSocketDisconnect:
         manager.disconnect(websocket)
     except Exception as e:
@@ -923,7 +1014,7 @@ async def get_dashboard_activity(
         # In a real implementation, you would store and retrieve activity logs
         # For now, return a mock activity feed
         activities = []
-        
+
         # Add recent agent activities
         for agent in list(platform.agents.values())[:10]:
             activities.append({
@@ -935,7 +1026,7 @@ async def get_dashboard_activity(
                     "status": agent.status
                 }
             })
-        
+
         # Add recent task activities
         for task in list(platform.tasks.values())[:10]:
             activities.append({
@@ -947,11 +1038,11 @@ async def get_dashboard_activity(
                     "status": task.status
                 }
             })
-        
+
         # Sort by timestamp and return limited results
         activities.sort(key=lambda x: x["timestamp"], reverse=True)
         return activities[:limit]
-    
+
     except Exception as e:
         logger.error("Failed to get dashboard activity: {}", extra={"e": e})
         raise HTTPException(status_code=500, detail=str(e))
@@ -961,7 +1052,7 @@ async def get_dashboard_activity(
 async def lifespan(app: FastAPI) -> Any:
     """Application lifespan manager"""
     global platform, redis_client
-    
+
     # Initialize Redis connection
     try:
         redis_client = aioredis.from_url("redis://localhost:6379", encoding="utf-8", decode_responses=True)
@@ -970,7 +1061,7 @@ async def lifespan(app: FastAPI) -> Any:
     except Exception as e:
         logger.warning("Redis connection failed: {}", extra={"e": e})
         redis_client = None
-    
+
     # Initialize platform with proper configuration
     try:
         # Configure platform
@@ -983,27 +1074,27 @@ async def lifespan(app: FastAPI) -> Any:
             storage_backend="redis" if redis_client else "memory",
             log_level="INFO"
         )
-        
+
         # Create and initialize platform
         platform = MultiAgentPlatform(platform_config)
         await platform.start()
-        
+
         # Register default agents
         await _register_default_agents(platform)
-        
+
         logger.info("Multi-Agent Platform initialized and started successfully")
-        
+
     except Exception as e:
         logger.error("Failed to initialize platform: {}", extra={"e": e})
         raise
-    
+
     yield
-    
+
     # Cleanup
     if platform:
         await platform.stop()
         logger.info("Platform stopped")
-    
+
     if redis_client:
         await redis_client.close()
         logger.info("Redis connection closed")
@@ -1016,19 +1107,19 @@ async def _register_default_agents(platform: MultiAgentPlatform) -> Any:
         await fsm_agent.initialize()
         await platform.register_agent(fsm_agent, fsm_agent.metadata)
         logger.info("FSM React Agent registered")
-        
+
         # Create and register Next Gen Agent
         next_gen_agent = NextGenAgentImpl()
         await next_gen_agent.initialize()
         await platform.register_agent(next_gen_agent, next_gen_agent.metadata)
         logger.info("Next Gen Agent registered")
-        
+
         # Create and register Crew Agent
         crew_agent = CrewAgentImpl()
         await crew_agent.initialize()
         await platform.register_agent(crew_agent, crew_agent.metadata)
         logger.info("Crew Agent registered")
-        
+
         # Create and register specialized agents for common domains
         domains = ["data_analysis", "code_generation", "research", "creative"]
         for domain in domains:
@@ -1036,9 +1127,9 @@ async def _register_default_agents(platform: MultiAgentPlatform) -> Any:
             await specialized_agent.initialize()
             await platform.register_agent(specialized_agent, specialized_agent.metadata)
             logger.info("Specialized {} Agent registered", extra={"domain": domain})
-        
+
         logger.info("Total agents registered: {}", extra={"len_platform_agents_": len(platform.agents)})
-        
+
     except Exception as e:
         logger.error("Failed to register default agents: {}", extra={"e": e})
         raise
@@ -1081,4 +1172,4 @@ if __name__ == "__main__":
         port=8000,
         reload=True,
         log_level="info"
-    ) 
+    )

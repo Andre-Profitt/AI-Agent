@@ -1,7 +1,24 @@
-from typing import Dict, Any, List
+from agent import query
+from agent import tools
+from examples.parallel_execution_example import executor
+
+from src.agents.crew_enhanced import crew
+from src.agents.crew_workflow import researcher
+from src.agents.crew_workflow import synthesiser
+from src.agents.crew_workflow import t1
+from src.agents.crew_workflow import t2
+from src.agents.crew_workflow import t3
+
+from typing import Any
+
 import logging
 
 # Placeholder imports – replace with real CrewAI components when available
+from typing import Dict
+
+from src.agents.advanced_agent_fsm import Agent
+# TODO: Fix undefined variables: crew, e, executor, query, researcher, result, synthesiser, t1, t2, t3, tools
+
 try:
     from crewai import Crew, Agent as CrewAgent, Task as CrewTask  # type: ignore
 except ImportError:
@@ -11,8 +28,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-
-def run_crew_workflow(query: str, tools: Dict[str, Any]) -> Dict[str, Any]:
+def run_crew_workflow(self, query: str, tools: Dict[str, Any]) -> Dict[str, Any]:
     """Lightweight wrapper that executes a 3-agent CrewAI workflow.
 
     1. ResearcherAgent – web & semantic search
@@ -87,4 +103,4 @@ def run_crew_workflow(query: str, tools: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "output": result.get("task_results", {}).get(t3.id, ""),
         "intermediate_steps": result.get("task_results", {})
-    } 
+    }

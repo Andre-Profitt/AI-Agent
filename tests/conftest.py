@@ -1,13 +1,20 @@
+from performance_dashboard import metric
+from tests.conftest import mock_db
+
+from unittest.mock import Mock
+# TODO: Fix undefined variables: Path, REGISTRY, metric, mock_db, os, reset_all_circuit_breakers, sys
+from unittest.mock import AsyncMock
+
+# TODO: Fix undefined variables: AsyncMock, REGISTRY, metric, mock_db, reset_all_circuit_breakers
 # tests/conftest.py
 """
 Enhanced test configuration with fixtures and setup
 """
 
 import pytest
-import asyncio
+
 import sys
 from pathlib import Path
-from unittest.mock import Mock, AsyncMock, patch
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
@@ -93,4 +100,82 @@ PERFORMANCE_BASELINES = {
     "concurrent_requests": 100,  # Handle 100 concurrent requests
     "api_response_time": 0.5,  # API calls <500ms
     "database_operation": 0.1,  # DB operations <100ms
-} 
+}
+
+
+"""
+Pytest Configuration
+Shared fixtures and test setup
+"""
+
+import pytest
+import asyncio
+import os
+from pathlib import Path
+from unittest.mock import Mock, AsyncMock
+
+# Set test environment
+os.environ["TESTING"] = "true"
+os.environ["LOG_LEVEL"] = "ERROR"
+
+
+@pytest.fixture(scope="session")
+def event_loop():
+    """Create event loop for async tests"""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
+
+
+@pytest.fixture(autouse=True)
+def reset_singletons():
+    """Reset singleton instances between tests"""
+    # Reset any singleton instances
+    from src.infrastructure.di.container import Container
+    Container._instance = None
+    
+    from src.tools.registry import ToolRegistry
+    ToolRegistry._instance = None
+
+
+@pytest.fixture
+def mock_llm():
+    """Mock LLM for testing"""
+    llm = Mock()
+    llm.agenerate = AsyncMock(return_value=Mock(
+        generations=[[Mock(text="Test response")]]
+    ))
+    return llm
+
+
+@pytest.fixture
+def temp_dir(tmp_path):
+    """Create temporary directory for tests"""
+    return tmp_path
+
+
+@pytest.fixture
+def mock_redis():
+    """Mock Redis client"""
+    redis = Mock()
+    redis.get = AsyncMock(return_value=None)
+    redis.set = AsyncMock(return_value=True)
+    redis.delete = AsyncMock(return_value=True)
+    redis.expire = AsyncMock(return_value=True)
+    return redis
+
+
+@pytest.fixture
+def mock_database():
+    """Mock database connection"""
+    db = Mock()
+    db.execute = AsyncMock()
+    db.fetch_one = AsyncMock()
+    db.fetch_all = AsyncMock()
+    return db
+
+
+# Markers
+pytest.mark.slow = pytest.mark.slow
+pytest.mark.integration = pytest.mark.integration
+pytest.mark.unit = pytest.mark.unit

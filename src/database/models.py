@@ -1,4 +1,22 @@
+from tests.unit.simple_test import func
+
+from src.tools.base_tool import Tool
+
+from src.agents.advanced_agent_fsm import Agent
+# TODO: Fix undefined variables: Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Table, Text, func, relationship, uuid
+# TODO: Fix undefined variables: Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Table, Text, declarative_base, func, relationship
+
 """
+
+from sqlalchemy import Boolean
+from sqlalchemy import DateTime
+from sqlalchemy import Float
+from sqlalchemy import ForeignKey
+from sqlalchemy import Integer
+from sqlalchemy import String
+from sqlalchemy import Table
+from sqlalchemy import Text
+from sqlalchemy import func
 Database Models for GAIA System
 SQLAlchemy models for all GAIA components
 """
@@ -7,7 +25,7 @@ from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Float, 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from datetime import datetime
+
 import uuid
 
 Base = declarative_base()
@@ -30,7 +48,7 @@ agent_tools = Table(
 class User(Base):
     """User model"""
     __tablename__ = 'users'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     username = Column(String(50), unique=True, nullable=False)
     email = Column(String(100), unique=True, nullable=False)
@@ -39,7 +57,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     last_login = Column(DateTime)
-    
+
     # Relationships
     permissions = relationship("Permission", secondary=user_permissions, back_populates="users")
     sessions = relationship("Session", back_populates="user")
@@ -48,33 +66,33 @@ class User(Base):
 class Permission(Base):
     """Permission model"""
     __tablename__ = 'permissions'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(50), unique=True, nullable=False)
     description = Column(Text)
     created_at = Column(DateTime, default=func.now())
-    
+
     # Relationships
     users = relationship("User", secondary=user_permissions, back_populates="permissions")
 
 class Session(Base):
     """User session model"""
     __tablename__ = 'sessions'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, ForeignKey('users.id'), nullable=False)
     session_token = Column(String(255), unique=True, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     created_at = Column(DateTime, default=func.now())
     last_activity = Column(DateTime, default=func.now())
-    
+
     # Relationships
     user = relationship("User", back_populates="sessions")
 
 class Query(Base):
     """Query model for tracking user queries"""
     __tablename__ = 'queries'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, ForeignKey('users.id'), nullable=False)
     query_text = Column(Text, nullable=False)
@@ -84,7 +102,7 @@ class Query(Base):
     confidence = Column(Float)
     verification_level = Column(String(20), default='basic')
     created_at = Column(DateTime, default=func.now())
-    
+
     # Relationships
     user = relationship("User", back_populates="queries")
     tool_calls = relationship("ToolCall", back_populates="query")
@@ -92,7 +110,7 @@ class Query(Base):
 class ToolCall(Base):
     """Tool call model for tracking tool executions"""
     __tablename__ = 'tool_calls'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     query_id = Column(String, ForeignKey('queries.id'), nullable=False)
     tool_name = Column(String(100), nullable=False)
@@ -102,14 +120,14 @@ class ToolCall(Base):
     execution_time = Column(Float)
     error_message = Column(Text)
     created_at = Column(DateTime, default=func.now())
-    
+
     # Relationships
     query = relationship("Query", back_populates="tool_calls")
 
 class Agent(Base):
     """Agent model"""
     __tablename__ = 'agents'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(100), nullable=False)
     agent_type = Column(String(50), nullable=False)
@@ -118,7 +136,7 @@ class Agent(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     last_used = Column(DateTime)
-    
+
     # Relationships
     tools = relationship("Tool", secondary=agent_tools, back_populates="agents")
     executions = relationship("AgentExecution", back_populates="agent")
@@ -126,7 +144,7 @@ class Agent(Base):
 class Tool(Base):
     """Tool model"""
     __tablename__ = 'tools'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(100), unique=True, nullable=False)
     description = Column(Text)
@@ -138,7 +156,7 @@ class Tool(Base):
     success_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=func.now())
     last_used = Column(DateTime)
-    
+
     # Relationships
     agents = relationship("Agent", secondary=agent_tools, back_populates="tools")
     executions = relationship("ToolExecution", back_populates="tool")
@@ -146,7 +164,7 @@ class Tool(Base):
 class AgentExecution(Base):
     """Agent execution model"""
     __tablename__ = 'agent_executions'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     agent_id = Column(String, ForeignKey('agents.id'), nullable=False)
     query_text = Column(Text, nullable=False)
@@ -156,14 +174,14 @@ class AgentExecution(Base):
     confidence = Column(Float)
     reasoning_path = Column(JSON)
     created_at = Column(DateTime, default=func.now())
-    
+
     # Relationships
     agent = relationship("Agent", back_populates="executions")
 
 class ToolExecution(Base):
     """Tool execution model"""
     __tablename__ = 'tool_executions'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     tool_id = Column(String, ForeignKey('tools.id'), nullable=False)
     input_data = Column(JSON)
@@ -172,14 +190,14 @@ class ToolExecution(Base):
     execution_time = Column(Float)
     error_message = Column(Text)
     created_at = Column(DateTime, default=func.now())
-    
+
     # Relationships
     tool = relationship("Tool", back_populates="executions")
 
 class Memory(Base):
     """Memory model for GAIA memory system"""
     __tablename__ = 'memories'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     memory_type = Column(String(50), nullable=False)  # episodic, semantic, working
     content = Column(Text, nullable=False)
@@ -193,7 +211,7 @@ class Memory(Base):
 class VectorStore(Base):
     """Vector store model"""
     __tablename__ = 'vector_stores'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(100), unique=True, nullable=False)
     provider = Column(String(50), nullable=False)  # chroma, pinecone, etc.
@@ -205,21 +223,21 @@ class VectorStore(Base):
 class Embedding(Base):
     """Embedding model"""
     __tablename__ = 'embeddings'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     vector_store_id = Column(String, ForeignKey('vector_stores.id'), nullable=False)
     text = Column(Text, nullable=False)
     embedding_vector = Column(JSON)  # Store as JSON array
     metadata = Column(JSON)
     created_at = Column(DateTime, default=func.now())
-    
+
     # Relationships
     vector_store = relationship("VectorStore")
 
 class PerformanceMetric(Base):
     """Performance metrics model"""
     __tablename__ = 'performance_metrics'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     metric_name = Column(String(100), nullable=False)
     metric_value = Column(Float, nullable=False)
@@ -230,7 +248,7 @@ class PerformanceMetric(Base):
 class SystemHealth(Base):
     """System health model"""
     __tablename__ = 'system_health'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     component = Column(String(100), nullable=False)
     status = Column(String(20), nullable=False)  # healthy, degraded, down
@@ -241,7 +259,7 @@ class SystemHealth(Base):
 class Backup(Base):
     """Backup model"""
     __tablename__ = 'backups'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     backup_id = Column(String(100), unique=True, nullable=False)
     backup_type = Column(String(50), nullable=False)
@@ -255,7 +273,7 @@ class Backup(Base):
 class AuditLog(Base):
     """Audit log model"""
     __tablename__ = 'audit_logs'
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, ForeignKey('users.id'))
     action = Column(String(100), nullable=False)
@@ -265,7 +283,7 @@ class AuditLog(Base):
     ip_address = Column(String(45))
     user_agent = Column(Text)
     created_at = Column(DateTime, default=func.now())
-    
+
     # Relationships
     user = relationship("User")
 
@@ -299,4 +317,4 @@ Index('idx_performance_metrics_timestamp', PerformanceMetric.timestamp)
 # Audit log indexes
 Index('idx_audit_logs_user_id', AuditLog.user_id)
 Index('idx_audit_logs_action', AuditLog.action)
-Index('idx_audit_logs_created_at', AuditLog.created_at) 
+Index('idx_audit_logs_created_at', AuditLog.created_at)

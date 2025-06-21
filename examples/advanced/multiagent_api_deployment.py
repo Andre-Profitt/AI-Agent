@@ -1,7 +1,92 @@
+from agent import query
+from benchmarks.cot_performance import total
+from examples.advanced.multiagent_api_deployment import agent_instance
+from examples.advanced.multiagent_api_deployment import allocated
+from examples.advanced.multiagent_api_deployment import capability_filter
+from examples.advanced.multiagent_api_deployment import fsm_metrics
+from examples.advanced.multiagent_api_deployment import status_breakdown
+from examples.advanced.multiagent_api_deployment import status_filter
+from examples.advanced.multiagent_api_deployment import tag_filter
+from examples.basic.demo_hybrid_architecture import percentage
+from examples.enhanced_unified_example import task
+from examples.enhanced_unified_example import tasks
+from examples.parallel_execution_example import agents
+from examples.parallel_execution_example import results
+from tests.load_test import credentials
+from tests.load_test import success
+
+from src.adapters.fsm_unified_adapter import capabilities
+from src.agents.enhanced_fsm import update
+from src.api.auth import payload
+from src.api_server import conflict
+from src.api_server import disconnected
+from src.api_server import redis_url
+from src.api_server import resource
+from src.api_server import resources
+from src.core.entities.agent import Agent
+from src.core.langgraph_resilience_patterns import request
+from src.database.models import agent_id
+from src.database.models import details
+from src.database.models import metadata
+from src.database.models import priority
+from src.database.models import user_id
+from src.database_extended import success_rate
+from src.gaia_components.adaptive_tool_system import mock_tools
+from src.gaia_components.multi_agent_orchestrator import completed_tasks
+from src.gaia_components.multi_agent_orchestrator import task_id
+from src.gaia_components.multi_agent_orchestrator import total_tasks
+from src.infrastructure.di.container import dependencies
+from src.meta_cognition import keywords
+from src.tools_introspection import description
+from src.tools_introspection import name
+from src.unified_architecture.conflict_resolution import conflict_id
+from src.unified_architecture.dashboard import overview
+from src.unified_architecture.enhanced_platform import task_type
+from src.unified_architecture.marketplace import listing
+from src.unified_architecture.marketplace import listings
+from src.unified_architecture.resource_management import utilization
+
+from src.agents.advanced_agent_fsm import AgentCapability
+
+from src.agents.advanced_agent_fsm import AgentStatus
+
+from src.tools.base_tool import Tool
+
+from src.agents.advanced_agent_fsm import Agent
+
+from src.agents.advanced_agent_fsm import MultiAgentPlatform
+
+from src.agents.advanced_agent_fsm import AgentMetadata
+
+from src.agents.advanced_agent_fsm import MigratedEnhancedFSMAgent
+# TODO: Fix undefined variables: a, agent_id, agent_instance, agent_registry, agent_resources, agents, allocated, amount, cap, capabilities, capability, capability_filter, completed_tasks, conflict, conflict_id, conflict_type, context, credentials, deadline, dependencies, description, details, disconnected, fsm_metrics, involved_agents, keyword, keywords, listing, listings, max_price, metadata, min_rating, mock_tools, name, overview, payload, percentage, pricing, priority, query, r, rating, redis_url, request, required_capabilities, resource, resources, results, review, status_breakdown, status_filter, success, success_rate, tag, tag_filter, tags, task, task_id, task_manager, task_request, task_type, tasks, total, total_tasks, user_id, utilization, uvicorn, a, agent, agent_id, agent_instance, agent_registry, agent_resources, agents, allocated, amount, cap, capabilities, capability, capability_filter, completed_tasks, conflict, conflict_id, conflict_type, context, credentials, deadline, dependencies, description, details, disconnected, fsm_metrics, involved_agents, keyword, keywords, listing, listings, max_price, metadata, min_rating, mock_tools, name, overview, payload, percentage, pricing, priority, query, r, rating, redis_url, request, required_capabilities, resource, resources, results, review, self, status_breakdown, status_filter, success, success_rate, tag, tag_filter, tags, task, task_id, task_manager, task_request, task_type, tasks, total, total_tasks, update, user_id, utilization, uvicorn
+from tests.test_gaia_agent import agent
+
+from fastapi import Depends
+from fastapi import HTTPException
+from fastapi import WebSocket
+from fastapi import WebSocketDisconnect
+from fastapi.security import HTTPAuthorizationCredentials
+from pydantic import Field
+
+from src.infrastructure.config_cli import update
+
+
 """
+import websocket
+from src.agents.migrated_enhanced_fsm_agent import MigratedEnhancedFSMAgent
+# TODO: Fix undefined variables: a, agent_id, agent_instance, agent_registry, agent_resources, agents, allocated, amount, cap, capabilities, capability, capability_filter, completed_tasks, conflict, conflict_id, conflict_type, context, credentials, deadline, dependencies, description, details, disconnected, fsm_metrics, involved_agents, keyword, keywords, listing, listings, max_price, metadata, min_rating, mock_tools, name, overview, payload, percentage, pricing, priority, query, r, rating, redis_url, request, required_capabilities, resource, resources, results, review, status_breakdown, status_filter, success, success_rate, tag, tag_filter, tags, task, task_id, task_manager, task_request, task_type, tasks, total, total_tasks, user_id, utilization, uvicorn, a, agent, agent_id, agent_instance, agent_registry, agent_resources, agents, allocated, amount, cap, capabilities, capability, capability_filter, completed_tasks, conflict, conflict_id, conflict_type, context, credentials, deadline, dependencies, description, details, disconnected, fsm_metrics, involved_agents, keyword, keywords, listing, listings, max_price, metadata, min_rating, mock_tools, name, overview, payload, percentage, pricing, priority, query, r, rating, redis_url, request, required_capabilities, resource, resources, results, review, self, status_breakdown, status_filter, success, success_rate, tag, tag_filter, tags, task, task_id, task_manager, task_request, task_type, tasks, total, total_tasks, update, user_id, utilization, uvicorn
+
+from fastapi import status
+from sqlalchemy import update
 Multi-Agent Platform API Server and Deployment Configuration
 Complete FastAPI implementation with WebSocket support for real-time monitoring
 """
+
+from typing import List
+from typing import Set
+from typing import Optional
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -10,15 +95,40 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any, Set
 import asyncio
-import json
+
 import uuid
 import os
 from datetime import datetime
 import logging
 
 # Import from the unified architecture and Enhanced FSM
-from src.enhanced_fsm import HierarchicalFSM, AtomicState, ProbabilisticTransition
+
 from src.migrated_enhanced_fsm_agent import MigratedEnhancedFSMAgent
+from datetime import datetime
+from math import e
+from platform import version
+from typing import Any
+from typing import Dict
+from typing import List
+from typing import Optional
+from typing import Set
+import logging
+import os
+import uuid
+import websocket
+
+from fastapi import Depends
+from fastapi import FastAPI
+from fastapi import HTTPException
+from fastapi import WebSocket
+from fastapi import WebSocketDisconnect
+from fastapi import status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from fastapi.security import HTTPAuthorizationCredentials
+from fastapi.security import HTTPBearer
+from pydantic import BaseModel
+from pydantic import Field
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -46,7 +156,7 @@ class AgentStatus:
 
 class AgentMetadata:
     """Agent metadata"""
-    def __init__(self, agent_id: str, name: str, version: str, 
+    def __init__(self, agent_id: str, name: str, version: str,
                  capabilities: List[str], tags: List[str] = None):
         self.agent_id = agent_id
         self.name = name
@@ -59,7 +169,7 @@ class AgentMetadata:
 
 class UnifiedTask:
     """Unified task representation"""
-    def __init__(self, task_id: str, task_type: str, priority: int, 
+    def __init__(self, task_id: str, task_type: str, priority: int,
                  payload: Dict[str, Any], required_capabilities: List[str],
                  deadline: Optional[datetime] = None, dependencies: List[str] = None):
         self.task_id = task_id
@@ -106,7 +216,7 @@ class MarketplaceListing:
         self.ratings = []
         self.total_usage = 0
         self.average_rating = 0.0
-    
+
     def add_rating(self, rating: float, review: str, user_id: str):
         """Add a rating to the listing"""
         self.ratings.append({
@@ -122,14 +232,14 @@ class AgentRegistry:
     def __init__(self):
         self.agents: Dict[str, AgentMetadata] = {}
         self.agent_instances: Dict[str, MigratedEnhancedFSMAgent] = {}
-    
-    async def register(self, agent_id: str, metadata: AgentMetadata, 
+
+    async def register(self, agent_id: str, metadata: AgentMetadata,
                       agent_instance: MigratedEnhancedFSMAgent) -> bool:
         """Register an agent"""
         self.agents[agent_id] = metadata
         self.agent_instances[agent_id] = agent_instance
         return True
-    
+
     async def unregister(self, agent_id: str) -> bool:
         """Unregister an agent"""
         if agent_id in self.agents:
@@ -138,21 +248,21 @@ class AgentRegistry:
                 del self.agent_instances[agent_id]
             return True
         return False
-    
+
     async def discover(self, capabilities: List[str] = None, tags: List[str] = None,
                       status: str = None) -> List[AgentMetadata]:
         """Discover agents based on criteria"""
         agents = list(self.agents.values())
-        
+
         if capabilities:
             agents = [a for a in agents if any(cap in a.capabilities for cap in capabilities)]
-        
+
         if tags:
             agents = [a for a in agents if any(tag in a.tags for tag in tags)]
-        
+
         if status:
             agents = [a for a in agents if a.status == status]
-        
+
         return agents
 
 class TaskManager:
@@ -160,18 +270,18 @@ class TaskManager:
     def __init__(self):
         self.tasks: Dict[str, UnifiedTask] = {}
         self.task_queue: List[str] = []
-    
+
     async def submit_task(self, task: UnifiedTask) -> str:
         """Submit a task for execution"""
         self.tasks[task.task_id] = task
         self.task_queue.append(task.task_id)
         return task.task_id
-    
+
     async def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
         """Get task status"""
         if task_id not in self.tasks:
             return None
-        
+
         task = self.tasks[task_id]
         return {
             "task_id": task.task_id,
@@ -190,82 +300,82 @@ class ResourceManager:
             "memory_mb": 102400.0,
             "gpu_memory_mb": 51200.0
         }
-    
+
     async def allocate_resources(self, agent_id: str, resources: Dict[str, float]) -> bool:
         """Allocate resources to an agent"""
         # Check if resources are available
         for resource, amount in resources.items():
             if resource in self.total_resources:
                 allocated = sum(
-                    agent_resources.get(resource, 0) 
+                    agent_resources.get(resource, 0)
                     for agent_resources in self.allocated_resources.values()
                 )
                 if allocated + amount > self.total_resources[resource]:
                     return False
-        
+
         self.allocated_resources[agent_id] = resources
         return True
-    
+
     async def release_resources(self, agent_id: str):
         """Release resources from an agent"""
         if agent_id in self.allocated_resources:
             del self.allocated_resources[agent_id]
-    
+
     def get_resource_utilization(self) -> Dict[str, float]:
         """Get current resource utilization"""
         utilization = {}
-        
+
         for resource, total in self.total_resources.items():
             allocated = sum(
-                agent_resources.get(resource, 0) 
+                agent_resources.get(resource, 0)
                 for agent_resources in self.allocated_resources.values()
             )
             utilization[resource] = (allocated / total) * 100
-        
+
         return utilization
 
 class Marketplace:
     """Marketplace for agent discovery and rating"""
     def __init__(self):
         self.listings: Dict[str, MarketplaceListing] = {}
-    
+
     async def publish_agent(self, agent_id: str, description: str,
                            pricing: Dict[str, float], keywords: List[str]) -> bool:
         """Publish an agent to marketplace"""
         # This would typically fetch agent metadata from registry
-        metadata = AgentMetadata(agent_id, f"Agent_{agent_id}", "1.0.0", 
+        metadata = AgentMetadata(agent_id, f"Agent_{agent_id}", "1.0.0",
                                [AgentCapability.REASONING], ["marketplace"])
-        
+
         listing = MarketplaceListing(agent_id, metadata, description, pricing, keywords)
         self.listings[agent_id] = listing
         return True
-    
+
     async def search_agents(self, query: str, min_rating: float = 0.0,
                            max_price: Optional[float] = None) -> List[MarketplaceListing]:
         """Search for agents in marketplace"""
         results = []
-        
+
         for listing in self.listings.values():
             # Simple search implementation
             if (query.lower() in listing.description.lower() or
                 query.lower() in listing.metadata.name.lower() or
                 any(query.lower() in keyword.lower() for keyword in listing.keywords)):
-                
+
                 if listing.average_rating >= min_rating:
                     if max_price is None or listing.pricing.get("per_task", 0) <= max_price:
                         results.append(listing)
-        
+
         return results
 
 class ConflictResolver:
     """Conflict resolution system"""
     def __init__(self):
         self.conflicts: Dict[str, Conflict] = {}
-    
+
     async def report_conflict(self, conflict: Conflict) -> str:
         """Report a conflict for resolution"""
         self.conflicts[conflict.conflict_id] = conflict
-        
+
         # Simple auto-resolution logic
         if conflict.conflict_type == ConflictType.RESOURCE_CONFLICT:
             conflict.resolved = True
@@ -273,7 +383,7 @@ class ConflictResolver:
         elif conflict.conflict_type == ConflictType.TASK_CONFLICT:
             conflict.resolved = True
             conflict.resolution = "Task priority adjusted"
-        
+
         return conflict.conflict_id
 
 class Dashboard:
@@ -281,23 +391,23 @@ class Dashboard:
     def __init__(self, agent_registry: AgentRegistry, task_manager: TaskManager):
         self.agent_registry = agent_registry
         self.task_manager = task_manager
-    
+
     async def get_system_overview(self) -> Dict[str, Any]:
         """Get system-wide overview"""
         agents = list(self.agent_registry.agents.values())
-        
+
         # Calculate agent breakdown by status
         status_breakdown = {}
         for agent in agents:
             status = agent.status
             status_breakdown[status] = status_breakdown.get(status, 0) + 1
-        
+
         # Calculate performance metrics
-        completed_tasks = sum(1 for task in self.task_manager.tasks.values() 
+        completed_tasks = sum(1 for task in self.task_manager.tasks.values()
                             if task.status == "COMPLETED")
         total_tasks = len(self.task_manager.tasks)
         success_rate = completed_tasks / total_tasks if total_tasks > 0 else 0.0
-        
+
         return {
             "total_agents": len(agents),
             "active_agents": sum(1 for a in agents if a.status == AgentStatus.AVAILABLE),
@@ -310,15 +420,15 @@ class Dashboard:
                 "overall_success_rate": success_rate
             }
         }
-    
+
     async def get_agent_details(self, agent_id: str) -> Optional[Dict[str, Any]]:
         """Get detailed agent information"""
         if agent_id not in self.agent_registry.agents:
             return None
-        
+
         agent = self.agent_registry.agents[agent_id]
         agent_instance = self.agent_registry.agent_instances.get(agent_id)
-        
+
         details = {
             "agent_id": agent.agent_id,
             "name": agent.name,
@@ -329,12 +439,12 @@ class Dashboard:
             "reliability_score": agent.reliability_score,
             "last_seen": agent.last_seen.isoformat()
         }
-        
+
         if agent_instance:
             # Add Enhanced FSM metrics
             fsm_metrics = agent_instance.get_metrics()
             details["fsm_metrics"] = fsm_metrics
-        
+
         return details
 
 class MultiAgentPlatform:
@@ -347,32 +457,32 @@ class MultiAgentPlatform:
         self.marketplace = Marketplace()
         self.conflict_resolver = ConflictResolver()
         self.dashboard = Dashboard(self.agent_registry, self.task_manager)
-    
+
     async def initialize(self):
         """Initialize the platform"""
         logger.info("Initializing Multi-Agent Platform")
         # Initialize Redis connection if needed
         # Initialize other components
-    
+
     async def shutdown(self):
         """Shutdown the platform"""
         logger.info("Shutting down Multi-Agent Platform")
         # Cleanup resources
-    
-    async def register_agent(self, agent_instance: MigratedEnhancedFSMAgent, 
+
+    async def register_agent(self, agent_instance: MigratedEnhancedFSMAgent,
                            metadata: AgentMetadata, resources: Dict[str, float]) -> bool:
         """Register an agent with the platform"""
         # Allocate resources
         if not await self.resource_manager.allocate_resources(metadata.agent_id, resources):
             return False
-        
+
         # Register agent
         return await self.agent_registry.register(metadata.agent_id, metadata, agent_instance)
-    
+
     async def submit_task(self, task: UnifiedTask) -> str:
         """Submit a task to the platform"""
         return await self.task_manager.submit_task(task)
-    
+
     async def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
         """Get task status"""
         return await self.task_manager.get_task_status(task_id)
@@ -457,25 +567,25 @@ websocket_connections: Set[WebSocket] = set()
 async def startup_event():
     """Initialize the platform on startup"""
     global platform
-    
+
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
     platform = MultiAgentPlatform(redis_url=redis_url)
     await platform.initialize()
-    
+
     logger.info("Multi-Agent Platform API started")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
     global platform
-    
+
     if platform:
         await platform.shutdown()
-    
+
     # Close all WebSocket connections
     for websocket in websocket_connections.copy():
         await websocket.close()
-    
+
     logger.info("Multi-Agent Platform API shut down")
 
 # =============================
@@ -502,15 +612,15 @@ async def register_agent(
     try:
         # Create Enhanced FSM agent instance
         agent_id = f"agent_{uuid.uuid4().hex[:8]}"
-        
+
         # Create mock tools for the agent
         class MockTool:
             def __init__(self, name):
                 self.name = name
                 self.tool_name = name
-        
+
         mock_tools = [MockTool("search"), MockTool("calculator"), MockTool("database")]
-        
+
         agent = MigratedEnhancedFSMAgent(
             tools=mock_tools,
             enable_hierarchical=True,
@@ -519,7 +629,7 @@ async def register_agent(
             enable_metrics=True,
             fsm_name=f"Agent_{agent_id}"
         )
-        
+
         # Create metadata
         metadata = AgentMetadata(
             agent_id=agent_id,
@@ -528,26 +638,26 @@ async def register_agent(
             capabilities=request.capabilities,
             tags=request.tags
         )
-        
+
         # Register with platform
         success = await platform.register_agent(agent, metadata, request.resources)
-        
+
         if not success:
             raise HTTPException(status_code=400, detail="Failed to register agent")
-        
+
         # Broadcast update
         await broadcast_update({
             "event": "agent_registered",
             "agent_id": agent_id,
             "name": request.name
         })
-        
+
         return {
             "agent_id": agent_id,
             "status": "registered",
             "message": f"Agent {request.name} successfully registered"
         }
-        
+
     except Exception as e:
         logger.error(f"Agent registration failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -565,14 +675,14 @@ async def list_agents(
         status_filter = status if status else None
         capability_filter = [capability] if capability else None
         tag_filter = [tag] if tag else None
-        
+
         # Discover agents
         agents = await platform.agent_registry.discover(
             capabilities=capability_filter,
             tags=tag_filter,
             status=status_filter
         )
-        
+
         # Format response
         return [
             {
@@ -587,7 +697,7 @@ async def list_agents(
             }
             for agent in agents
         ]
-        
+
     except Exception as e:
         logger.error(f"Failed to list agents: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -600,12 +710,12 @@ async def get_agent_details(
     """Get detailed information about a specific agent"""
     try:
         details = await platform.dashboard.get_agent_details(agent_id)
-        
+
         if not details:
             raise HTTPException(status_code=404, detail="Agent not found")
-        
+
         return details
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -620,21 +730,21 @@ async def unregister_agent(
     """Unregister an agent from the platform"""
     try:
         success = await platform.agent_registry.unregister(agent_id)
-        
+
         if not success:
             raise HTTPException(status_code=404, detail="Agent not found")
-        
+
         # Release resources
         await platform.resource_manager.release_resources(agent_id)
-        
+
         # Broadcast update
         await broadcast_update({
             "event": "agent_unregistered",
             "agent_id": agent_id
         })
-        
+
         return {"status": "unregistered", "agent_id": agent_id}
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -662,23 +772,23 @@ async def submit_task(
             deadline=request.deadline,
             dependencies=request.dependencies
         )
-        
+
         # Submit to platform
         task_id = await platform.submit_task(task)
-        
+
         # Broadcast update
         await broadcast_update({
             "event": "task_submitted",
             "task_id": task_id,
             "task_type": request.task_type
         })
-        
+
         return {
             "task_id": task_id,
             "status": "submitted",
             "message": "Task successfully submitted for execution"
         }
-        
+
     except Exception as e:
         logger.error(f"Task submission failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -691,12 +801,12 @@ async def get_task_status(
     """Get the status of a submitted task"""
     try:
         status = await platform.get_task_status(task_id)
-        
+
         if not status:
             raise HTTPException(status_code=404, detail="Task not found")
-        
+
         return status
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -711,7 +821,7 @@ async def submit_batch_tasks(
     """Submit multiple tasks as a batch"""
     try:
         results = []
-        
+
         for task_request in tasks:
             task = UnifiedTask(
                 task_id=str(uuid.uuid4()),
@@ -722,15 +832,15 @@ async def submit_batch_tasks(
                 deadline=task_request.deadline,
                 dependencies=task_request.dependencies
             )
-            
+
             task_id = await platform.submit_task(task)
             results.append({
                 "task_id": task_id,
                 "status": "submitted"
             })
-        
+
         return results
-        
+
     except Exception as e:
         logger.error(f"Batch task submission failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -752,16 +862,16 @@ async def publish_to_marketplace(
             request.pricing,
             request.keywords
         )
-        
+
         if not success:
             raise HTTPException(status_code=400, detail="Failed to publish agent")
-        
+
         return {
             "status": "published",
             "agent_id": request.agent_id,
             "message": "Agent successfully published to marketplace"
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -780,7 +890,7 @@ async def search_marketplace(
             request.min_rating,
             request.max_price
         )
-        
+
         return [
             {
                 "agent_id": listing.agent_id,
@@ -793,7 +903,7 @@ async def search_marketplace(
             }
             for listing in listings
         ]
-        
+
     except Exception as e:
         logger.error(f"Marketplace search failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -808,18 +918,18 @@ async def rate_agent(
     """Rate an agent in the marketplace"""
     try:
         listing = platform.marketplace.listings.get(agent_id)
-        
+
         if not listing:
             raise HTTPException(status_code=404, detail="Agent not found in marketplace")
-        
+
         listing.add_rating(rating, review, "anonymous")  # Would use actual user ID
-        
+
         return {
             "status": "rated",
             "agent_id": agent_id,
             "new_average_rating": listing.average_rating
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -836,7 +946,7 @@ async def get_system_overview(token: str = Depends(verify_token)):
     try:
         overview = await platform.dashboard.get_system_overview()
         return overview
-        
+
     except Exception as e:
         logger.error(f"Failed to get system overview: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -846,12 +956,12 @@ async def get_resource_utilization(token: str = Depends(verify_token)):
     """Get current resource utilization"""
     try:
         utilization = platform.resource_manager.get_resource_utilization()
-        
+
         return {
             resource: percentage
             for resource, percentage in utilization.items()
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to get resource utilization: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -870,15 +980,15 @@ async def report_conflict(
             description=request.description,
             context=request.context
         )
-        
+
         conflict_id = await platform.conflict_resolver.report_conflict(conflict)
-        
+
         return {
             "conflict_id": conflict_id,
             "status": "reported",
             "resolution": conflict.resolution if conflict.resolved else None
         }
-        
+
     except Exception as e:
         logger.error(f"Conflict reporting failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -892,24 +1002,24 @@ async def dashboard_websocket(websocket: WebSocket):
     """WebSocket endpoint for real-time dashboard updates"""
     await websocket.accept()
     websocket_connections.add(websocket)
-    
+
     try:
         # Send initial system overview
         overview = await platform.dashboard.get_system_overview()
         await websocket.send_json({"type": "overview", "data": overview})
-        
+
         # Keep connection alive and send periodic updates
         while True:
             # Wait for messages or send periodic updates
             try:
                 message = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
                 # Handle client messages if needed
-                
+
             except asyncio.TimeoutError:
                 # Send periodic update
                 overview = await platform.dashboard.get_system_overview()
                 await websocket.send_json({"type": "overview", "data": overview})
-                
+
     except WebSocketDisconnect:
         websocket_connections.remove(websocket)
     except Exception as e:
@@ -919,13 +1029,13 @@ async def dashboard_websocket(websocket: WebSocket):
 async def broadcast_update(update: Dict[str, Any]):
     """Broadcast update to all connected WebSocket clients"""
     disconnected = set()
-    
+
     for websocket in websocket_connections:
         try:
             await websocket.send_json({"type": "update", "data": update})
         except:
             disconnected.add(websocket)
-    
+
     # Remove disconnected clients
     websocket_connections.difference_update(disconnected)
 
@@ -1005,9 +1115,9 @@ async def dashboard():
     <body>
         <div class="container">
             <h1>Multi-Agent Collaboration Platform</h1>
-            
+
             <div id="connectionStatus" class="disconnected">Disconnected</div>
-            
+
             <div class="metrics-grid" id="metricsGrid">
                 <div class="metric-card">
                     <div class="metric-value" id="totalAgents">0</div>
@@ -1026,17 +1136,17 @@ async def dashboard():
                     <div class="metric-label">Success Rate</div>
                 </div>
             </div>
-            
+
             <div class="chart-container">
                 <h3>Agent Status Distribution</h3>
                 <canvas id="statusChart" width="400" height="200"></canvas>
             </div>
-            
+
             <div class="chart-container">
                 <h3>Resource Utilization</h3>
                 <canvas id="resourceChart" width="400" height="200"></canvas>
             </div>
-            
+
             <div class="chart-container">
                 <h3>Real-time Events</h3>
                 <div id="eventLog" style="max-height: 200px; overflow-y: auto;">
@@ -1044,34 +1154,34 @@ async def dashboard():
                 </div>
             </div>
         </div>
-        
+
         <script>
             // WebSocket connection
             let ws = null;
             const wsUrl = `ws://${window.location.host}/ws/dashboard`;
-            
+
             // Charts
             let statusChart = null;
             let resourceChart = null;
-            
+
             function connectWebSocket() {
                 ws = new WebSocket(wsUrl);
-                
+
                 ws.onopen = () => {
                     document.getElementById('connectionStatus').className = 'connected';
                     document.getElementById('connectionStatus').textContent = 'Connected';
                 };
-                
+
                 ws.onclose = () => {
                     document.getElementById('connectionStatus').className = 'disconnected';
                     document.getElementById('connectionStatus').textContent = 'Disconnected';
                     // Reconnect after 3 seconds
                     setTimeout(connectWebSocket, 3000);
                 };
-                
+
                 ws.onmessage = (event) => {
                     const message = JSON.parse(event.data);
-                    
+
                     if (message.type === 'overview') {
                         updateDashboard(message.data);
                     } else if (message.type === 'update') {
@@ -1079,30 +1189,30 @@ async def dashboard():
                     }
                 };
             }
-            
+
             function updateDashboard(data) {
                 // Update metrics
                 document.getElementById('totalAgents').textContent = data.total_agents;
                 document.getElementById('activeAgents').textContent = data.active_agents;
-                document.getElementById('tasksCompleted').textContent = 
+                document.getElementById('tasksCompleted').textContent =
                     data.performance_summary.total_tasks_completed;
-                document.getElementById('successRate').textContent = 
+                document.getElementById('successRate').textContent =
                     (data.performance_summary.overall_success_rate * 100).toFixed(1) + '%';
-                
+
                 // Update status chart
                 updateStatusChart(data.agent_breakdown.by_status);
-                
+
                 // Update resource chart (would need additional API call)
                 fetchResourceUtilization();
             }
-            
+
             function updateStatusChart(statusData) {
                 const ctx = document.getElementById('statusChart').getContext('2d');
-                
+
                 if (statusChart) {
                     statusChart.destroy();
                 }
-                
+
                 statusChart = new Chart(ctx, {
                     type: 'doughnut',
                     data: {
@@ -1124,7 +1234,7 @@ async def dashboard():
                     }
                 });
             }
-            
+
             async function fetchResourceUtilization() {
                 try {
                     const response = await fetch('/api/v2/resources/utilization', {
@@ -1138,14 +1248,14 @@ async def dashboard():
                     console.error('Failed to fetch resource utilization:', error);
                 }
             }
-            
+
             function updateResourceChart(resourceData) {
                 const ctx = document.getElementById('resourceChart').getContext('2d');
-                
+
                 if (resourceChart) {
                     resourceChart.destroy();
                 }
-                
+
                 resourceChart = new Chart(ctx, {
                     type: 'bar',
                     data: {
@@ -1168,27 +1278,27 @@ async def dashboard():
                     }
                 });
             }
-            
+
             function addEvent(event) {
                 const eventLog = document.getElementById('eventLog');
                 const eventElement = document.createElement('div');
                 eventElement.style.padding = '10px';
                 eventElement.style.borderBottom = '1px solid #eee';
-                
+
                 const timestamp = new Date().toLocaleTimeString();
                 eventElement.innerHTML = `
-                    <strong>${timestamp}</strong> - 
+                    <strong>${timestamp}</strong> -
                     ${event.event}: ${JSON.stringify(event)}
                 `;
-                
+
                 eventLog.insertBefore(eventElement, eventLog.firstChild);
-                
+
                 // Keep only last 50 events
                 while (eventLog.children.length > 50) {
                     eventLog.removeChild(eventLog.lastChild);
                 }
             }
-            
+
             // Initialize
             connectWebSocket();
         </script>
@@ -1198,7 +1308,6 @@ async def dashboard():
 
 if __name__ == "__main__":
     import uvicorn
-    import os
-    
+
     port = int(os.getenv("PORT", 8080))
-    uvicorn.run(app, host="0.0.0.0", port=port) 
+    uvicorn.run(app, host="0.0.0.0", port=port)

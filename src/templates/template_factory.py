@@ -1,4 +1,38 @@
+from agent import query
+from benchmarks.cot_performance import avg_confidence
+from benchmarks.cot_performance import recommendations
+from benchmarks.cot_performance import template
+from tests.load_test import data
+
+from src.core.optimized_chain_of_thought import domain_boost
+from src.core.optimized_chain_of_thought import indicator_count
+from src.core.optimized_chain_of_thought import keyword_matches
+from src.core.optimized_chain_of_thought import step
+from src.core.optimized_chain_of_thought import steps
+from src.database.models import reasoning_path
+from src.gaia_components.adaptive_tool_system import total_usage
+from src.infrastructure.agents.agent_factory import domain
+from src.meta_cognition import base_score
+from src.meta_cognition import complexity
+from src.meta_cognition import query_lower
+from src.templates.template_factory import avg_feedback
+from src.templates.template_factory import avg_time
+from src.templates.template_factory import base_step
+from src.templates.template_factory import config_path
+from src.templates.template_factory import creative_keywords
+from src.templates.template_factory import debug_keywords
+from src.templates.template_factory import final_score
+from src.templates.template_factory import legal_indicators
+from src.templates.template_factory import phase_templates
+from src.templates.template_factory import success_adjustment
+from src.templates.template_factory import total_templates
+from src.tools_introspection import name
+
 """
+
+from typing import Any
+from typing import List
+from typing import Optional
 Template Factory for Domain-Specific Templates
 Creates specialized reasoning templates for different domains
 """
@@ -12,6 +46,9 @@ from collections import defaultdict
 # Import base template class
 from src.core.optimized_chain_of_thought import ReasoningTemplate
 import logging
+# TODO: Fix undefined variables: Any, Dict, List, Optional, avg_confidence, avg_feedback, avg_time, base_score, base_step, complexity, config_path, context, creative_keywords, data, debug_keywords, defaultdict, domain, domain_boost, e, error_occurred, f, final_score, ind, indicator_count, json, keyword, keyword_matches, kw, legal_indicators, logging, name, os, performance_data, phase, phase_templates, query, query_lower, reasoning_path, recommendations, step, steps, success_adjustment, template, template_name, total_templates, total_usage, user_feedback, x
+import pattern
+
 
 logger = logging.getLogger(__name__)
 
@@ -435,8 +472,8 @@ if __name__ == "__main__":
     technical_template = factory.create_template('technical', 'development')
     
     # Test template creation
-    logger.info("Available domains:", extra={"data": factory.get_available_domains(}))
-    logger.info("Created templates:", extra={"data": list(factory.template_registry.keys(})))
+    logger.info("Available domains:", extra={"data": factory.get_available_domains()})
+    logger.info("Created templates:", extra={"data": list(factory.template_registry.keys())})
     
     # Test template applicability
     test_query = "Analyze the experimental results and draw conclusions"

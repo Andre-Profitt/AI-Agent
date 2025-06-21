@@ -1,23 +1,92 @@
+from agent import graph
+from agent import query
+from agent import workflow
+from examples.enhanced_unified_example import execution_time
+from examples.parallel_execution_example import tool_name
+from setup_environment import value
+
+from src.agents.enhanced_fsm import source_path
+from src.agents.enhanced_fsm import state
+from src.agents.enhanced_fsm import target_path
+from src.api_server import execution
+from src.api_server import fsm_agent
+from src.core.entities.agent import Agent
+from src.core.langgraph_resilience_patterns import circuit_breaker
+from src.core.monitoring import key
+from src.core.optimized_chain_of_thought import step
+from src.core.optimized_chain_of_thought import steps
+from src.database.models import agent_id
+from src.database.models import executions
+from src.database.models import input_data
+from src.database.models import tool
+from src.gaia_components.multi_agent_orchestrator import workflow_id
+from src.infrastructure.workflow.workflow_engine import current_step
+from src.infrastructure.workflow.workflow_engine import final_state
+from src.infrastructure.workflow.workflow_engine import initial_state
+from src.infrastructure.workflow.workflow_engine import next_step
+from src.infrastructure.workflow.workflow_engine import retry_count
+from src.infrastructure.workflow.workflow_engine import step_input
+from src.infrastructure.workflow.workflow_engine import step_result
+from src.infrastructure.workflow.workflow_engine import step_type
+from src.infrastructure.workflow.workflow_engine import workflow_graph
+from src.infrastructure.workflow.workflow_engine import workflow_results
+from src.tools_introspection import description
+from src.tools_introspection import name
+from src.utils.tavily_search import max_retries
+from src.utils.tools_introspection import field
+from src.utils.tools_introspection import schema
+from src.workflow.workflow_automation import condition
+from src.workflow.workflow_automation import execution_id
+from src.workflow.workflow_automation import input_key
+from src.workflow.workflow_automation import timeout
+
+from src.tools.base_tool import Tool
+
+from src.tools.base_tool import BaseTool
+
+from src.agents.advanced_agent_fsm import Agent
+# TODO: Fix undefined variables: Any, Callable, Dict, Enum, List, Optional, TYPE_CHECKING, agent_id, condition, current_step, dataclass, datetime, description, e, execution, execution_id, execution_time, executions, field, final_state, fsm_agent, graph, i, initial_state, input_data, input_key, input_mapping, key, logging, max_retries, name, next_step, output_key, output_mapping, query, result, retry_count, source_path, state, step, step_data, step_id, step_input, step_result, step_type, steps, target_path, timeout, tool_name, uuid, value, workflow, workflow_graph, workflow_id, workflow_results, workflow_steps, workflow_type
+from langgraph.graph import END
+from tests.test_gaia_agent import agent
+import schema
+
+from src.infrastructure.resilience.circuit_breaker import circuit_breaker
+from src.tools.base_tool import tool
+
+
 """
+import datetime
+from typing import Dict
+from datetime import datetime
+from src.services.circuit_breaker import CircuitBreakerConfig
+from src.shared.types.di_types import BaseTool
+# TODO: Fix undefined variables: END, StateGraph, TYPE_CHECKING, agent, agent_id, circuit_breaker, condition, current_step, description, e, execution, execution_id, execution_time, executions, final_state, fsm_agent, graph, i, initial_state, input_data, input_key, input_mapping, key, max_retries, name, next_step, output_key, output_mapping, query, result, retry_count, schema, self, source_path, state, step, step_data, step_id, step_input, step_result, step_type, steps, target_path, timeout, tool, tool_name, value, workflow, workflow_graph, workflow_id, workflow_results, workflow_steps, workflow_type
+
+from langchain.tools import BaseTool
 Workflow Orchestration Engine
 Provides workflow management using LangGraph for complex agent workflows
 Enhanced with circuit breaker protection and FSM integration
 """
 
+from typing import Optional
+from typing import TYPE_CHECKING
+from dataclasses import field
+from typing import Any
+from typing import List
+from typing import Callable
+
 import asyncio
-import json
+
 import logging
-from typing import Dict, List, Any, Optional, Callable, Union
+
 from dataclasses import dataclass, field
 from enum import Enum
-from datetime import datetime, timedelta
+
 import uuid
-from contextlib import asynccontextmanager
 
 from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolExecutor
+
 from langchain_core.tools import BaseTool
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 
 # Import circuit breaker protection
 from src.infrastructure.resilience.circuit_breaker import (
@@ -26,8 +95,9 @@ from src.infrastructure.resilience.circuit_breaker import (
     circuit_breaker
 )
 
-# Import FSM agent for integration
-from src.agents.advanced_agent_fsm import FSMReActAgent, FSMState
+# Import FSM agent for integration - use TYPE_CHECKING to avoid circular import
+if TYPE_CHECKING:
+    from src.agents.advanced_agent_fsm import FSMReActAgent, FSMState
 
 logger = logging.getLogger(__name__)
 
@@ -122,21 +192,21 @@ class WorkflowState:
 
 class WorkflowEngine:
     """Main workflow orchestration engine"""
-    
+
     def __init__(self):
         self.workflows: Dict[str, WorkflowDefinition] = {}
         self.executions: Dict[str, WorkflowExecution] = {}
         self.agents: Dict[str, Any] = {}  # Agent registry
         self.tools: Dict[str, BaseTool] = {}  # Tool registry
         self._lock = asyncio.Lock()
-        
+
     async def register_workflow(self, workflow: WorkflowDefinition) -> bool:
         """Register a new workflow definition"""
         async with self._lock:
             self.workflows[workflow.workflow_id] = workflow
             logger.info("Registered workflow: {} ({})", extra={"workflow_name": workflow.name, "workflow_workflow_id": workflow.workflow_id})
             return True
-            
+
     async def unregister_workflow(self, workflow_id: str) -> bool:
         """Unregister a workflow definition"""
         async with self._lock:
@@ -145,25 +215,25 @@ class WorkflowEngine:
                 logger.info("Unregistered workflow: {}", extra={"workflow_id": workflow_id})
                 return True
             return False
-            
+
     async def register_agent(self, agent_id: str, agent: Any) -> None:
         """Register an agent for workflow execution"""
         self.agents[agent_id] = agent
-        
+
     async def register_tool(self, tool_name: str, tool: BaseTool) -> None:
         """Register a tool for workflow execution"""
         self.tools[tool_name] = tool
-        
+
     @circuit_breaker("workflow_execution", CircuitBreakerConfig(failure_threshold=3, recovery_timeout=120))
     async def execute_workflow(self, workflow_id: str, input_data: Dict[str, Any],
                              execution_id: Optional[str] = None) -> WorkflowExecution:
         """Execute a workflow with circuit breaker protection"""
         if workflow_id not in self.workflows:
             raise ValueError(f"Workflow {workflow_id} not found")
-            
+
         workflow = self.workflows[workflow_id]
         execution_id = execution_id or str(uuid.uuid4())
-        
+
         # Create execution instance
         execution = WorkflowExecution(
             execution_id=execution_id,
@@ -171,16 +241,16 @@ class WorkflowEngine:
             status=WorkflowStatus.PENDING,
             input_data=input_data
         )
-        
+
         self.executions[execution_id] = execution
-        
+
         try:
             # Update status to running
             execution.status = WorkflowStatus.RUNNING
-            
+
             # Create workflow graph
             graph = await self._create_workflow_graph(workflow)
-            
+
             # Execute workflow
             initial_state = WorkflowState(
                 execution_id=execution_id,
@@ -188,34 +258,34 @@ class WorkflowEngine:
                 current_step="start",
                 input_data=input_data
             )
-            
+
             # Run the workflow
             final_state = await self._run_workflow(graph, initial_state, workflow)
-            
+
             # Update execution with results
             execution.output_data = final_state.output_data
             execution.step_results = final_state.step_results
             execution.status = WorkflowStatus.COMPLETED
             execution.end_time = datetime.now()
-            
+
             logger.info("Workflow execution completed with circuit breaker protection: {}", extra={"execution_id": execution_id})
-            
+
         except Exception as e:
             execution.status = WorkflowStatus.FAILED
             execution.error_message = str(e)
             execution.end_time = datetime.now()
             logger.error("Workflow execution failed: {}, error: {}", extra={"execution_id": execution_id, "e": e})
-            
+
         return execution
-        
+
     async def _create_workflow_graph(self, workflow: WorkflowDefinition) -> StateGraph:
         """Create LangGraph state graph from workflow definition"""
         workflow_graph = StateGraph(WorkflowState)
-        
+
         # Add nodes for each step
         for step in workflow.steps:
             workflow_graph.add_node(step.step_id, self._create_step_node(step))
-            
+
         # Add edges based on workflow type
         if workflow.workflow_type == WorkflowType.SEQUENTIAL:
             await self._add_sequential_edges(workflow_graph, workflow.steps)
@@ -225,26 +295,26 @@ class WorkflowEngine:
             await self._add_conditional_edges(workflow_graph, workflow.steps)
         elif workflow.workflow_type == WorkflowType.LOOP:
             await self._add_loop_edges(workflow_graph, workflow.steps)
-            
+
         # Set entry point
         if workflow.steps:
             workflow_graph.set_entry_point(workflow.steps[0].step_id)
-            
+
         return workflow_graph.compile()
-        
+
     def _create_step_node(self, step: WorkflowStep) -> Callable:
         """Create a node function for a workflow step"""
         async def step_node(state: WorkflowState) -> WorkflowState:
             try:
                 logger.info("Executing step: {} ({})", extra={"step_name": step.name, "step_step_id": step.step_id})
-                
+
                 # Update current step
                 state.current_step = step.step_id
                 state.step_history.append(step.step_id)
-                
+
                 # Prepare input for the step
                 step_input = self._prepare_step_input(step, state)
-                
+
                 # Execute the step
                 if step.agent_id:
                     result = await self._execute_agent_step(step, step_input)
@@ -252,20 +322,20 @@ class WorkflowEngine:
                     result = await self._execute_tool_step(step, step_input)
                 else:
                     result = await self._execute_custom_step(step, step_input)
-                    
+
                 # Process output
                 self._process_step_output(step, result, state)
-                
+
                 # Update step results
                 state.step_results[step.step_id] = {
                     "status": "success",
                     "result": result,
                     "timestamp": datetime.now().isoformat()
                 }
-                
+
             except Exception as e:
                 logger.error("Step execution failed: {}, error: {}", extra={"step_step_id": step.step_id, "e": e})
-                
+
                 # Handle retries
                 retry_count = state.retry_count.get(step.step_id, 0)
                 if retry_count < step.retry_count:
@@ -281,15 +351,15 @@ class WorkflowEngine:
                         "error": str(e),
                         "timestamp": datetime.now().isoformat()
                     }
-                    
+
             return state
-            
+
         return step_node
-        
+
     def _prepare_step_input(self, step: WorkflowStep, state: WorkflowState) -> Dict[str, Any]:
         """Prepare input data for a workflow step"""
         step_input = {}
-        
+
         for input_key, source_path in step.input_mapping.items():
             if source_path.startswith("input."):
                 # Map from workflow input
@@ -303,37 +373,40 @@ class WorkflowEngine:
             else:
                 # Direct value
                 step_input[input_key] = source_path
-                
+
         return step_input
-        
+
     @circuit_breaker("agent_execution", CircuitBreakerConfig(failure_threshold=3, recovery_timeout=60))
     async def _execute_agent_step(self, step: WorkflowStep, step_input: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute agent step with circuit breaker protection"""
-        agent_id = step.agent_id
-        if agent_id not in self.agents:
-            raise ValueError(f"Agent {agent_id} not found")
-            
-        agent = self.agents[agent_id]
-        
-        # Handle FSM agent specifically
-        if isinstance(agent, FSMReActAgent):
-            # Use FSM agent's run method
+        """Execute an agent step with circuit breaker protection"""
+        agent = self.agents.get(step.agent_id)
+        if not agent:
+            raise ValueError(f"Agent {step.agent_id} not found")
+
+        # Handle different agent types
+        if hasattr(agent, '__class__') and 'FSMReActAgent' in str(agent.__class__):
+            # FSM agent execution
             result = await agent.run(step_input.get('query', ''))
-            return {'output': result, 'agent_type': 'fsm'}
+            return result
         else:
-            # Handle other agent types
-            result = await agent.arun(step_input)
-            return {'output': result, 'agent_type': 'standard'}
-        
+            # Generic agent execution
+            if hasattr(agent, 'run'):
+                result = await agent.run(step_input)
+            elif hasattr(agent, 'invoke'):
+                result = await agent.invoke(step_input)
+            else:
+                raise ValueError(f"Agent {step.agent_id} does not have a run or invoke method")
+            return result
+
     @circuit_breaker("tool_execution", CircuitBreakerConfig(failure_threshold=5, recovery_timeout=60))
     async def _execute_tool_step(self, step: WorkflowStep, step_input: Dict[str, Any]) -> Dict[str, Any]:
         """Execute tool step with circuit breaker protection"""
         tool_name = step.tool_name
         if tool_name not in self.tools:
             raise ValueError(f"Tool {tool_name} not found")
-            
+
         tool = self.tools[tool_name]
-        
+
         try:
             # Execute tool with proper error handling
             result = await tool.ainvoke(step_input)
@@ -341,7 +414,7 @@ class WorkflowEngine:
         except Exception as e:
             logger.error("Tool execution failed: {}, error: {}", extra={"tool_name": tool_name, "e": e})
             return {'output': None, 'tool_name': tool_name, 'success': False, 'error': str(e)}
-        
+
     async def _execute_custom_step(self, step: WorkflowStep, step_input: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a custom step (placeholder for custom logic)"""
         # This would be implemented based on custom step types
@@ -350,7 +423,7 @@ class WorkflowEngine:
             "input": step_input,
             "result": {"status": "completed"}
         }
-        
+
     def _process_step_output(self, step: WorkflowStep, result: Dict[str, Any], state: WorkflowState):
         """Process output from a workflow step"""
         for output_key, target_path in step.output_mapping.items():
@@ -361,24 +434,24 @@ class WorkflowEngine:
             else:
                 # Store in step results
                 state.step_results[step.step_id][output_key] = result.get(output_key)
-                
+
     async def _add_sequential_edges(self, graph: StateGraph, steps: List[WorkflowStep]):
         """Add edges for sequential workflow"""
         for i in range(len(steps) - 1):
             current_step = steps[i]
             next_step = steps[i + 1]
             graph.add_edge(current_step.step_id, next_step.step_id)
-            
+
         # Add final edge to END
         if steps:
             graph.add_edge(steps[-1].step_id, END)
-            
+
     async def _add_parallel_edges(self, graph: StateGraph, steps: List[WorkflowStep]):
         """Add edges for parallel workflow"""
         # All steps can run in parallel
         for step in steps:
             graph.add_edge(step.step_id, END)
-            
+
     async def _add_conditional_edges(self, graph: StateGraph, steps: List[WorkflowStep]):
         """Add edges for conditional workflow"""
         # This would implement conditional routing based on step conditions
@@ -391,16 +464,16 @@ class WorkflowEngine:
                 )
             else:
                 graph.add_edge(step.step_id, END)
-                
+
     async def _add_loop_edges(self, graph: StateGraph, steps: List[WorkflowStep]):
         """Add edges for loop workflow"""
         # This would implement loop logic
         for step in steps:
             graph.add_edge(step.step_id, step.step_id)  # Loop back to same step
-            
+
     def _create_condition_function(self, condition: str) -> Callable:
         """Create a condition function for conditional routing"""
-        def condition_func(state: WorkflowState) -> str:
+        def condition_func(self, state: WorkflowState) -> str:
             # Simple condition evaluation (would be more sophisticated in practice)
             try:
                 # Evaluate condition against state
@@ -408,25 +481,25 @@ class WorkflowEngine:
             except:
                 return "end"
         return condition_func
-        
+
     async def _run_workflow(self, graph: StateGraph, initial_state: WorkflowState,
                           workflow: WorkflowDefinition) -> WorkflowState:
         """Run the workflow graph"""
         # Execute the graph
         final_state = await graph.ainvoke(initial_state)
-        
+
         # Check for timeout
         if workflow.timeout:
             execution_time = (datetime.now() - initial_state.start_time).total_seconds()
             if execution_time > workflow.timeout:
                 raise TimeoutError(f"Workflow execution timed out after {workflow.timeout} seconds")
-                
+
         return final_state
-        
+
     async def get_execution_status(self, execution_id: str) -> Optional[WorkflowExecution]:
         """Get the status of a workflow execution"""
         return self.executions.get(execution_id)
-        
+
     async def cancel_execution(self, execution_id: str) -> bool:
         """Cancel a workflow execution"""
         if execution_id in self.executions:
@@ -436,11 +509,11 @@ class WorkflowEngine:
                 execution.end_time = datetime.now()
                 return True
         return False
-        
+
     async def get_workflow_definitions(self) -> List[WorkflowDefinition]:
         """Get all workflow definitions"""
         return list(self.workflows.values())
-        
+
     async def get_execution_history(self, workflow_id: Optional[str] = None) -> List[WorkflowExecution]:
         """Get execution history"""
         executions = list(self.executions.values())
@@ -454,7 +527,7 @@ class WorkflowEngine:
 
 class WorkflowBuilder:
     """Builder for creating workflow definitions"""
-    
+
     def __init__(self, name: str, description: str = ""):
         self.workflow_id = str(uuid.uuid4())
         self.name = name
@@ -466,17 +539,17 @@ class WorkflowBuilder:
         self.timeout: Optional[float] = None
         self.max_retries: int = 3
         self.metadata: Dict[str, Any] = {}
-        
+
     def set_type(self, workflow_type: WorkflowType) -> 'WorkflowBuilder':
         """Set workflow type"""
         self.workflow_type = workflow_type
         return self
-        
+
     def add_step(self, step: WorkflowStep) -> 'WorkflowBuilder':
         """Add a step to the workflow"""
         self.steps.append(step)
         return self
-        
+
     def add_agent_step(self, name: str, agent_id: str, description: str = "",
                       input_mapping: Optional[Dict[str, str]] = None,
                       output_mapping: Optional[Dict[str, str]] = None) -> 'WorkflowBuilder':
@@ -490,7 +563,7 @@ class WorkflowBuilder:
             output_mapping=output_mapping or {}
         )
         return self.add_step(step)
-        
+
     def add_tool_step(self, name: str, tool_name: str, description: str = "",
                      input_mapping: Optional[Dict[str, str]] = None,
                      output_mapping: Optional[Dict[str, str]] = None) -> 'WorkflowBuilder':
@@ -504,32 +577,32 @@ class WorkflowBuilder:
             output_mapping=output_mapping or {}
         )
         return self.add_step(step)
-        
+
     def set_input_schema(self, schema: Dict[str, Any]) -> 'WorkflowBuilder':
         """Set input schema"""
         self.input_schema = schema
         return self
-        
+
     def set_output_schema(self, schema: Dict[str, Any]) -> 'WorkflowBuilder':
         """Set output schema"""
         self.output_schema = schema
         return self
-        
+
     def set_timeout(self, timeout: float) -> 'WorkflowBuilder':
         """Set workflow timeout"""
         self.timeout = timeout
         return self
-        
+
     def set_max_retries(self, max_retries: int) -> 'WorkflowBuilder':
         """Set maximum retries"""
         self.max_retries = max_retries
         return self
-        
+
     def add_metadata(self, key: str, value: Any) -> 'WorkflowBuilder':
         """Add metadata"""
         self.metadata[key] = value
         return self
-        
+
     def build(self) -> WorkflowDefinition:
         """Build the workflow definition"""
         return WorkflowDefinition(
@@ -569,7 +642,7 @@ async def get_execution_status(execution_id: str) -> Optional[WorkflowExecution]
     """Get execution status from the global engine"""
     return await workflow_engine.get_execution_status(execution_id)
 
-def create_workflow_builder(name: str, description: str = "") -> WorkflowBuilder:
+def create_workflow_builder(self, name: str, description: str = "") -> WorkflowBuilder:
     """Create a new workflow builder"""
     return WorkflowBuilder(name, description)
 
@@ -578,23 +651,23 @@ def create_workflow_builder(name: str, description: str = "") -> WorkflowBuilder
 # =============================
 
 class AgentOrchestrator:
-    """Orchestrator that integrates with existing FSM agent for workflow management"""
-    
+    """Orchestrates FSM agents and workflows"""
+
     def __init__(self, workflow_engine: WorkflowEngine = None):
         self.workflow_engine = workflow_engine or WorkflowEngine()
-        self.fsm_agents: Dict[str, FSMReActAgent] = {}
+        self.fsm_agents: Dict[str, 'FSMReActAgent'] = {}
         self.workflow_definitions: Dict[str, Dict[str, Any]] = {}
-        
-    async def register_fsm_agent(self, agent_id: str, agent: FSMReActAgent) -> None:
+
+    async def register_fsm_agent(self, agent_id: str, agent: 'FSMReActAgent') -> None:
         """Register an FSM agent for orchestration"""
         self.fsm_agents[agent_id] = agent
         await self.workflow_engine.register_agent(agent_id, agent)
         logger.info("Registered FSM agent: {}", extra={"agent_id": agent_id})
-    
-    async def create_workflow_from_fsm(self, workflow_id: str, fsm_agent: FSMReActAgent,
+
+    async def create_workflow_from_fsm(self, workflow_id: str, fsm_agent: 'FSMReActAgent',
                                      workflow_steps: List[Dict[str, Any]]) -> str:
         """Create a workflow definition from FSM agent and steps"""
-        
+
         # Convert steps to WorkflowStep objects
         steps = []
         for i, step_data in enumerate(workflow_steps):
@@ -611,7 +684,7 @@ class AgentOrchestrator:
                 dependencies=step_data.get('dependencies', [])
             )
             steps.append(step)
-        
+
         # Create workflow definition
         workflow = WorkflowDefinition(
             workflow_id=workflow_id,
@@ -622,53 +695,53 @@ class AgentOrchestrator:
             timeout=300,  # 5 minutes default
             max_retries=3
         )
-        
+
         # Register workflow
         await self.workflow_engine.register_workflow(workflow)
-        
+
         # Store workflow definition
         self.workflow_definitions[workflow_id] = {
             'workflow': workflow,
             'fsm_agent': fsm_agent,
             'steps': workflow_steps
         }
-        
+
         logger.info("Created FSM workflow: {}", extra={"workflow_id": workflow_id})
         return workflow_id
-    
+
     @circuit_breaker("orchestrator_execution", CircuitBreakerConfig(failure_threshold=3, recovery_timeout=120))
     async def execute_workflow(self, workflow_id: str, input_data: Dict[str, Any],
                              execution_id: Optional[str] = None) -> WorkflowExecution:
         """Execute a workflow with circuit breaker protection"""
         return await self.workflow_engine.execute_workflow(workflow_id, input_data, execution_id)
-    
+
     async def execute_fsm_workflow(self, query: str, workflow_steps: List[Dict[str, Any]],
-                                 fsm_agent: FSMReActAgent = None) -> Dict[str, Any]:
+                                 fsm_agent: 'FSMReActAgent' = None) -> Dict[str, Any]:
         """Execute a workflow using FSM agent directly"""
-        
+
         if fsm_agent is None:
             # Use default FSM agent if available
             if 'default' in self.fsm_agents:
                 fsm_agent = self.fsm_agents['default']
             else:
                 raise ValueError("No FSM agent provided and no default agent available")
-        
+
         try:
             # Execute FSM agent with workflow steps
             result = await fsm_agent.run(query)
-            
+
             # Process workflow steps if needed
             workflow_results = []
             for step in workflow_steps:
                 step_result = await self._execute_workflow_step(step, result, fsm_agent)
                 workflow_results.append(step_result)
-            
+
             return {
                 'fsm_result': result,
                 'workflow_results': workflow_results,
                 'success': True
             }
-            
+
         except Exception as e:
             logger.error("FSM workflow execution failed: {}", extra={"e": e})
             return {
@@ -677,12 +750,12 @@ class AgentOrchestrator:
                 'success': False,
                 'error': str(e)
             }
-    
+
     async def _execute_workflow_step(self, step: Dict[str, Any], fsm_result: Any,
-                                   fsm_agent: FSMReActAgent) -> Dict[str, Any]:
+                                   fsm_agent: 'FSMReActAgent') -> Dict[str, Any]:
         """Execute a single workflow step"""
         step_type = step.get('type', 'tool')
-        
+
         if step_type == 'tool':
             # Execute tool using FSM agent's tools
             tool_name = step.get('tool_name')
@@ -694,7 +767,7 @@ class AgentOrchestrator:
                             return {'step_type': 'tool', 'tool_name': tool_name, 'result': result}
                         except Exception as e:
                             return {'step_type': 'tool', 'tool_name': tool_name, 'error': str(e)}
-        
+
         elif step_type == 'agent':
             # Execute sub-agent
             agent_id = step.get('agent_id')
@@ -704,21 +777,21 @@ class AgentOrchestrator:
                     return {'step_type': 'agent', 'agent_id': agent_id, 'result': result}
                 except Exception as e:
                     return {'step_type': 'agent', 'agent_id': agent_id, 'error': str(e)}
-        
+
         return {'step_type': step_type, 'error': 'Unknown step type'}
-    
+
     async def get_workflow_status(self, execution_id: str) -> Optional[WorkflowExecution]:
         """Get workflow execution status"""
         return await self.workflow_engine.get_execution_status(execution_id)
-    
+
     async def cancel_workflow(self, execution_id: str) -> bool:
         """Cancel a running workflow"""
         return await self.workflow_engine.cancel_execution(execution_id)
-    
+
     def get_available_workflows(self) -> List[str]:
         """Get list of available workflow IDs"""
         return list(self.workflow_definitions.keys())
-    
+
     def get_fsm_agents(self) -> List[str]:
         """Get list of registered FSM agent IDs"""
-        return list(self.fsm_agents.keys()) 
+        return list(self.fsm_agents.keys())

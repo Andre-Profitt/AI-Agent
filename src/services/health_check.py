@@ -1,13 +1,37 @@
+from examples.enhanced_unified_example import health
+from examples.parallel_execution_example import summary
+
+from src.config.integrations import is_valid
+from src.config.settings import issues
+from src.core.llamaindex_enhanced import LLAMAINDEX_AVAILABLE
+from src.infrastructure.config_cli import api_keys
+from src.infrastructure.database import client
+from src.services.health_check import embedding_status
+from src.services.health_check import health_checks
+from src.services.health_check import healthy_count
+from src.services.health_check import key_value
+from src.services.health_check import total_count
+from src.services.integration_manager import connection_pool
+from src.tools_introspection import name
+
+from src.agents.advanced_agent_fsm import Agent
+# TODO: Fix undefined variables: Any, Dict, LLAMAINDEX_AVAILABLE, api_keys, client, connection_pool, crewai, datetime, e, embedding_status, env_var, health, health_checks, healthy_count, integration, integration_name, is_valid, issues, key_value, logging, name, os, summary, total_count
+
 """
+from typing import Dict
+# TODO: Fix undefined variables: LLAMAINDEX_AVAILABLE, api_keys, client, connection_pool, crewai, e, embedding_status, env_var, health, health_checks, healthy_count, integration, integration_name, is_valid, issues, key_value, langchain, name, summary, total_count
+
 Health Check Module for AI Agent
 Provides comprehensive health monitoring for all integrations including
 Supabase, LangChain, CrewAI, LlamaIndex, and GAIA components.
 """
 
+from typing import Any
+
 import logging
-from typing import Dict, Any, Optional
+
 from datetime import datetime
-import asyncio
+
 import os
 
 try:
@@ -24,13 +48,13 @@ logger = logging.getLogger(__name__)
 
 async def check_integrations_health() -> Dict[str, Any]:
     """Check health of all integrations"""
-    
+
     health = {
         "timestamp": datetime.now().isoformat(),
         "overall_status": "unknown",
         "integrations": {}
     }
-    
+
     # Check Supabase
     if await integration_config.supabase.is_configured_safe():
         try:
@@ -58,7 +82,7 @@ async def check_integrations_health() -> Dict[str, Any]:
             "status": "not_configured",
             "details": "Supabase not configured"
         }
-    
+
     # Check LlamaIndex
     try:
         from .llamaindex_enhanced import LLAMAINDEX_AVAILABLE
@@ -77,7 +101,7 @@ async def check_integrations_health() -> Dict[str, Any]:
             "status": "error",
             "details": f"Error checking LlamaIndex: {str(e)}"
         }
-    
+
     # Check LangChain
     try:
         import langchain
@@ -95,7 +119,7 @@ async def check_integrations_health() -> Dict[str, Any]:
             "status": "error",
             "details": f"Error checking LangChain: {str(e)}"
         }
-    
+
     # Check CrewAI
     try:
         import crewai
@@ -113,14 +137,14 @@ async def check_integrations_health() -> Dict[str, Any]:
             "status": "error",
             "details": f"Error checking CrewAI: {str(e)}"
         }
-    
+
     # Check API Keys
     api_keys = {
         "openai": "OPENAI_API_KEY",
         "anthropic": "ANTHROPIC_API_KEY",
         "groq": "GROQ_API_KEY"
     }
-    
+
     health["api_keys"] = {}
     for name, env_var in api_keys.items():
         key_value = os.getenv(env_var)
@@ -134,48 +158,48 @@ async def check_integrations_health() -> Dict[str, Any]:
                 "status": "not_configured",
                 "details": "API key not set"
             }
-    
+
     # Check Configuration
     is_valid, issues = integration_config.validate()
     health["configuration"] = {
         "status": "valid" if is_valid else "invalid",
         "issues": issues if issues else []
     }
-    
+
     # Determine overall status
     healthy_count = 0
     total_count = 0
-    
+
     for integration in health["integrations"].values():
         total_count += 1
         if integration["status"] in ["healthy", "available"]:
             healthy_count += 1
-    
+
     if healthy_count == total_count:
         health["overall_status"] = "healthy"
     elif healthy_count > 0:
         health["overall_status"] = "degraded"
     else:
         health["overall_status"] = "unhealthy"
-    
+
     return health
 
 async def check_specific_integration(integration_name: str) -> Dict[str, Any]:
     """Check health of a specific integration"""
-    
+
     health_checks = {
         "supabase": _check_supabase_health,
         "llamaindex": _check_llamaindex_health,
         "langchain": _check_langchain_health,
         "crewai": _check_crewai_health
     }
-    
+
     if integration_name not in health_checks:
         return {
             "status": "error",
             "details": f"Unknown integration: {integration_name}"
         }
-    
+
     try:
         return await health_checks[integration_name]()
     except Exception as e:
@@ -191,21 +215,20 @@ async def _check_supabase_health() -> Dict[str, Any]:
             "status": "not_configured",
             "details": "Supabase URL and key not configured"
         }
-    
+
     try:
-        from .database_enhanced import connection_pool
-        
+
         if not connection_pool or not connection_pool._initialized:
             return {
                 "status": "unhealthy",
                 "details": "Connection pool not initialized"
             }
-        
+
         # Test database connection
         async with connection_pool.get_client() as client:
             # Test basic query
             result = await client.table("knowledge_base").select("count").limit(1).execute()
-            
+
             # Test vector search function
             await client.rpc(
                 'match_documents',
@@ -214,14 +237,14 @@ async def _check_supabase_health() -> Dict[str, Any]:
                     'match_count': 1
                 }
             ).execute()
-        
+
         return {
             "status": "healthy",
             "details": "Database connection and functions working",
             "pool_size": connection_pool.pool_size,
             "pool_initialized": connection_pool._initialized
         }
-        
+
     except Exception as e:
         return {
             "status": "unhealthy",
@@ -231,29 +254,28 @@ async def _check_supabase_health() -> Dict[str, Any]:
 async def _check_llamaindex_health() -> Dict[str, Any]:
     """Detailed LlamaIndex health check"""
     try:
-        from .llamaindex_enhanced import LLAMAINDEX_AVAILABLE
-        
+
         if not LLAMAINDEX_AVAILABLE:
             return {
                 "status": "not_installed",
                 "details": "LlamaIndex package not available"
             }
-        
+
         # Test basic imports
         from llama_index import VectorStoreIndex, Document
         from llama_index.embeddings import OpenAIEmbedding, HuggingFaceEmbedding
-        
+
         # Check if embedding models are available
         embedding_status = "local_only"
         if os.getenv("OPENAI_API_KEY"):
             embedding_status = "openai_available"
-        
+
         return {
             "status": "available",
             "details": "LlamaIndex package installed and imports working",
             "embedding_status": embedding_status
         }
-        
+
     except Exception as e:
         return {
             "status": "error",
@@ -263,15 +285,14 @@ async def _check_llamaindex_health() -> Dict[str, Any]:
 async def _check_langchain_health() -> Dict[str, Any]:
     """Detailed LangChain health check"""
     try:
-        import langchain
         from langchain.schema import Document
-        
+
         return {
             "status": "available",
             "details": "LangChain package installed and imports working",
             "version": langchain.__version__
         }
-        
+
     except ImportError:
         return {
             "status": "not_installed",
@@ -286,15 +307,14 @@ async def _check_langchain_health() -> Dict[str, Any]:
 async def _check_crewai_health() -> Dict[str, Any]:
     """Detailed CrewAI health check"""
     try:
-        import crewai
         from crewai import Agent, Task, Crew
-        
+
         return {
             "status": "available",
             "details": "CrewAI package installed and imports working",
             "version": crewai.__version__
         }
-        
+
     except ImportError:
         return {
             "status": "not_installed",
@@ -318,5 +338,5 @@ def get_health_summary() -> Dict[str, Any]:
             "groq": bool(os.getenv("GROQ_API_KEY"))
         }
     }
-    
-    return summary 
+
+    return summary

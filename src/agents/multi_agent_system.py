@@ -1,12 +1,74 @@
+from agent import query
+from agent import tools
+from app import error_msg
+from examples.enhanced_unified_example import agent_configs
+from examples.enhanced_unified_example import final_answer
+from examples.parallel_execution_example import agents
+from examples.parallel_execution_example import tool_name
+from migrations.env import config
+from performance_dashboard import stats
+
+from src.agents.advanced_hybrid_architecture import research_result
+from src.agents.crew_enhanced import crew
+from src.agents.crew_workflow import Crew
+from src.agents.multi_agent_system import fallback_tools
+from src.agents.multi_agent_system import plan_result
+from src.agents.multi_agent_system import planning_task
+from src.agents.multi_agent_system import reliability
+from src.agents.multi_agent_system import reliable_tools
+from src.agents.multi_agent_system import role_tools
+from src.agents.multi_agent_system import suitable_tools
+from src.agents.multi_agent_system import tool_schema
+from src.agents.multi_agent_system import verification_result
+from src.agents.multi_agent_system import verification_task
+from src.core.optimized_chain_of_thought import step
+from src.database.models import agent_tools
+from src.database.models import role
+from src.database.models import tool
+from src.database_extended import success_count
+from src.database_extended import total_calls
+from src.gaia_components.multi_agent_orchestrator import research_task
+from src.gaia_components.multi_agent_orchestrator import synthesis_task
+from src.infrastructure.config.configuration_service import model_config
+from src.services.integration_hub import get_tool_orchestrator
+from src.services.integration_hub import get_unified_registry
+from src.services.integration_hub import tool_categories
+from src.tools.registry import category
+from src.utils.tools_introspection import tool_introspector
+
+import logging
+from src.agents.advanced_agent_fsm import AgentCapability
+
+from src.tools.base_tool import Tool
+
+from src.tools.base_tool import BaseTool
+
+from src.agents.advanced_agent_fsm import Agent
+from multiprocessing import Process
+from src.gaia_components.multi_agent_orchestrator import Agent
+from src.gaia_components.multi_agent_orchestrator import Task
+from src.shared.types.di_types import BaseTool
+# TODO: Fix undefined variables: Any, Crew, Dict, Enum, List, Optional, Process, agent_configs, agent_tools, agents, category, config, crew, dataclass, e, error_msg, fallback_tools, final_answer, logging, model_config, plan_result, planning_task, query, reliability, reliable_tools, research_result, research_task, role, role_tools, stats, step, success_count, suitable_tools, synthesis_task, tool_categories, tool_introspector, tool_name, tool_schema, tools, total_calls, verification_result, verification_task
+from pydantic import Field
+
+from src.services.integration_hub import get_tool_orchestrator
+from src.services.integration_hub import get_unified_registry
+from src.tools.base_tool import tool
+
+# TODO: Fix undefined variables: BaseModel, Crew, Field, agent_configs, agent_tools, agents, category, config, crew, e, error_msg, fallback_tools, final_answer, get_tool_orchestrator, get_unified_registry, model_config, plan_result, planning_task, query, reliability, reliable_tools, research_result, research_task, role, role_tools, self, stats, step, success_count, suitable_tools, synthesis_task, tool, tool_categories, tool_introspector, tool_name, tool_schema, tools, total_calls, verification_result, verification_task
+
+logger = logging.getLogger(__name__)
+from typing import Optional
+from typing import Dict
+from typing import Any
+
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
-import logging
 from pydantic import BaseModel, Field
 
 from crewai import Agent, Task, Crew, Process
 from langchain.tools import BaseTool
-from langchain_core.messages import BaseMessage
 
 # --- Multi-Agent System Architecture ---
 
@@ -37,52 +99,52 @@ class AgentState:
 
 class MultiAgentSystem:
     """Orchestrates a team of specialized agents with unified tool management"""
-    
+
     def __init__(self, tools: List[BaseTool], model_config: Dict[str, Any] = None):
         self.tools = tools
         self.model_config = model_config or {}
         self.state = AgentState(query="", findings={}, errors=[])
-        
+
         # Initialize unified tool registry integration
         try:
             from src.integration_hub import get_unified_registry, get_tool_orchestrator
             self.unified_registry = get_unified_registry()
             self.tool_orchestrator = get_tool_orchestrator()
-            
+
             # Register tools with unified registry
             for tool in tools:
                 self.unified_registry.register(tool)
-            
+
             logger.info("Multi-agent system registered {} tools with unified registry", extra={"len_tools_": len(tools)})
-            
+
         except ImportError:
             logger.warning("Unified tool registry not available, using local tools")
             self.unified_registry = None
             self.tool_orchestrator = None
-        
+
         # Initialize tool introspection
         try:
             from src.tools_introspection import tool_introspector
             self.tool_introspector = tool_introspector
-            
+
             # Register tools with introspector
             for tool in tools:
                 if hasattr(tool, 'name'):
                     self.tool_introspector.tool_registry[tool.name] = tool
-            
+
             logger.info("Multi-agent system initialized with tool introspection")
-            
+
         except ImportError:
             logger.warning("Tool introspection not available")
             self.tool_introspector = None
-        
+
         # Initialize specialized agents
         self.agents = self._create_agent_team()
-        
+
     def _create_agent_team(self) -> Dict[AgentRole, Agent]:
         """Create a team of specialized agents with tool introspection"""
         agents = {}
-        
+
         # Define agent configurations with tool assignments
         agent_configs = {
             AgentRole.PLANNER: {
@@ -121,12 +183,12 @@ class MultiAgentSystem:
                 "verbose": True
             }
         }
-        
+
         # Create agents with appropriate tools
         for role, config in agent_configs.items():
             # Get tools for this agent role
             agent_tools = self._get_tools_for_role(role, config["tool_categories"])
-            
+
             agents[role] = Agent(
                 role=config["role"],
                 goal=config["goal"],
@@ -134,21 +196,21 @@ class MultiAgentSystem:
                 tools=agent_tools,
                 verbose=config["verbose"]
             )
-            
+
             logger.info("Created {} agent with {} tools", extra={"role": role, "len_agent_tools_": len(agent_tools)})
-        
+
         return agents
-    
+
     def _get_tools_for_role(self, role: AgentRole, tool_categories: List[str]) -> List[BaseTool]:
         """Get tools suitable for a specific agent role using introspection and reliability"""
         if not tool_categories:
             return []
-        
+
         # Use unified registry if available
         if self.unified_registry:
             # Get reliable tools for this role
             reliable_tools = self.unified_registry.get_tools_by_reliability(min_success_rate=0.7)
-            
+
             # Filter by role-specific categories
             role_tools = []
             for tool in reliable_tools:
@@ -156,11 +218,11 @@ class MultiAgentSystem:
                     # Check if tool matches any category for this role
                     if any(category in tool.name.lower() for category in tool_categories):
                         role_tools.append(tool)
-            
+
             if role_tools:
                 logger.info("Found {} reliable tools for {}", extra={"len_role_tools_": len(role_tools), "role": role})
                 return role_tools
-        
+
         # Fallback to tool introspection
         if self.tool_introspector:
             try:
@@ -170,45 +232,45 @@ class MultiAgentSystem:
                     if hasattr(tool, 'name'):
                         # Analyze tool capabilities for this role
                         tool_schema = self.tool_introspector.get_tool_schema(tool.name)
-                        if tool_schema and any(category in tool_schema.get("description", "").lower() 
+                        if tool_schema and any(category in tool_schema.get("description", "").lower()
                                              for category in tool_categories):
                             suitable_tools.append(tool)
-                
+
                 if suitable_tools:
                     logger.info("Found {} suitable tools for {} via introspection", extra={"len_suitable_tools_": len(suitable_tools), "role": role})
                     return suitable_tools
-                    
+
             except Exception as e:
                 logger.warning("Tool introspection failed for {}: {}", extra={"role": role, "e": e})
-        
+
         # Final fallback: return tools that match category names
         fallback_tools = []
         for tool in self.tools:
             if hasattr(tool, 'name'):
                 if any(category in tool.name.lower() for category in tool_categories):
                     fallback_tools.append(tool)
-        
+
         logger.info("Using {} fallback tools for {}", extra={"len_fallback_tools_": len(fallback_tools), "role": role})
         return fallback_tools
-    
+
     def _filter_by_reliability(self, tools: List[BaseTool]) -> List[BaseTool]:
         """Filter tools by reliability score"""
         if not self.unified_registry:
             return tools
-        
+
         reliable_tools = []
         for tool in tools:
             if hasattr(tool, 'name'):
                 reliability = self.unified_registry.tool_reliability.get(tool.name, {})
                 total_calls = reliability.get("total_calls", 0)
                 success_count = reliability.get("success_count", 0)
-                
+
                 # Include tools with good reliability or new tools
                 if total_calls == 0 or (success_count / total_calls >= 0.7):
                     reliable_tools.append(tool)
-        
+
         return reliable_tools
-    
+
     def _create_planning_task(self, query: str) -> Task:
         """Create a planning task"""
         return Task(
@@ -216,7 +278,7 @@ class MultiAgentSystem:
             agent=self.agents[AgentRole.PLANNER],
             expected_output="A list of specific steps to accomplish the task"
         )
-        
+
     def _create_research_task(self, query: str) -> Task:
         """Create a research task"""
         return Task(
@@ -224,7 +286,7 @@ class MultiAgentSystem:
             agent=self.agents[AgentRole.RESEARCHER],
             expected_output="Comprehensive research findings with sources"
         )
-        
+
     def _create_execution_task(self, step: Dict[str, Any]) -> Task:
         """Create an execution task for a specific step"""
         return Task(
@@ -232,7 +294,7 @@ class MultiAgentSystem:
             agent=self.agents[AgentRole.EXECUTOR],
             expected_output="Results of executing the step"
         )
-        
+
     def _create_verification_task(self, findings: Dict[str, Any]) -> Task:
         """Create a verification task"""
         return Task(
@@ -240,7 +302,7 @@ class MultiAgentSystem:
             agent=self.agents[AgentRole.VERIFIER],
             expected_output="Verification results and any identified issues"
         )
-        
+
     def _create_synthesis_task(self, query: str, findings: Dict[str, Any]) -> Task:
         """Create a synthesis task"""
         return Task(
@@ -248,13 +310,13 @@ class MultiAgentSystem:
             agent=self.agents[AgentRole.SYNTHESIZER],
             expected_output="A clear, accurate, and well-structured answer"
         )
-        
+
     def process_query(self, query: str) -> str:
         """Process a user query using the multi-agent system with enhanced tool management"""
         try:
             # Update state
             self.state.query = query
-            
+
             # Create the crew
             crew = Crew(
                 agents=list(self.agents.values()),
@@ -262,72 +324,72 @@ class MultiAgentSystem:
                 process=Process.sequential,
                 verbose=True
             )
-            
+
             # Create initial planning task
             planning_task = self._create_planning_task(query)
             crew.tasks.append(planning_task)
-            
+
             # Execute planning
             plan_result = crew.kickoff()
             self.state.plan = plan_result
-            
+
             # Create and execute research task
             research_task = self._create_research_task(query)
             crew.tasks.append(research_task)
             research_result = crew.kickoff()
             self.state.findings = research_result
-            
+
             # Create and execute verification task
             verification_task = self._create_verification_task(research_result)
             crew.tasks.append(verification_task)
             verification_result = crew.kickoff()
             self.state.verification_results = verification_result
-            
+
             # Create and execute synthesis task
             synthesis_task = self._create_synthesis_task(query, research_result)
             crew.tasks.append(synthesis_task)
             final_answer = crew.kickoff()
             self.state.final_answer = final_answer
-            
+
             # Update tool reliability metrics if orchestrator is available
             if self.tool_orchestrator:
                 self._update_tool_metrics()
-            
+
             return final_answer
-            
+
         except Exception as e:
             error_msg = f"Error in multi-agent system: {str(e)}"
             self.state.errors.append(error_msg)
             logging.error(error_msg)
             raise
-    
+
     def _update_tool_metrics(self):
         """Update tool reliability metrics based on execution results"""
         if not self.tool_orchestrator or not self.unified_registry:
             return
-        
+
         try:
             # This would update metrics based on tool usage during execution
             # For now, this is a placeholder for the actual implementation
             logger.debug("Tool metrics would be updated here")
-            
+
         except Exception as e:
             logger.warning("Failed to update tool metrics: {}", extra={"e": e})
-            
+
     def get_state(self) -> AgentState:
         """Get the current state of the multi-agent system"""
         return self.state
-    
+
     def get_tool_usage_stats(self) -> Dict[str, Any]:
         """Get tool usage statistics for the multi-agent system"""
         if not self.unified_registry:
             return {}
-        
+
         stats = {}
         for tool_name, reliability in self.unified_registry.tool_reliability.items():
             total_calls = reliability.get("total_calls", 0)
             success_count = reliability.get("success_count", 0)
-            
+
             if total_calls > 0:
                 stats[tool_name] = {
                     "total_calls": total_calls,
@@ -335,5 +397,5 @@ class MultiAgentSystem:
                     "avg_latency": reliability.get("avg_latency", 0.0),
                     "last_used": reliability.get("last_used")
                 }
-        
-        return stats 
+
+        return stats

@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
+from src.tools.base_tool import Tool
+
+from src.agents.advanced_agent_fsm import Agent
+
 """
+
+from fastapi import status
+from typing import Any
+from typing import Dict
+from typing import Optional
 GAIA Testing Framework for Advanced ReAct Agent Performance
 Comprehensive evaluation and iteration system for sophisticated reasoning.
 """
@@ -222,7 +231,7 @@ class GAIATestSuite:
         for i, question in enumerate(self.questions, 1):
             if verbose:
                 logger.info("\n🔍 Test {}/{}: {}", extra={"i": i, "len_self_questions_": len(self.questions), "question_id": question.id})
-                logger.info("   Question: {}{}", extra={"question_question_": question.question[, "______if_len_question_question____80_else___": '...' if len(question.question) > 80 else ''})
+                logger.info(f"   Question: {question.question[:80]}{'...' if len(question.question) > 80 else ''}")
             
             result = self._test_single_question(agent, question, verbose)
 

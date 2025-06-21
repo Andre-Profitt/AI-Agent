@@ -1,4 +1,41 @@
+from agent import response
+from app import msg
+from benchmarks.cot_performance import successful
+from examples.enhanced_unified_example import task
+from examples.enhanced_unified_example import tasks
+from examples.parallel_execution_example import results
+from tests.load_test import data
+
+from src.api_server import message
+from src.collaboration.realtime_collaboration import handler
+from src.core.langchain_enhanced import future
+from src.database.models import agent_id
+from src.database.models import priority
+from src.unified_architecture.communication import expired_messages
+from src.unified_architecture.communication import expired_responses
+from src.unified_architecture.communication import heartbeat_message
+from src.unified_architecture.communication import recipient_message
+from src.unified_architecture.communication import recipients
+from src.unified_architecture.communication import response_message
+from src.unified_architecture.communication import subscribers
+from src.unified_architecture.communication import topic_message
+from src.workflow.workflow_automation import timeout
+
+from src.agents.advanced_agent_fsm import Agent
+
+from src.agents.advanced_agent_fsm import AgentMessage
+from collections import deque
+from dataclasses import field
+from enum import auto
+from typing import Any
+from typing import Callable
+from typing import Set
+# TODO: Fix undefined variables: agent_id, auto, cls, data, expired_messages, expired_responses, future, handler, heartbeat_message, message, message_handler, msg, msg_id, original_message, priority, queue, r, recipient_message, recipients, response, response_message, results, subscribers, successful, task, tasks, timeout, topic, topic_message, agent_id, cls, data, expired_messages, expired_responses, future, handler, heartbeat_message, message, message_handler, msg, msg_id, original_message, priority, queue, r, recipient_message, recipients, response, response_message, results, self, subscribers, successful, task, tasks, timeout, topic, topic_message
+# TODO: Fix undefined variables: agent_id, auto, cls, data, expired_messages, expired_responses, future, handler, heartbeat_message, message, message_handler, msg, msg_id, original_message, priority, queue, r, recipient_message, recipients, response, response_message, results, subscribers, successful, task, tasks, timeout, topic, topic_message, agent_id, cls, data, expired_messages, expired_responses, future, handler, heartbeat_message, message, message_handler, msg, msg_id, original_message, priority, queue, r, recipient_message, recipients, response, response_message, results, self, subscribers, successful, task, tasks, timeout, topic, topic_message
+
 """
+
+from fastapi import status
 Communication Protocol for Multi-Agent System
 
 This module provides inter-agent messaging system:
@@ -17,6 +54,22 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 import logging
 from typing import Optional, Dict, Any, List, Union, Tuple
+from collections import defaultdict
+from collections import deque
+from dataclasses import dataclass
+from dataclasses import field
+from enum import Enum
+from math import e
+from typing import Any
+from typing import Callable
+from typing import Dict
+from typing import Optional
+from typing import Set
+import logging
+import time
+import uuid
+
+from fastapi import status
 
 logger = logging.getLogger(__name__)
 
@@ -382,8 +435,8 @@ class CommunicationProtocol:
                 self.message_history.remove(msg)
         
         if expired_responses or expired_messages:
-            logger.debug("Cleaned up {} expired responses "
-                        f"and {} expired messages", extra={"len_expired_responses_": len(expired_responses), "len_expired_messages_": len(expired_messages)})
+            logger.debug(f"Cleaned up {len(expired_responses)} expired responses "
+                        f"and {len(expired_messages)} expired messages")
     
     async def shutdown(self) -> Any:
         """Shutdown the communication protocol"""

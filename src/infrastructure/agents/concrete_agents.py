@@ -1,30 +1,80 @@
+from agent import tools
+from examples.enhanced_unified_example import execution_time
+from examples.enhanced_unified_example import start_time
+from examples.enhanced_unified_example import task
+from migrations.env import config
+
+from src.application.agents.agent_factory import specialization
+from src.database.models import agent_id
+from src.database.models import role
+from src.gaia_components.advanced_reasoning_engine import strategy
+from src.infrastructure.agents.concrete_agents import base_capabilities
+from src.infrastructure.agents.concrete_agents import collab_task
+from src.infrastructure.agents.concrete_agents import enhanced_task
+from src.infrastructure.agents.concrete_agents import followup_task
+from src.infrastructure.agents.concrete_agents import fsm_input
+from src.infrastructure.agents.concrete_agents import memory_key
+from src.infrastructure.agents.concrete_agents import my_result
+from src.infrastructure.agents.concrete_agents import other_capabilities
+from src.infrastructure.agents.concrete_agents import relevant_memory
+from src.infrastructure.agents.concrete_agents import similar
+from src.infrastructure.agents.concrete_agents import similar_results
+from src.infrastructure.agents.concrete_agents import specialization_map
+from src.infrastructure.agents.concrete_agents import task_specializations
+from src.infrastructure.agents.concrete_agents import task_type_key
+from src.infrastructure.config.configuration_service import model_config
+from src.tools_introspection import name
+
+from src.agents.advanced_agent_fsm import AgentCapability
+
+from src.agents.advanced_agent_fsm import AgentStatus
+
+from src.agents.advanced_agent_fsm import Agent
+
+from src.agents.advanced_agent_fsm import IUnifiedAgent
+
+from src.agents.advanced_agent_fsm import FSMReActAgent
+
+from src.agents.advanced_agent_fsm import AgentMetadata
+
+from src.agents.advanced_agent_fsm import BaseAgent
+
+from src.agents.advanced_agent_fsm import FSMReactAgentImpl
+
+from src.agents.advanced_agent_fsm import AgentConfig
+# TODO: Fix undefined variables: Any, Dict, List, agent_id, base_capabilities, cap, collab_task, config, dataclass, datetime, e, enhanced_task, execution_time, followup_task, fsm_input, logging, memory_item, memory_key, model_config, my_result, name, other_agent, other_capabilities, relevant_memory, result, role, similar, similar_results, specialization, specialization_map, start_time, strategy, task, task_specializations, task_type_key, tools
+from src.core.entities.agent import AgentCapability
+
+
 """
+import datetime
+from dataclasses import dataclass
+from typing import Dict
+from datetime import datetime
+from src.application.agents.base_agent import BaseAgent
+from src.unified_architecture.enhanced_platform import AgentCapability
+from src.unified_architecture.enhanced_platform import AgentStatus
+from src.unified_architecture.enhanced_platform import IUnifiedAgent
+from src.unified_architecture.enhanced_platform import TaskResult
+from src.unified_architecture.enhanced_platform import UnifiedTask
+# TODO: Fix undefined variables: agent_id, base_capabilities, cap, collab_task, config, e, enhanced_task, execution_time, followup_task, fsm_input, memory_item, memory_key, model_config, my_result, name, other_agent, other_capabilities, relevant_memory, result, role, self, similar, similar_results, specialization, specialization_map, start_time, strategy, task, task_specializations, task_type_key, tools
+
 Concrete Agent Implementations
 
 This module provides concrete implementations of different agent types
 that implement the IUnifiedAgent interface from the unified architecture.
 """
 
+from typing import Any
+from typing import List
+
 import asyncio
 import logging
-import time
-from typing import Dict, Any, List, Optional, Tuple
-from uuid import UUID, uuid4
-from datetime import datetime, timedelta
-from dataclasses import dataclass, field
 
-from src.core.entities.agent import Agent, AgentType, AgentState
-from src.core.entities.message import Message
 from src.unified_architecture.enhanced_platform import (
     IUnifiedAgent, AgentCapability, AgentStatus, AgentMetadata,
     UnifiedTask, TaskResult, TaskStatus
 )
-from src.application.agents.base_agent import BaseAgent
-from src.agents.advanced_agent_fsm import FSMReActAgent
-from src.agents.enhanced_fsm import EnhancedFSMAgent
-from src.agents.crew_enhanced import CrewEnhancedAgent
-from src.agents.advanced_hybrid_architecture import AdvancedHybridAgent
-
 
 @dataclass
 class AgentConfig:
@@ -37,10 +87,9 @@ class AgentConfig:
     memory_size: int = 1000
     log_level: str = "INFO"
 
-
 class FSMReactAgentImpl(IUnifiedAgent, BaseAgent):
     """Concrete implementation of FSM React Agent"""
-    
+
     def __init__(self, agent_id: str, name: str, tools: List[Any]):
         self.agent_id = agent_id
         self.name = name
@@ -52,11 +101,11 @@ class FSMReactAgentImpl(IUnifiedAgent, BaseAgent):
             AgentCapability.STATE_BASED,
             AgentCapability.EXECUTION
         ]
-        
+
         # Initialize FSM agent
         self.fsm_agent = FSMReActAgent(tools=tools)
         self.logger = logging.getLogger(f"FSMReactAgent-{name}")
-        
+
     async def initialize(self, config: Dict[str, Any]) -> bool:
         """Initialize the agent"""
         try:
@@ -67,26 +116,26 @@ class FSMReactAgentImpl(IUnifiedAgent, BaseAgent):
             self.logger.error("Failed to initialize: {}", extra={"e": e})
             self.status = AgentStatus.ERROR
             return False
-    
+
     async def execute(self, task: UnifiedTask) -> TaskResult:
         """Execute a task using FSM logic"""
         start_time = datetime.now()
         self.status = AgentStatus.BUSY
-        
+
         try:
             # Convert UnifiedTask to FSM agent format
             fsm_input = {
                 "input": task.payload.get("query", ""),
                 "correlation_id": task.task_id
             }
-            
+
             # Execute using FSM agent
             result = await asyncio.to_thread(self.fsm_agent.run, fsm_input)
-            
+
             execution_time = (datetime.now() - start_time).total_seconds()
-            
+
             self.status = AgentStatus.AVAILABLE
-            
+
             return TaskResult(
                 task_id=task.task_id,
                 success=True,
@@ -98,11 +147,11 @@ class FSMReactAgentImpl(IUnifiedAgent, BaseAgent):
                     "tools_used": result.get("tools_used", [])
                 }
             )
-            
+
         except Exception as e:
             self.logger.error("Task execution failed: {}", extra={"e": e})
             self.status = AgentStatus.ERROR
-            
+
             return TaskResult(
                 task_id=task.task_id,
                 success=False,
@@ -111,15 +160,15 @@ class FSMReactAgentImpl(IUnifiedAgent, BaseAgent):
                 agent_id=self.agent_id,
                 error=str(e)
             )
-    
+
     async def get_capabilities(self) -> List[AgentCapability]:
         """Return agent capabilities"""
         return self.capabilities
-    
+
     async def get_status(self) -> AgentStatus:
         """Return current status"""
         return self.status
-    
+
     async def shutdown(self) -> bool:
         """Shutdown the agent"""
         try:
@@ -129,7 +178,7 @@ class FSMReactAgentImpl(IUnifiedAgent, BaseAgent):
         except Exception as e:
             self.logger.error("Shutdown failed: {}", extra={"e": e})
             return False
-    
+
     async def health_check(self) -> Dict[str, Any]:
         """Perform health check"""
         return {
@@ -140,15 +189,15 @@ class FSMReactAgentImpl(IUnifiedAgent, BaseAgent):
             "tools_available": len(self.tools),
             "healthy": self.status != AgentStatus.ERROR
         }
-    
-    async def collaborate(self, other_agent: IUnifiedAgent, 
+
+    async def collaborate(self, other_agent: IUnifiedAgent,
                          task: UnifiedTask) -> TaskResult:
         """Collaborate with another agent"""
         # Simple collaboration: delegate subtasks
         if task.payload.get("collaboration_type") == "sequential":
             # Execute first part
             my_result = await self.execute(task)
-            
+
             # Pass result to other agent
             followup_task = UnifiedTask(
                 task_id=f"{task.task_id}_followup",
@@ -160,15 +209,14 @@ class FSMReactAgentImpl(IUnifiedAgent, BaseAgent):
                 },
                 required_capabilities=task.required_capabilities
             )
-            
-            return await other_agent.execute(followup_task)
-        
-        return await self.execute(task)
 
+            return await other_agent.execute(followup_task)
+
+        return await self.execute(task)
 
 class NextGenAgentImpl(IUnifiedAgent, BaseAgent):
     """Next generation agent with advanced capabilities"""
-    
+
     def __init__(self, agent_id: str, name: str, model_config: Dict[str, Any]):
         self.agent_id = agent_id
         self.name = name
@@ -183,45 +231,45 @@ class NextGenAgentImpl(IUnifiedAgent, BaseAgent):
         ]
         self.logger = logging.getLogger(f"NextGenAgent-{name}")
         self.memory_store: Dict[str, Any] = {}
-        
+
     async def initialize(self, config: Dict[str, Any]) -> bool:
         """Initialize with advanced configuration"""
         try:
             # Initialize model connections
             self.model_endpoint = config.get("model_endpoint", "default")
             self.learning_rate = config.get("learning_rate", 0.01)
-            
+
             self.status = AgentStatus.AVAILABLE
             self.logger.info("Next Gen Agent {} initialized", extra={"self_name": self.name})
             return True
-            
+
         except Exception as e:
             self.logger.error("Initialization failed: {}", extra={"e": e})
             self.status = AgentStatus.ERROR
             return False
-    
+
     async def execute(self, task: UnifiedTask) -> TaskResult:
         """Execute with learning capabilities"""
         start_time = datetime.now()
         self.status = AgentStatus.BUSY
-        
+
         try:
             # Check memory for similar tasks
             similar_results = await self._search_memory(task)
-            
+
             # Plan execution strategy
             strategy = await self._plan_execution(task, similar_results)
-            
+
             # Execute strategy
             result = await self._execute_strategy(strategy, task)
-            
+
             # Learn from execution
             await self._update_memory(task, result)
-            
+
             execution_time = (datetime.now() - start_time).total_seconds()
-            
+
             self.status = AgentStatus.AVAILABLE
-            
+
             return TaskResult(
                 task_id=task.task_id,
                 success=True,
@@ -233,7 +281,7 @@ class NextGenAgentImpl(IUnifiedAgent, BaseAgent):
                     "memory_hits": len(similar_results)
                 }
             )
-            
+
         except Exception as e:
             self.logger.error("Execution failed: {}", extra={"e": e})
             self.status = AgentStatus.ERROR
@@ -245,7 +293,7 @@ class NextGenAgentImpl(IUnifiedAgent, BaseAgent):
                 agent_id=self.agent_id,
                 error=str(e)
             )
-    
+
     async def _search_memory(self, task: UnifiedTask) -> List[Dict[str, Any]]:
         """Search memory for similar tasks"""
         # Simple similarity search
@@ -254,8 +302,8 @@ class NextGenAgentImpl(IUnifiedAgent, BaseAgent):
             if memory_item.get("task_type") == task.task_type:
                 similar.append(memory_item)
         return similar[:5]  # Return top 5
-    
-    async def _plan_execution(self, task: UnifiedTask, 
+
+    async def _plan_execution(self, task: UnifiedTask,
                             similar_results: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Plan execution strategy"""
         strategy = {
@@ -263,25 +311,25 @@ class NextGenAgentImpl(IUnifiedAgent, BaseAgent):
             "steps": [],
             "confidence": 0.8
         }
-        
+
         if similar_results:
             # Use previous successful strategies
             strategy["approach"] = "experience_based"
             strategy["confidence"] = 0.9
-        
+
         return strategy
-    
-    async def _execute_strategy(self, strategy: Dict[str, Any], 
+
+    async def _execute_strategy(self, strategy: Dict[str, Any],
                               task: UnifiedTask) -> Any:
         """Execute planned strategy"""
         # Simulate advanced execution
         await asyncio.sleep(1)  # Simulate processing
-        
+
         return {
             "answer": f"Processed {task.task_type} using {strategy['approach']}",
             "confidence": strategy["confidence"]
         }
-    
+
     async def _update_memory(self, task: UnifiedTask, result: Any):
         """Update memory with new experience"""
         memory_key = f"{task.task_type}_{len(self.memory_store)}"
@@ -291,13 +339,13 @@ class NextGenAgentImpl(IUnifiedAgent, BaseAgent):
             "result": result,
             "timestamp": datetime.now().isoformat()
         }
-    
+
     async def get_capabilities(self) -> List[AgentCapability]:
         return self.capabilities
-    
+
     async def get_status(self) -> AgentStatus:
         return self.status
-    
+
     async def shutdown(self) -> bool:
         try:
             # Save memory state
@@ -307,7 +355,7 @@ class NextGenAgentImpl(IUnifiedAgent, BaseAgent):
         except Exception as e:
             self.logger.error("Shutdown failed: {}", extra={"e": e})
             return False
-    
+
     async def health_check(self) -> Dict[str, Any]:
         return {
             "agent_id": self.agent_id,
@@ -317,13 +365,13 @@ class NextGenAgentImpl(IUnifiedAgent, BaseAgent):
             "memory_size": len(self.memory_store),
             "healthy": self.status != AgentStatus.ERROR
         }
-    
-    async def collaborate(self, other_agent: IUnifiedAgent, 
+
+    async def collaborate(self, other_agent: IUnifiedAgent,
                          task: UnifiedTask) -> TaskResult:
         """Advanced collaboration with knowledge sharing"""
         # Share relevant memory with other agent
         relevant_memory = await self._search_memory(task)
-        
+
         enhanced_task = UnifiedTask(
             task_id=f"{task.task_id}_collab",
             task_type=task.task_type,
@@ -334,13 +382,12 @@ class NextGenAgentImpl(IUnifiedAgent, BaseAgent):
             },
             required_capabilities=task.required_capabilities
         )
-        
-        return await other_agent.execute(enhanced_task)
 
+        return await other_agent.execute(enhanced_task)
 
 class CrewAgentImpl(IUnifiedAgent, BaseAgent):
     """Crew agent for team-based collaboration"""
-    
+
     def __init__(self, agent_id: str, name: str, role: str):
         self.agent_id = agent_id
         self.name = name
@@ -353,27 +400,27 @@ class CrewAgentImpl(IUnifiedAgent, BaseAgent):
         ]
         self.team_members: List[str] = []
         self.logger = logging.getLogger(f"CrewAgent-{name}")
-        
+
     async def initialize(self, config: Dict[str, Any]) -> bool:
         """Initialize crew agent"""
         try:
             self.team_id = config.get("team_id", "default_team")
             self.coordination_strategy = config.get("strategy", "democratic")
-            
+
             self.status = AgentStatus.AVAILABLE
             self.logger.info("Crew Agent {} ({}) initialized", extra={"self_name": self.name, "self_role": self.role})
             return True
-            
+
         except Exception as e:
             self.logger.error("Initialization failed: {}", extra={"e": e})
             self.status = AgentStatus.ERROR
             return False
-    
+
     async def execute(self, task: UnifiedTask) -> TaskResult:
         """Execute task with crew coordination"""
         start_time = datetime.now()
         self.status = AgentStatus.BUSY
-        
+
         try:
             # Role-based execution
             if self.role == "coordinator":
@@ -384,11 +431,11 @@ class CrewAgentImpl(IUnifiedAgent, BaseAgent):
                 result = await self._execute_task(task)
             else:
                 result = await self._default_execution(task)
-            
+
             execution_time = (datetime.now() - start_time).total_seconds()
-            
+
             self.status = AgentStatus.AVAILABLE
-            
+
             return TaskResult(
                 task_id=task.task_id,
                 success=True,
@@ -400,7 +447,7 @@ class CrewAgentImpl(IUnifiedAgent, BaseAgent):
                     "team_id": self.team_id
                 }
             )
-            
+
         except Exception as e:
             self.logger.error("Execution failed: {}", extra={"e": e})
             self.status = AgentStatus.ERROR
@@ -412,42 +459,42 @@ class CrewAgentImpl(IUnifiedAgent, BaseAgent):
                 agent_id=self.agent_id,
                 error=str(e)
             )
-    
+
     async def _coordinate_task(self, task: UnifiedTask) -> Any:
         """Coordinate task among team members"""
         return {
             "coordination_plan": "Task distributed to team",
             "assignments": []
         }
-    
+
     async def _research_task(self, task: UnifiedTask) -> Any:
         """Research and gather information"""
         return {
             "research_findings": "Relevant information gathered",
             "sources": []
         }
-    
+
     async def _execute_task(self, task: UnifiedTask) -> Any:
         """Execute the actual task"""
         return {
             "execution_result": "Task completed successfully",
             "details": {}
         }
-    
+
     async def _default_execution(self, task: UnifiedTask) -> Any:
         """Default execution for undefined roles"""
         return {"result": "Task processed by crew member"}
-    
+
     async def get_capabilities(self) -> List[AgentCapability]:
         return self.capabilities
-    
+
     async def get_status(self) -> AgentStatus:
         return self.status
-    
+
     async def shutdown(self) -> bool:
         self.status = AgentStatus.OFFLINE
         return True
-    
+
     async def health_check(self) -> Dict[str, Any]:
         return {
             "agent_id": self.agent_id,
@@ -457,8 +504,8 @@ class CrewAgentImpl(IUnifiedAgent, BaseAgent):
             "team_id": self.team_id,
             "healthy": self.status != AgentStatus.ERROR
         }
-    
-    async def collaborate(self, other_agent: IUnifiedAgent, 
+
+    async def collaborate(self, other_agent: IUnifiedAgent,
                          task: UnifiedTask) -> TaskResult:
         """Crew-based collaboration"""
         # Coordinate with other crew members
@@ -467,13 +514,12 @@ class CrewAgentImpl(IUnifiedAgent, BaseAgent):
             if self.role == "coordinator" and getattr(other_agent, 'role') == "executor":
                 # Coordinator delegates to executor
                 return await other_agent.execute(task)
-        
-        return await self.execute(task)
 
+        return await self.execute(task)
 
 class SpecializedAgentImpl(IUnifiedAgent, BaseAgent):
     """Specialized agent for domain-specific tasks"""
-    
+
     def __init__(self, agent_id: str, name: str, specialization: str):
         self.agent_id = agent_id
         self.name = name
@@ -481,52 +527,52 @@ class SpecializedAgentImpl(IUnifiedAgent, BaseAgent):
         self.status = AgentStatus.IDLE
         self.capabilities = self._determine_capabilities(specialization)
         self.logger = logging.getLogger(f"SpecializedAgent-{name}")
-        
+
     def _determine_capabilities(self, specialization: str) -> List[AgentCapability]:
         """Determine capabilities based on specialization"""
         base_capabilities = [AgentCapability.EXECUTION]
-        
+
         specialization_map = {
             "data_analysis": [AgentCapability.REASONING, AgentCapability.PLANNING],
             "code_generation": [AgentCapability.TOOL_USE, AgentCapability.EXECUTION],
             "research": [AgentCapability.MEMORY_ACCESS, AgentCapability.REASONING],
             "creative": [AgentCapability.PLANNING, AgentCapability.COLLABORATION]
         }
-        
+
         return base_capabilities + specialization_map.get(specialization, [])
-    
+
     async def initialize(self, config: Dict[str, Any]) -> bool:
         """Initialize specialized agent"""
         try:
             self.domain_config = config.get("domain_config", {})
             self.expertise_level = config.get("expertise_level", "intermediate")
-            
+
             self.status = AgentStatus.AVAILABLE
             self.logger.info("Specialized Agent {} ({}) initialized", extra={"self_name": self.name, "self_specialization": self.specialization})
             return True
-            
+
         except Exception as e:
             self.logger.error("Initialization failed: {}", extra={"e": e})
             self.status = AgentStatus.ERROR
             return False
-    
+
     async def execute(self, task: UnifiedTask) -> TaskResult:
         """Execute specialized task"""
         start_time = datetime.now()
         self.status = AgentStatus.BUSY
-        
+
         try:
             # Check if task matches specialization
             if not self._can_handle_task(task):
                 raise ValueError(f"Task type {task.task_type} not suitable for {self.specialization}")
-            
+
             # Execute based on specialization
             result = await self._specialized_execution(task)
-            
+
             execution_time = (datetime.now() - start_time).total_seconds()
-            
+
             self.status = AgentStatus.AVAILABLE
-            
+
             return TaskResult(
                 task_id=task.task_id,
                 success=True,
@@ -538,7 +584,7 @@ class SpecializedAgentImpl(IUnifiedAgent, BaseAgent):
                     "expertise_level": self.expertise_level
                 }
             )
-            
+
         except Exception as e:
             self.logger.error("Specialized execution failed: {}", extra={"e": e})
             self.status = AgentStatus.ERROR
@@ -550,7 +596,7 @@ class SpecializedAgentImpl(IUnifiedAgent, BaseAgent):
                 agent_id=self.agent_id,
                 error=str(e)
             )
-    
+
     def _can_handle_task(self, task: UnifiedTask) -> bool:
         """Check if agent can handle the task"""
         task_specializations = {
@@ -559,10 +605,10 @@ class SpecializedAgentImpl(IUnifiedAgent, BaseAgent):
             "research": ["research", "data_analysis"],
             "creative": ["creative", "generation"]
         }
-        
+
         task_type_key = task.task_type.lower()
         return self.specialization in task_specializations.get(task_type_key, [])
-    
+
     async def _specialized_execution(self, task: UnifiedTask) -> Any:
         """Execute based on specialization"""
         if self.specialization == "data_analysis":
@@ -575,7 +621,7 @@ class SpecializedAgentImpl(IUnifiedAgent, BaseAgent):
             return await self._creative_process(task)
         else:
             return {"result": f"Processed by {self.specialization} specialist"}
-    
+
     async def _analyze_data(self, task: UnifiedTask) -> Dict[str, Any]:
         """Specialized data analysis"""
         await asyncio.sleep(0.5)  # Simulate analysis
@@ -584,7 +630,7 @@ class SpecializedAgentImpl(IUnifiedAgent, BaseAgent):
             "findings": ["Pattern detected", "Anomaly found"],
             "confidence": 0.85
         }
-    
+
     async def _generate_code(self, task: UnifiedTask) -> Dict[str, Any]:
         """Specialized code generation"""
         await asyncio.sleep(0.3)  # Simulate generation
@@ -593,7 +639,7 @@ class SpecializedAgentImpl(IUnifiedAgent, BaseAgent):
             "code": "# Generated code\ndef solution():\n    pass",
             "tested": True
         }
-    
+
     async def _conduct_research(self, task: UnifiedTask) -> Dict[str, Any]:
         """Specialized research"""
         await asyncio.sleep(0.7)  # Simulate research
@@ -602,7 +648,7 @@ class SpecializedAgentImpl(IUnifiedAgent, BaseAgent):
             "key_findings": ["Finding 1", "Finding 2"],
             "reliability": "high"
         }
-    
+
     async def _creative_process(self, task: UnifiedTask) -> Dict[str, Any]:
         """Specialized creative process"""
         await asyncio.sleep(0.4)  # Simulate creativity
@@ -610,17 +656,17 @@ class SpecializedAgentImpl(IUnifiedAgent, BaseAgent):
             "creative_output": "Generated creative content",
             "originality_score": 0.9
         }
-    
+
     async def get_capabilities(self) -> List[AgentCapability]:
         return self.capabilities
-    
+
     async def get_status(self) -> AgentStatus:
         return self.status
-    
+
     async def shutdown(self) -> bool:
         self.status = AgentStatus.OFFLINE
         return True
-    
+
     async def health_check(self) -> Dict[str, Any]:
         return {
             "agent_id": self.agent_id,
@@ -631,13 +677,13 @@ class SpecializedAgentImpl(IUnifiedAgent, BaseAgent):
             "expertise_level": self.expertise_level,
             "healthy": self.status != AgentStatus.ERROR
         }
-    
-    async def collaborate(self, other_agent: IUnifiedAgent, 
+
+    async def collaborate(self, other_agent: IUnifiedAgent,
                          task: UnifiedTask) -> TaskResult:
         """Specialized collaboration"""
         # Check if other agent has complementary specialization
         other_capabilities = await other_agent.get_capabilities()
-        
+
         if AgentCapability.COLLABORATION in other_capabilities:
             # Create collaborative task
             collab_task = UnifiedTask(
@@ -650,7 +696,7 @@ class SpecializedAgentImpl(IUnifiedAgent, BaseAgent):
                 },
                 required_capabilities=task.required_capabilities
             )
-            
+
             return await other_agent.execute(collab_task)
-        
-        return await self.execute(task) 
+
+        return await self.execute(task)

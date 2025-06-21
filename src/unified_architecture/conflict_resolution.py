@@ -1,4 +1,70 @@
+from app import history
+from examples.enhanced_unified_example import metrics
+from examples.enhanced_unified_example import task
+from examples.parallel_execution_example import agents
+from setup_environment import value
+from tests.load_test import data
+
+from src.agents.enhanced_fsm import state
+from src.api_server import conflict
+from src.api_server import resource
+from src.collaboration.realtime_collaboration import session
+from src.core.monitoring import key
+from src.database.models import action
+from src.database.models import agent_id
+from src.database.models import priority
+from src.gaia_components.advanced_reasoning_engine import strategy
+from src.gaia_components.enhanced_memory_system import current_time
+from src.gaia_components.multi_agent_orchestrator import agent_scores
+from src.meta_cognition import score
+from src.services.integration_hub import limit
+from src.unified_architecture.conflict_resolution import agent_priorities
+from src.unified_architecture.conflict_resolution import avg_score
+from src.unified_architecture.conflict_resolution import common_elements
+from src.unified_architecture.conflict_resolution import competing_agents
+from src.unified_architecture.conflict_resolution import conflict_id
+from src.unified_architecture.conflict_resolution import conflicts_to_remove
+from src.unified_architecture.conflict_resolution import consensus
+from src.unified_architecture.conflict_resolution import consensus_state
+from src.unified_architecture.conflict_resolution import failed_agents
+from src.unified_architecture.conflict_resolution import failure_type
+from src.unified_architecture.conflict_resolution import goals
+from src.unified_architecture.conflict_resolution import importance
+from src.unified_architecture.conflict_resolution import most_common
+from src.unified_architecture.conflict_resolution import negotiation_id
+from src.unified_architecture.conflict_resolution import proposal
+from src.unified_architecture.conflict_resolution import proposals
+from src.unified_architecture.conflict_resolution import ranked_goals
+from src.unified_architecture.conflict_resolution import resolution
+from src.unified_architecture.conflict_resolution import resolution_record
+from src.unified_architecture.conflict_resolution import resolution_time
+from src.unified_architecture.conflict_resolution import retry_config
+from src.unified_architecture.conflict_resolution import selected_index
+from src.unified_architecture.conflict_resolution import severity
+from src.unified_architecture.conflict_resolution import state_counts
+from src.unified_architecture.conflict_resolution import state_str
+from src.unified_architecture.conflict_resolution import states
+from src.unified_architecture.conflict_resolution import total_resolved
+from src.unified_architecture.conflict_resolution import violating_agent
+from src.unified_architecture.conflict_resolution import violation_type
+from src.unified_architecture.conflict_resolution import winner
+from src.unified_architecture.task_distribution import agent_performance
+from src.unified_architecture.task_distribution import selected_agent
+from src.utils.tools_introspection import field
+
+from src.agents.advanced_agent_fsm import Agent
+# TODO: Fix undefined variables: Any, Callable, Dict, Enum, List, Optional, action, agent_id, agent_performance, agent_priorities, agent_scores, agents, auto, avg_score, cls, common_elements, competing_agents, conflict, conflict_id, conflict_type, conflicts_to_remove, consensus, consensus_state, current_time, data, dataclass, defaultdict, deque, e, failed_agents, failure_type, field, goal, goals, history, importance, key, limit, logging, max_age, metrics, most_common, negotiation_config, negotiation_id, priority, proposal, proposal_data, proposals, ranked_goals, record, resolution, resolution_record, resolution_time, resource, retry_config, s, score, selected_agent, selected_index, session, severity, state, state_counts, state_str, states, strategy, task, time, total_resolved, uuid, value, value_counts, violating_agent, violation_type, winner, winner_agent, winner_goal, winner_importance, x
+from src.infrastructure.monitoring.decorators import performance_metrics
+
+
 """
+
+from collections import deque
+from dataclasses import field
+from typing import Any
+from typing import Callable
+from typing import List
+from typing import Optional
 Conflict Resolution for Multi-Agent System
 
 This module provides automated conflict resolution:
@@ -106,8 +172,8 @@ class ConflictResolver:
         self.stats["total_conflicts"] += 1
         self.stats["conflicts_by_type"][conflict.conflict_type.name] += 1
         
-        logger.info("Conflict reported: {} "
-                   f"involving {} (severity: {})", extra={"conflict_conflict_type_name": conflict.conflict_type.name, "conflict_involved_agents": conflict.involved_agents, "conflict_severity": conflict.severity})
+        logger.info(f"Conflict reported: {conflict.conflict_type.name} "
+                   f"involving {conflict.involved_agents} (severity: {conflict.severity})")
         
         # Attempt automatic resolution
         if self.auto_resolve_enabled:

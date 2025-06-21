@@ -1,4 +1,47 @@
+from benchmarks.cot_performance import memory_usage
+from examples.enhanced_unified_example import task
+from examples.integration.unified_architecture_example import requirements
+from setup_environment import info
+from tests.performance.cot_benchmark_suite import p
+
+from src.agents.migrated_enhanced_fsm_agent import optimization
+from src.api_server import resources
+from src.database.models import action
+from src.database.models import agent_id
+from src.database.models import priority
+from src.database.models import resource_type
+from src.infrastructure.monitoring.metrics_integration import available_resources
+from src.unified_architecture.resource_management import active_allocations
+from src.unified_architecture.resource_management import actual_usage
+from src.unified_architecture.resource_management import allocation
+from src.unified_architecture.resource_management import available_amount
+from src.unified_architecture.resource_management import cpu_usage
+from src.unified_architecture.resource_management import device_count
+from src.unified_architecture.resource_management import expired_agents
+from src.unified_architecture.resource_management import handle
+from src.unified_architecture.resource_management import optimization_suggestions
+from src.unified_architecture.resource_management import required_resources
+from src.unified_architecture.resource_management import resource_enum
+from src.unified_architecture.resource_management import time_until_deadline
+from src.unified_architecture.resource_management import total_cpu
+from src.unified_architecture.resource_management import total_gpu
+from src.unified_architecture.resource_management import total_gpu_memory
+from src.unified_architecture.resource_management import total_memory
+from src.unified_architecture.resource_management import usage
+from src.unified_architecture.resource_management import utilization
+from src.utils.tools_introspection import field
+
+from src.agents.advanced_agent_fsm import Agent
+# TODO: Fix undefined variables: Any, Dict, Enum, List, Optional, Tuple, a, action, active_allocations, actual_usage, agent_id, allocation, auto, available_amount, available_resources, cpu_usage, dataclass, defaultdict, deque, device_count, e, expired_agents, field, handle, i, info, k, logging, memory_usage, optimization, optimization_suggestions, p, priority, required_amount, required_resources, requirements, resource_enum, resource_type, resources, task, time, time_until_deadline, total_cpu, total_gpu, total_gpu_memory, total_memory, usage, util_percent, utilization, v, x
+
 """
+
+from collections import deque
+from dataclasses import field
+from typing import Any
+from typing import List
+from typing import Optional
+from typing import Tuple
 Resource Management for Multi-Agent System
 
 This module provides resource allocation and monitoring:
@@ -144,9 +187,9 @@ class ResourceManager:
                 self.stats["total_allocations"] += 1
                 self.stats["active_allocations"] += 1
                 
-                logger.info("Allocated resources to agent {}: "
-                           f"CPU={}, "
-                           f"Memory={}MB", extra={"agent_id": agent_id, "allocation_cpu_cores": allocation.cpu_cores, "allocation_memory_mb": allocation.memory_mb})
+                logger.info(f"Allocated resources to agent {agent_id}: "
+                           f"CPU={allocation.cpu_cores}, "
+                           f"Memory={allocation.memory_mb}MB")
                 return True
             else:
                 self.stats["failed_allocations"] += 1

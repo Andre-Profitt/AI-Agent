@@ -1,4 +1,61 @@
+from benchmarks.cot_performance import times
+from examples.enhanced_unified_example import health
+from examples.enhanced_unified_example import metrics
+from examples.parallel_execution_example import agents
+from performance_dashboard import alerts
+from performance_dashboard import cutoff_time
+from performance_dashboard import metric
+
+from src.core.entities.agent import Agent
+from src.database.models import agent_id
+from src.database.models import metadata
+from src.gaia_components.monitoring import values
+from src.gaia_components.multi_agent_orchestrator import total_tasks
+from src.gaia_components.performance_optimization import entry
+from src.gaia_components.performance_optimization import successes
+from src.infrastructure.monitoring.metrics import performance_tracker
+from src.services.integration_hub import registry
+from src.unified_architecture.dashboard import agent_details
+from src.unified_architecture.dashboard import agent_history
+from src.unified_architecture.dashboard import agents_with_capability
+from src.unified_architecture.dashboard import all_exec_times
+from src.unified_architecture.dashboard import all_successes
+from src.unified_architecture.dashboard import cap_key
+from src.unified_architecture.dashboard import capability_analysis
+from src.unified_architecture.dashboard import capability_clusters
+from src.unified_architecture.dashboard import collaborations
+from src.unified_architecture.dashboard import network
+from src.unified_architecture.dashboard import overview
+from src.unified_architecture.dashboard import partner
+from src.unified_architecture.dashboard import performance_alerts
+from src.unified_architecture.dashboard import recent_tasks
+from src.unified_architecture.dashboard import timestamps
+from src.unified_architecture.dashboard import total_execution_time
+from src.unified_architecture.dashboard import total_successes
+from src.unified_architecture.dashboard import trend
+from src.unified_architecture.dashboard import trend_analysis
+from src.unified_architecture.enhanced_platform import agent1
+from src.unified_architecture.enhanced_platform import agent2
+from src.unified_architecture.registry import agent_ids
+from src.unified_architecture.registry import capability_counts
+from src.unified_architecture.registry import health_results
+from src.unified_architecture.registry import status_counts
+from src.unified_architecture.shared_memory import export_data
+
+from src.agents.advanced_agent_fsm import Agent
+# TODO: Fix undefined variables: Any, Dict, List, Optional, a, agent1, agent2, agent_details, agent_history, agent_id, agent_ids, agents, agents_with_capability, alert, alerts, all_exec_times, all_successes, cap, cap_key, capability, capability_analysis, capability_clusters, capability_counts, collab_metrics, collaborations, cutoff_time, datetime, defaultdict, deque, e, entry, export_data, health, health_results, logging, metadata, metric, metrics, network, overview, partner, performance_alerts, performance_tracker, recent_tasks, record, registry, status_counts, successes, time, time_window, times, timestamps, total_execution_time, total_successes, total_tasks, trend, trend_analysis, values
+from tests.test_gaia_agent import agent
+
+
 """
+import datetime
+from collections import deque
+from typing import Dict
+from datetime import datetime
+from src.infrastructure.monitoring.metrics import PerformanceTracker
+from src.unified_architecture.registry import AgentRegistry
+# TODO: Fix undefined variables: a, agent, agent1, agent2, agent_details, agent_history, agent_id, agent_ids, agents, agents_with_capability, alert, alerts, all_exec_times, all_successes, cap, cap_key, capability, capability_analysis, capability_clusters, capability_counts, collab_metrics, collaborations, cutoff_time, e, entry, export_data, health, health_results, metadata, metric, metrics, network, overview, partner, performance_alerts, performance_tracker, recent_tasks, record, registry, self, status_counts, successes, time_window, times, timestamps, total_execution_time, total_successes, total_tasks, trend, trend_analysis, values
+
 Collaboration Dashboard for Multi-Agent System
 
 This module provides monitoring and analytics:
@@ -8,12 +65,16 @@ This module provides monitoring and analytics:
 - Real-time monitoring capabilities
 """
 
+from typing import Optional
+from typing import Any
+from typing import List
+
 import asyncio
 import time
 import numpy as np
-from typing import Dict, List, Optional, Any, Tuple
+
 from collections import defaultdict, deque
-from datetime import datetime, timedelta
+
 import logging
 
 from .registry import AgentRegistry
@@ -23,15 +84,15 @@ logger = logging.getLogger(__name__)
 
 class CollaborationDashboard:
     """Dashboard for monitoring multi-agent collaboration"""
-    
-    def __init__(self, registry: AgentRegistry, 
+
+    def __init__(self, registry: AgentRegistry,
                  performance_tracker: PerformanceTracker):
         self.registry = registry
         self.performance_tracker = performance_tracker
         self.metrics_cache: Dict[str, Any] = {}
         self.cache_ttl = 60  # 1 minute
         self.last_cache_update = 0
-        
+
         # Real-time monitoring
         self.monitoring_active = False
         self.monitoring_interval = 30  # seconds
@@ -41,19 +102,19 @@ class CollaborationDashboard:
             "resource_utilization": 0.9,  # 90%
             "agent_failures": 3  # consecutive failures
         }
-        
+
         # Historical data
         self.historical_metrics: deque = deque(maxlen=1000)
-        
+
     async def get_system_overview(self) -> Dict[str, Any]:
         """Get system-wide collaboration metrics"""
         # Check cache
         if time.time() - self.last_cache_update < self.cache_ttl:
             return self.metrics_cache
-        
+
         # Calculate fresh metrics
         agents = list(self.registry.registry.values())
-        
+
         overview = {
             "total_agents": len(agents),
             "active_agents": sum(1 for a in agents if a.status.value in [1, 2]),  # IDLE, AVAILABLE
@@ -66,35 +127,35 @@ class CollaborationDashboard:
             "alerts": await self._get_active_alerts(),
             "timestamp": datetime.utcnow().isoformat()
         }
-        
+
         # Update cache
         self.metrics_cache = overview
         self.last_cache_update = time.time()
-        
+
         # Store in historical data
         self.historical_metrics.append({
             "timestamp": time.time(),
             "overview": overview
         })
-        
+
         return overview
-    
+
     def _get_agent_breakdown(self, agents: List[Any]) -> Dict[str, Any]:
         """Get breakdown of agents by capability and status"""
         capability_counts = defaultdict(int)
         status_counts = defaultdict(int)
-        
+
         for agent in agents:
             for capability in agent.capabilities:
                 capability_counts[capability.name] += 1
-            
+
             status_counts[agent.status.name] += 1
-        
+
         return {
             "by_capability": dict(capability_counts),
             "by_status": dict(status_counts)
         }
-    
+
     def _get_collaboration_network(self) -> Dict[str, Any]:
         """Get collaboration network metrics"""
         network = {
@@ -102,12 +163,12 @@ class CollaborationDashboard:
             "edges": [],
             "clusters": []
         }
-        
+
         # Add nodes (agents)
         for agent_id in self.registry.registry:
             metadata = self.registry.registry[agent_id]
             metrics = self.performance_tracker.get_agent_metrics(agent_id)
-            
+
             network["nodes"].append({
                 "id": agent_id,
                 "name": metadata.name,
@@ -117,7 +178,7 @@ class CollaborationDashboard:
                 "total_tasks": metrics.get("total_tasks", 0),
                 "reliability_score": metadata.reliability_score
             })
-        
+
         # Add edges (collaborations)
         for (agent1, agent2), metrics in self.performance_tracker.collaboration_metrics.items():
             network["edges"].append({
@@ -126,13 +187,13 @@ class CollaborationDashboard:
                 "weight": metrics.get("avg_score", 0.0),
                 "count": metrics.get("total_collaborations", 0)
             })
-        
+
         # Identify clusters (simplified - agents with same capabilities)
         capability_clusters = defaultdict(list)
         for agent_id, metadata in self.registry.registry.items():
             cap_key = tuple(sorted(cap.name for cap in metadata.capabilities))
             capability_clusters[cap_key].append(agent_id)
-        
+
         for cap_key, agent_ids in capability_clusters.items():
             if len(agent_ids) > 1:
                 network["clusters"].append({
@@ -140,20 +201,20 @@ class CollaborationDashboard:
                     "agents": agent_ids,
                     "size": len(agent_ids)
                 })
-        
+
         return network
-    
+
     def _get_performance_summary(self) -> Dict[str, Any]:
         """Get overall performance summary"""
         all_exec_times = []
         all_successes = []
-        
+
         for times in self.performance_tracker.execution_times.values():
             all_exec_times.extend(times)
-        
+
         for successes in self.performance_tracker.success_rates.values():
             all_successes.extend(successes)
-        
+
         if not all_exec_times:
             return {
                 "avg_execution_time": 0.0,
@@ -165,7 +226,7 @@ class CollaborationDashboard:
                     "p99": 0.0
                 }
             }
-        
+
         return {
             "avg_execution_time": np.mean(all_exec_times),
             "overall_success_rate": sum(all_successes) / len(all_successes),
@@ -176,7 +237,7 @@ class CollaborationDashboard:
                 "p99": np.percentile(all_exec_times, 99)
             }
         }
-    
+
     def _get_resource_utilization(self) -> Dict[str, float]:
         """Get current resource utilization"""
         # This would integrate with resource manager
@@ -187,16 +248,16 @@ class CollaborationDashboard:
             "gpu_utilization": 0.0,
             "network_utilization": 0.0
         }
-    
+
     async def _get_active_alerts(self) -> List[Dict[str, Any]]:
         """Get active system alerts"""
         alerts = []
-        
+
         # Check performance alerts
         performance_alerts = self.performance_tracker.get_performance_alerts(
             time_window=3600  # Last hour
         )
-        
+
         for alert in performance_alerts:
             alerts.append({
                 "type": "performance",
@@ -205,7 +266,7 @@ class CollaborationDashboard:
                 "agent_id": alert.get("agent_id"),
                 "timestamp": alert.get("timestamp", time.time())
             })
-        
+
         # Check agent health
         health_results = await self.registry.check_agent_health()
         for agent_id, health in health_results.items():
@@ -217,17 +278,17 @@ class CollaborationDashboard:
                     "agent_id": agent_id,
                     "timestamp": time.time()
                 })
-        
+
         return alerts
-    
+
     async def get_agent_details(self, agent_id: str) -> Optional[Dict[str, Any]]:
         """Get detailed metrics for a specific agent"""
         metadata = await self.registry.get_agent(agent_id)
         if not metadata:
             return None
-        
+
         metrics = self.performance_tracker.get_agent_metrics(agent_id)
-        
+
         # Get collaboration partners
         collaborations = []
         for (agent1, agent2), collab_metrics in self.performance_tracker.collaboration_metrics.items():
@@ -238,7 +299,7 @@ class CollaborationDashboard:
                     "score": collab_metrics.get("avg_score", 0.0),
                     "count": collab_metrics.get("total_collaborations", 0)
                 })
-        
+
         # Get recent task history
         recent_tasks = []
         agent_history = self.performance_tracker.agent_performance_history.get(agent_id, [])
@@ -249,7 +310,7 @@ class CollaborationDashboard:
                 "success": entry.get("success"),
                 "timestamp": entry.get("timestamp")
             })
-        
+
         return {
             "metadata": {
                 "name": metadata.name,
@@ -264,13 +325,13 @@ class CollaborationDashboard:
             "recent_tasks": recent_tasks,
             "last_seen": metadata.last_seen.isoformat()
         }
-    
+
     async def get_capability_analysis(self, capability: str) -> Dict[str, Any]:
         """Get analysis for a specific capability"""
         agents_with_capability = await self.registry.get_agents_by_capability(
             getattr(self.registry.registry[list(self.registry.registry.keys())[0]].capabilities[0].__class__, capability, None)
         )
-        
+
         if not agents_with_capability:
             return {
                 "capability": capability,
@@ -278,18 +339,18 @@ class CollaborationDashboard:
                 "performance": {},
                 "utilization": 0.0
             }
-        
+
         # Aggregate performance metrics
         total_tasks = 0
         total_successes = 0
         total_execution_time = 0.0
-        
+
         for agent in agents_with_capability:
             metrics = self.performance_tracker.get_agent_metrics(agent.agent_id)
             total_tasks += metrics.get("total_tasks", 0)
             total_successes += int(metrics.get("success_rate", 0) * metrics.get("total_tasks", 0))
             total_execution_time += metrics.get("avg_execution_time", 0) * metrics.get("total_tasks", 0)
-        
+
         return {
             "capability": capability,
             "total_agents": len(agents_with_capability),
@@ -300,7 +361,7 @@ class CollaborationDashboard:
             },
             "utilization": len([a for a in agents_with_capability if a.status.value in [1, 2]]) / len(agents_with_capability)
         }
-    
+
     async def get_trend_analysis(self, metric: str, time_window: int = 3600) -> Dict[str, Any]:
         """Get trend analysis for a specific metric"""
         if not self.historical_metrics:
@@ -310,16 +371,16 @@ class CollaborationDashboard:
                 "values": [],
                 "timestamps": []
             }
-        
+
         # Extract metric values from historical data
         values = []
         timestamps = []
         cutoff_time = time.time() - time_window
-        
+
         for record in self.historical_metrics:
             if record["timestamp"] >= cutoff_time:
                 overview = record["overview"]
-                
+
                 if metric == "total_agents":
                     values.append(overview["total_agents"])
                 elif metric == "active_agents":
@@ -328,9 +389,9 @@ class CollaborationDashboard:
                     values.append(overview["performance_summary"]["overall_success_rate"])
                 elif metric == "avg_execution_time":
                     values.append(overview["performance_summary"]["avg_execution_time"])
-                
+
                 timestamps.append(record["timestamp"])
-        
+
         if len(values) < 2:
             return {
                 "metric": metric,
@@ -338,7 +399,7 @@ class CollaborationDashboard:
                 "values": values,
                 "timestamps": timestamps
             }
-        
+
         # Calculate trend
         if values[-1] > values[0] * 1.1:
             trend = "increasing"
@@ -346,7 +407,7 @@ class CollaborationDashboard:
             trend = "decreasing"
         else:
             trend = "stable"
-        
+
         return {
             "metric": metric,
             "trend": trend,
@@ -355,71 +416,71 @@ class CollaborationDashboard:
             "current_value": values[-1] if values else 0,
             "change_percent": ((values[-1] - values[0]) / values[0] * 100) if values and values[0] != 0 else 0
         }
-    
+
     async def start_monitoring(self):
         """Start real-time monitoring"""
         if self.monitoring_active:
             return
-        
+
         self.monitoring_active = True
         logger.info("Started real-time monitoring")
-        
+
         while self.monitoring_active:
             try:
                 # Update metrics
                 await self.get_system_overview()
-                
+
                 # Check for alerts
                 alerts = await self._get_active_alerts()
                 if alerts:
                     logger.warning("Active alerts: {}", extra={"len_alerts_": len(alerts)})
                     for alert in alerts:
                         logger.warning("Alert: {}", extra={"alert__message_": alert['message']})
-                
+
                 await asyncio.sleep(self.monitoring_interval)
-                
+
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error("Error in monitoring loop: {}", extra={"e": e})
                 await asyncio.sleep(self.monitoring_interval)
-    
+
     async def stop_monitoring(self):
         """Stop real-time monitoring"""
         self.monitoring_active = False
         logger.info("Stopped real-time monitoring")
-    
+
     async def export_dashboard_data(self, format: str = "json") -> Dict[str, Any]:
         """Export dashboard data for external analysis"""
         overview = await self.get_system_overview()
-        
+
         export_data = {
             "overview": overview,
             "agents": {},
             "capabilities": {},
             "trends": {}
         }
-        
+
         # Export agent details
         for agent_id in self.registry.registry:
             agent_details = await self.get_agent_details(agent_id)
             if agent_details:
                 export_data["agents"][agent_id] = agent_details
-        
+
         # Export capability analysis
         for capability in ["REASONING", "TOOL_USE", "COLLABORATION", "PLANNING"]:
             capability_analysis = await self.get_capability_analysis(capability)
             export_data["capabilities"][capability] = capability_analysis
-        
+
         # Export trend analysis
         for metric in ["total_agents", "active_agents", "success_rate", "avg_execution_time"]:
             trend_analysis = await self.get_trend_analysis(metric)
             export_data["trends"][metric] = trend_analysis
-        
+
         export_data["exported_at"] = datetime.utcnow().isoformat()
-        
+
         return export_data
-    
+
     def get_dashboard_stats(self) -> Dict[str, Any]:
         """Get dashboard statistics"""
         return {
@@ -428,4 +489,4 @@ class CollaborationDashboard:
             "monitoring_active": self.monitoring_active,
             "last_update": self.last_cache_update,
             "cache_ttl": self.cache_ttl
-        } 
+        }

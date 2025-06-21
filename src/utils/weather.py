@@ -1,12 +1,27 @@
+# TODO: Fix undefined variables: BaseModel, Field, api_key, data, e, location, params, response, tool, units, url, weather
 """
 Weather tool implementation.
 """
+from agent import response
+from migrations.env import url
+from tests.load_test import data
+
+from src.config.integrations import api_key
+from src.database.models import tool
+from src.query_classifier import params
+from src.utils.weather import weather
+
 
 import os
 import requests
-from typing import Optional, Dict, Any
+
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
+# TODO: Fix undefined variables: api_key, data, e, location, os, params, response, units, url, weather
+from pydantic import Field
+
+from src.tools.base_tool import tool
+
 
 class WeatherInput(BaseModel):
     """Input schema for weather tool."""
@@ -17,11 +32,11 @@ class WeatherInput(BaseModel):
 def get_weather(location: str, units: str = "metric") -> str:
     """
     Get current weather for a location.
-    
+
     Args:
         location (str): Location to get weather for
         units (str): Units (metric/imperial)
-        
+
     Returns:
         str: Weather information or error message
     """
@@ -30,7 +45,7 @@ def get_weather(location: str, units: str = "metric") -> str:
         api_key = os.getenv("OPENWEATHER_API_KEY")
         if not api_key:
             return "Error: OPENWEATHER_API_KEY environment variable not set"
-            
+
         # Make API request
         url = f"http://api.openweathermap.org/data/2.5/weather"
         params = {
@@ -38,12 +53,12 @@ def get_weather(location: str, units: str = "metric") -> str:
             "appid": api_key,
             "units": units
         }
-        
+
         response = requests.get(url, params=params)
         response.raise_for_status()
-        
+
         data = response.json()
-        
+
         # Format weather information
         weather = {
             "location": data["name"],
@@ -52,8 +67,8 @@ def get_weather(location: str, units: str = "metric") -> str:
             "humidity": data["main"]["humidity"],
             "wind_speed": data["wind"]["speed"]
         }
-        
+
         return str(weather)
-                
+
     except Exception as e:
-        return f"Error getting weather: {str(e)}" 
+        return f"Error getting weather: {str(e)}"

@@ -1,9 +1,32 @@
+from examples.enhanced_unified_example import start_time
+from examples.enhanced_unified_example import task
+from examples.enhanced_unified_example import tasks
+
+from src.collaboration.realtime_collaboration import event
+from src.collaboration.realtime_collaboration import handler
+from src.database.models import priority
+from src.infrastructure.database_enhanced import subscription
+from src.infrastructure.events.event_bus import avg_processing_time
+from src.infrastructure.events.event_bus import events
+from src.infrastructure.events.event_bus import insert_index
+from src.infrastructure.events.event_bus import processing_time
+from src.services.integration_hub import limit
+
 """
+
+from typing import Any
+from typing import Awaitable
+from typing import Callable
+from typing import List
+from typing import Optional
+from typing import Set
+from typing import Union
 Event-driven architecture implementation for decoupled component communication.
 
 Usage Example:
     from src.infrastructure.events.event_bus import get_event_bus, Event, EventType
     import asyncio
+# TODO: Fix undefined variables: Any, Awaitable, Callable, Dict, Event, EventFilter, EventSubscription, EventType, List, Optional, Set, UUID, Union, avg_processing_time, cid, e, et, event, event_type, event_types, events, filter_fn, handler, i, insert_index, json, limit, logging, max_queue_size, priority, processing_time, start_time, sub, subscription, subscription_id, task, tasks, time
     
     async def my_handler(event: Event):
         logger.info("Handled event: {} from {}", extra={"event_type": event.type, "event_source": event.source})
@@ -202,7 +225,7 @@ class EventBus:
         try:
             await subscription.handle_event(event)
         except Exception as e:
-            logger.error("Handler error: %s\n%s", e, traceback.format_exc(), ,
+            logger.error("Handler error: %s\n%s", e, traceback.format_exc(),
                          extra={"event_id": str(event.id), "handler": str(subscription.handler)})
     
     def _add_to_history(self, event: Event) -> None:

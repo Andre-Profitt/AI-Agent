@@ -1,4 +1,48 @@
+from benchmarks.cot_performance import duration
+from examples.basic.demo_hybrid_architecture import percentage
+from examples.enhanced_unified_example import start_time
+from performance_dashboard import cpu_percent
+from performance_dashboard import metric
+from tests.load_test import args
+from tests.load_test import success
+from tests.unit.simple_test import func
+
+from src.application.tools.tool_executor import operation
+from src.core.health_check import disk
+from src.core.monitoring import memory
+from src.database.models import agent_id
+from src.database.models import agent_type
+from src.database.models import component
+from src.database.models import labels
+from src.database.models import metadata
+from src.database.models import priority
+from src.database.models import resource_type
+from src.database.models import status
+from src.database.supabase_manager import table
+from src.gaia_components.production_vector_store import count
+from src.infrastructure.monitoring.metrics import operation_id
+from src.tools_introspection import error
+from src.tools_introspection import error_type
+from src.tools_introspection import name
+from src.unified_architecture.conflict_resolution import severity
+from src.unified_architecture.enhanced_platform import task_type
+
+from src.agents.advanced_agent_fsm import Agent
+# TODO: Fix undefined variables: Any, CONTENT_TYPE_LATEST, Callable, CollectorRegistry, Dict, Optional, agent_id, agent_type, args, asynccontextmanager, component, contextmanager, count, cpu_percent, database, dataclass, disk, duration, e, endpoint, error, error_type, func, generate_latest, interval, kwargs, labels, logging, memory, metadata, metric, name, operation, operation_id, operation_name, percentage, priority, resource_type, result, service, severity, size, start_time, status, success, table, task_type, threading, time
+from prometheus_client import Counter
+from prometheus_client import Gauge
+from prometheus_client import Histogram
+
+
 """
+
+from collections import Counter
+from contextlib import contextmanager
+from fastapi import status
+from sqlalchemy import func
+from typing import Any
+from typing import Callable
+from typing import Optional
 Comprehensive Metrics Collection System
 Provides Prometheus metrics, timing decorators, and distributed tracing
 """
@@ -11,7 +55,6 @@ from dataclasses import dataclass
 from contextlib import asynccontextmanager, contextmanager
 import logging
 from prometheus_client import (
-from typing import Optional, Dict, Any, List, Union, Tuple
     Counter, Histogram, Gauge, Summary, 
     generate_latest, CONTENT_TYPE_LATEST,
     CollectorRegistry, multiprocess

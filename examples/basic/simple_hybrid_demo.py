@@ -1,8 +1,82 @@
 #!/usr/bin/env python3
+from agent import query
+from agent import tools
+from benchmarks.cot_performance import current
+from benchmarks.cot_performance import template
+from examples.basic.demo_enhanced_fsm import fsm
+from examples.basic.simple_hybrid_demo import complexity_analyzer
+from examples.basic.simple_hybrid_demo import current_thought
+from examples.basic.simple_hybrid_demo import factors
+from examples.basic.simple_hybrid_demo import final_prob
+from examples.basic.simple_hybrid_demo import learned_prob
+from examples.basic.simple_hybrid_demo import max_depth
+from examples.basic.simple_hybrid_demo import mode
+from examples.basic.simple_hybrid_demo import next_thought
+from examples.basic.simple_hybrid_demo import observation
+from examples.basic.simple_hybrid_demo import possible_transitions
+from examples.basic.simple_hybrid_demo import probs
+from examples.basic.simple_hybrid_demo import selected
+from examples.basic.simple_hybrid_demo import selected_tool
+from examples.basic.simple_hybrid_demo import template_library
+from examples.basic.simple_hybrid_demo import transitions
+from examples.enhanced_unified_example import execution_time
+from examples.enhanced_unified_example import start_time
+from examples.enhanced_unified_example import task
+from examples.enhanced_unified_example import tasks
+from examples.parallel_execution_example import tool_name
+from tests.load_test import args
+from tests.load_test import queries
+from tests.load_test import success
+
+from src.agents.enhanced_fsm import state
+from src.agents.enhanced_fsm import transition
+from src.application.tools.tool_executor import expression
+from src.core.entities.agent import Agent
+from src.core.monitoring import key
+from src.core.optimized_chain_of_thought import cached
+from src.core.optimized_chain_of_thought import cot
+from src.core.optimized_chain_of_thought import idx
+from src.core.optimized_chain_of_thought import query_hash
+from src.core.optimized_chain_of_thought import steps
+from src.core.optimized_chain_of_thought import thought
+from src.core.optimized_chain_of_thought import words
+from src.database.models import action
+from src.database.models import text
+from src.database.models import tool
+from src.gaia_components.adaptive_tool_system import available_tools
+from src.gaia_components.multi_agent_orchestrator import performance_score
+from src.meta_cognition import complexity
+from src.meta_cognition import query_lower
+from src.tools_introspection import description
+from src.tools_introspection import name
+from src.unified_architecture.conflict_resolution import states
+from src.unified_architecture.enhanced_platform import alpha
+from src.unified_architecture.enhanced_platform import task_type
+from src.utils.knowledge_utils import word
+from src.utils.tools_introspection import field
+
+from collections import deque
+
+from src.tools.base_tool import Tool
+
+from src.agents.advanced_agent_fsm import Agent
+# TODO: Fix undefined variables: Any, Callable, Dict, List, Optional, action, alpha, args, available_tools, cached, complexity, complexity_analyzer, context, cot, current, current_thought, dataclass, defaultdict, deque, description, e, execution_time, expression, factors, field, final_prob, fsm, function, i, idx, json, key, kwargs, learned_prob, logging, max_depth, max_steps, mode, name, next_thought, observation, performance_score, possible_transitions, probs, queries, query, query_hash, query_lower, result, selected, selected_tool, start_time, state, state_data, state_name, states, step_num, steps, success, t, task, task_type, tasks, template, template_library, text, thought, time, tool_name, tools, transition, transitions, w, word, words, x
+from tests.test_gaia_agent import agent
+
+from src.tools.base_tool import tool
+
+# TODO: Fix undefined variables: action, agent, alpha, args, available_tools, cached, complexity, complexity_analyzer, context, cot, current, current_thought, description, e, execution_time, expression, factors, final_prob, fsm, function, hashlib, i, idx, key, kwargs, learned_prob, max_depth, max_steps, mode, name, next_thought, observation, performance_score, possible_transitions, probs, queries, query, query_hash, query_lower, result, selected, selected_tool, self, start_time, state, state_data, state_name, states, step_num, steps, success, t, task, task_type, tasks, template, template_library, text, thought, tool, tool_name, tools, transition, transitions, w, word, words, x
+
 """
 Simplified Demonstration of Advanced AI Agent Architecture
 Shows core concepts without external dependencies
 """
+
+from dataclasses import field
+from typing import List
+from typing import Optional
+from typing import Any
+from typing import Callable
 
 import asyncio
 import logging
@@ -29,7 +103,7 @@ class AgentState:
     data: Dict[str, Any] = field(default_factory=dict)
     confidence: float = 1.0
     timestamp: float = field(default_factory=time.time)
-    
+
 @dataclass
 class Transition:
     """Represents a state transition"""
@@ -38,7 +112,7 @@ class Transition:
     condition: Callable
     probability: float = 1.0
     action: Optional[Callable] = None
-    
+
 @dataclass
 class ReasoningStep:
     """Represents a step in chain of thought reasoning"""
@@ -54,7 +128,7 @@ class ReasoningStep:
 
 class ProbabilisticFSM:
     """Enhanced FSM with probabilistic transitions and learning capabilities"""
-    
+
     def __init__(self, name: str):
         self.name = name
         self.states: Dict[str, AgentState] = {}
@@ -63,27 +137,27 @@ class ProbabilisticFSM:
         self.state_history: deque = deque(maxlen=100)
         self.transition_history: deque = deque(maxlen=1000)
         self.learned_transitions: Dict[tuple, float] = {}
-        
+
     def add_state(self, state: AgentState):
         """Add a state to the FSM"""
         self.states[state.name] = state
-        
+
     def add_transition(self, transition: Transition):
         """Add a transition between states"""
         self.transitions.append(transition)
-        
+
     def set_initial_state(self, state_name: str):
         """Set the initial state"""
         if state_name not in self.states:
             raise ValueError(f"State {state_name} not found")
         self.current_state = self.states[state_name]
         self.state_history.append(self.current_state)
-        
+
     def evaluate_transitions(self) -> List[tuple]:
         """Evaluate all possible transitions from current state"""
         if not self.current_state:
             return []
-            
+
         possible_transitions = []
         for transition in self.transitions:
             if transition.from_state == self.current_state.name:
@@ -93,34 +167,34 @@ class ProbabilisticFSM:
                     learned_prob = self.learned_transitions.get(key, transition.probability)
                     final_prob = 0.7 * transition.probability + 0.3 * learned_prob
                     possible_transitions.append((transition, final_prob))
-                    
+
         return sorted(possible_transitions, key=lambda x: x[1], reverse=True)
-        
+
     def execute_transition(self, transition: Transition):
         """Execute a state transition"""
         if transition.action:
             transition.action(self.current_state)
-            
+
         self.current_state = self.states[transition.to_state]
         self.state_history.append(self.current_state)
         self.transition_history.append((transition, time.time()))
-        
+
         # Update learned probabilities
         self.update_learning(transition)
-        
+
     def update_learning(self, transition: Transition):
         """Update learned transition probabilities based on success"""
         key = (transition.from_state, transition.to_state)
         current = self.learned_transitions.get(key, transition.probability)
         # Simple exponential moving average
         self.learned_transitions[key] = 0.9 * current + 0.1
-        
+
     def step(self) -> bool:
         """Execute one step of the FSM"""
         transitions = self.evaluate_transitions()
         if not transitions:
             return False
-            
+
         # Probabilistic selection
         if len(transitions) == 1:
             selected = transitions[0][0]
@@ -129,7 +203,7 @@ class ProbabilisticFSM:
             probs = np.array(probs) / sum(probs)
             idx = np.random.choice(len(transitions), p=probs)
             selected = transitions[idx][0]
-            
+
         self.execute_transition(selected)
         return True
 
@@ -139,22 +213,22 @@ class ProbabilisticFSM:
 
 class ChainOfThought:
     """Optimized CoT with adaptive depth and caching"""
-    
+
     def __init__(self, name: str):
         self.name = name
         self.reasoning_cache: Dict[str, List[ReasoningStep]] = {}
         self.complexity_analyzer = ComplexityAnalyzer()
         self.template_library = TemplateLibrary()
-        
+
     def analyze_complexity(self, query: str) -> float:
         """Analyze query complexity to determine reasoning depth"""
         return self.complexity_analyzer.analyze(query)
-        
+
     def get_cached_reasoning(self, query: str) -> Optional[List[ReasoningStep]]:
         """Check if we have cached reasoning for similar queries"""
         query_hash = hashlib.md5(query.encode()).hexdigest()
         return self.reasoning_cache.get(query_hash)
-        
+
     def reason(self, query: str, max_depth: Optional[int] = None) -> List[ReasoningStep]:
         """Execute chain of thought reasoning"""
         # Check cache first
@@ -162,53 +236,53 @@ class ChainOfThought:
         if cached:
             logger.info("Using cached reasoning")
             return cached
-            
+
         # Determine reasoning depth based on complexity
         complexity = self.analyze_complexity(query)
         if max_depth is None:
             max_depth = min(int(complexity * 10), 20)
-            
+
         # Select appropriate template
         template = self.template_library.select_template(query)
-        
+
         # Execute reasoning
         steps = self.execute_reasoning(query, template, max_depth)
-        
+
         # Cache successful reasoning
         if steps and steps[-1].confidence > 0.8:
             query_hash = hashlib.md5(query.encode()).hexdigest()
             self.reasoning_cache[query_hash] = steps
-            
+
         return steps
-        
-    def execute_reasoning(self, query: str, template: str, 
+
+    def execute_reasoning(self, query: str, template: str,
                          max_depth: int) -> List[ReasoningStep]:
         """Execute the actual reasoning process"""
         steps = []
         current_thought = query
-        
+
         for i in range(max_depth):
             # Generate next thought based on template
             next_thought = f"{template} Step {i+1}: Analyzing '{current_thought}'"
-            
+
             step = ReasoningStep(
                 step_id=i,
                 thought=next_thought,
                 confidence=0.9 - (i * 0.05)  # Decreasing confidence with depth
             )
             steps.append(step)
-            
+
             # Check if we've reached a conclusion
             if "therefore" in next_thought.lower() or i == max_depth - 1:
                 break
-                
+
             current_thought = next_thought
-            
+
         return steps
 
 class ComplexityAnalyzer:
     """Analyzes query complexity"""
-    
+
     def analyze(self, query: str) -> float:
         """Return complexity score between 0 and 1"""
         # Simplified implementation
@@ -218,13 +292,13 @@ class ComplexityAnalyzer:
             'conjunctions': sum(query.count(w) for w in ['and', 'or', 'but']) / 10,
             'technical_terms': sum(query.count(w) for w in ['calculate', 'analyze', 'evaluate']) / 5
         }
-        
+
         complexity = min(sum(factors.values()) / len(factors), 1.0)
         return complexity
 
 class TemplateLibrary:
     """Library of reasoning templates"""
-    
+
     def __init__(self):
         self.templates = {
             'mathematical': "Let me solve this step by step using mathematical principles.",
@@ -232,11 +306,11 @@ class TemplateLibrary:
             'comparative': "I'll compare and contrast the different aspects.",
             'default': "Let me think through this systematically."
         }
-        
+
     def select_template(self, query: str) -> str:
         """Select appropriate template based on query"""
         query_lower = query.lower()
-        
+
         if any(word in query_lower for word in ['calculate', 'solve', 'compute']):
             return self.templates['mathematical']
         elif any(word in query_lower for word in ['analyze', 'examine', 'investigate']):
@@ -252,29 +326,29 @@ class TemplateLibrary:
 
 class SimpleTool:
     """Simple tool implementation"""
-    
+
     def __init__(self, name: str, function: Callable, description: str):
         self.name = name
         self.function = function
         self.description = description
-    
+
     def run(self, **kwargs):
         return self.function(**kwargs)
 
 class DemoTools:
     """Demo tools for testing"""
-    
+
     @staticmethod
-    def calculator_tool(expression: str) -> dict:
+    def calculator_tool(self, expression: str) -> dict:
         """Simple calculator tool"""
         try:
             result = eval(expression)  # Note: eval is unsafe in production
             return {"result": result, "expression": expression}
         except Exception as e:
             return {"error": str(e), "expression": expression}
-    
+
     @staticmethod
-    def text_analyzer_tool(text: str) -> dict:
+    def text_analyzer_tool(self, text: str) -> dict:
         """Simple text analysis tool"""
         words = text.split()
         return {
@@ -282,9 +356,9 @@ class DemoTools:
             "char_count": len(text),
             "avg_word_length": sum(len(word) for word in words) / len(words) if words else 0
         }
-    
+
     @staticmethod
-    def mock_search_tool(query: str) -> dict:
+    def mock_search_tool(self, query: str) -> dict:
         """Mock search tool"""
         return {
             "results": [
@@ -301,19 +375,19 @@ class DemoTools:
 
 class ReActAgent:
     """Simple ReAct agent implementation"""
-    
+
     def __init__(self, name: str, tools: List[SimpleTool], max_steps: int = 10):
         self.name = name
         self.tools = {tool.name: tool for tool in tools}
         self.max_steps = max_steps
         self.reasoning_history: List[ReasoningStep] = []
         self.tool_usage_stats: Dict[str, int] = defaultdict(int)
-        
+
     def think(self, observation: str, context: Dict[str, Any]) -> str:
         """Generate a thought based on observation"""
         thought = f"Analyzing: {observation}. Context indicates we need to use available tools."
         return thought
-        
+
     def act(self, thought: str, context: Dict[str, Any]) -> tuple:
         """Decide on an action based on thought"""
         available_tools = list(self.tools.keys())
@@ -322,37 +396,37 @@ class ReActAgent:
             self.tool_usage_stats[selected_tool] += 1
             return selected_tool, {}
         return "no_action", None
-        
+
     def execute_tool(self, tool_name: str, args: Dict[str, Any]) -> str:
         """Execute a tool and return observation"""
         if tool_name not in self.tools:
             return f"Tool {tool_name} not found"
-            
+
         tool = self.tools[tool_name]
         try:
             result = tool.run(**args)
             return json.dumps(result)
         except Exception as e:
             return f"Error executing tool: {str(e)}"
-            
+
     async def reasoning_path(self, query: str, context: Dict[str, Any]) -> List[ReasoningStep]:
         """Execute a single reasoning path"""
         steps = []
         observation = query
-        
+
         for step_num in range(self.max_steps):
             # Think
             thought = self.think(observation, context)
-            
+
             # Act
             action, args = self.act(thought, context)
-            
+
             # Execute
             if action != "no_action":
                 observation = self.execute_tool(action, args or {})
             else:
                 observation = "No action taken"
-                
+
             step = ReasoningStep(
                 step_id=step_num,
                 thought=thought,
@@ -361,11 +435,11 @@ class ReActAgent:
                 confidence=0.8 + 0.2 * np.random.random()  # Simulated confidence
             )
             steps.append(step)
-            
+
             # Check if we have a final answer
             if "final_answer" in observation.lower():
                 break
-                
+
         return steps
 
 # =============================
@@ -374,24 +448,24 @@ class ReActAgent:
 
 class HybridAgent:
     """Unified agent combining FSM, ReAct, and CoT"""
-    
+
     def __init__(self, name: str, tools: List[SimpleTool] = None):
         self.name = name
         self.fsm = ProbabilisticFSM(f"{name}_fsm")
         self.react = ReActAgent(f"{name}_react", tools or [])
         self.cot = ChainOfThought(f"{name}_cot")
-        
+
         self.current_mode = "fsm"
         self.mode_performance: Dict[str, float] = {
             "fsm": 0.5,
             "react": 0.5,
             "cot": 0.5
         }
-        
+
     def select_mode(self, task: Dict[str, Any]) -> str:
         """Select the best mode for the current task"""
         task_type = task.get("type", "unknown")
-        
+
         # Simple heuristics for mode selection
         if task_type == "navigation" or task_type == "state_based":
             return "fsm"
@@ -402,16 +476,16 @@ class HybridAgent:
         else:
             # Select based on past performance
             return max(self.mode_performance.items(), key=lambda x: x[1])[0]
-            
+
     async def execute_task(self, task: Dict[str, Any]) -> Any:
         """Execute a task using the appropriate mode"""
         mode = self.select_mode(task)
         self.current_mode = mode
-        
+
         start_time = time.time()
         result = None
         success = False
-        
+
         try:
             if mode == "fsm":
                 result = await self.execute_fsm_task(task)
@@ -419,18 +493,18 @@ class HybridAgent:
                 result = await self.execute_react_task(task)
             elif mode == "cot":
                 result = await self.execute_cot_task(task)
-                
+
             success = result is not None
-            
+
         except Exception as e:
             logger.error(f"Error executing task in {mode} mode: {str(e)}")
-            
+
         # Update performance metrics
         execution_time = time.time() - start_time
         self.update_performance(mode, success, execution_time)
-        
+
         return result
-        
+
     async def execute_fsm_task(self, task: Dict[str, Any]) -> Any:
         """Execute task using FSM"""
         # Setup FSM for the task
@@ -438,42 +512,42 @@ class HybridAgent:
         for state_data in states:
             state = AgentState(name=state_data["name"], data=state_data.get("data", {}))
             self.fsm.add_state(state)
-            
+
         # Run FSM
         self.fsm.set_initial_state(states[0]["name"])
-        
+
         while self.fsm.step():
             await asyncio.sleep(0.1)  # Simulate processing
-            
+
         return {"final_state": self.fsm.current_state.name}
-        
+
     async def execute_react_task(self, task: Dict[str, Any]) -> Any:
         """Execute task using ReAct"""
         query = task.get("query", "")
         context = task.get("context", {})
-        
+
         # Execute reasoning path
         steps = await self.react.reasoning_path(query, context)
-        
+
         return {"reasoning_path": steps}
-        
+
     async def execute_cot_task(self, task: Dict[str, Any]) -> Any:
         """Execute task using Chain of Thought"""
         query = task.get("query", "")
-        
+
         # Execute reasoning
         steps = self.cot.reason(query)
-        
+
         return {"reasoning_steps": steps}
-        
+
     def update_performance(self, mode: str, success: bool, execution_time: float):
         """Update performance metrics for mode selection"""
         # Simple exponential moving average
         alpha = 0.1
         performance_score = (1.0 if success else 0.0) * (1.0 / (1.0 + execution_time))
-        
+
         self.mode_performance[mode] = (
-            (1 - alpha) * self.mode_performance[mode] + 
+            (1 - alpha) * self.mode_performance[mode] +
             alpha * performance_score
         )
 
@@ -486,17 +560,17 @@ async def demo_basic_hybrid_agent():
     print("\n" + "="*60)
     logger.info("DEMO 1: Basic Hybrid Agent")
     print("="*60)
-    
+
     # Create demo tools
     tools = [
         SimpleTool("calculator", DemoTools.calculator_tool, "Perform mathematical calculations"),
         SimpleTool("text_analyzer", DemoTools.text_analyzer_tool, "Analyze text statistics"),
         SimpleTool("search", DemoTools.mock_search_tool, "Search for information")
     ]
-    
+
     # Create hybrid agent
     agent = HybridAgent("demo_agent", tools)
-    
+
     # Test different task types
     tasks = [
         {
@@ -517,15 +591,15 @@ async def demo_basic_hybrid_agent():
             ]
         }
     ]
-    
+
     for i, task in enumerate(tasks, 1):
         logger.info("\n--- Task {}: {} ---", extra={"i": i, "task__type_": task['type']})
         logger.info("Query: {}", extra={"task_get__query____State_based_task__": task.get('query', 'State-based task')})
-        
+
         result = await agent.execute_task(task)
         logger.info("Mode used: {}", extra={"agent_current_mode": agent.current_mode})
         logger.info("Result: {}", extra={"result": result})
-        
+
         # Show performance metrics
         logger.info("Performance by mode: {}", extra={"agent_mode_performance": agent.mode_performance})
 
@@ -534,10 +608,10 @@ async def demo_fsm_learning():
     print("\n" + "="*60)
     logger.info("DEMO 2: FSM Learning")
     print("="*60)
-    
+
     # Create a probabilistic FSM
     fsm = ProbabilisticFSM("learning_fsm")
-    
+
     # Define states
     states = [
         AgentState("idle", {"energy": 100}),
@@ -545,23 +619,23 @@ async def demo_fsm_learning():
         AgentState("resting", {"recovery": 0}),
         AgentState("completed", {"result": None})
     ]
-    
+
     for state in states:
         fsm.add_state(state)
-    
+
     # Define transitions with conditions
-    def has_energy(state):
+    def has_energy(self, state):
         return state.data.get("energy", 0) > 30
-    
-    def is_tired(state):
+
+    def is_tired(self, state):
         return state.data.get("energy", 0) < 50
-    
-    def work_complete(state):
+
+    def work_complete(self, state):
         return state.data.get("task") == "done"
-    
-    def rested(state):
+
+    def rested(self, state):
         return state.data.get("recovery", 0) > 5
-    
+
     transitions = [
         Transition("idle", "working", has_energy, probability=0.8),
         Transition("idle", "resting", is_tired, probability=0.2),
@@ -570,21 +644,21 @@ async def demo_fsm_learning():
         Transition("resting", "idle", rested, probability=0.7),
         Transition("completed", "idle", lambda s: True, probability=1.0)
     ]
-    
+
     for transition in transitions:
         fsm.add_transition(transition)
-    
+
     # Set initial state
     fsm.set_initial_state("idle")
-    
+
     logger.info("Running FSM with learning...")
     logger.info("Initial state:", extra={"data": fsm.current_state.name})
-    
+
     # Run FSM for several steps
     for step in range(10):
         if fsm.step():
             logger.info("Step {}: {} (energy: {})", extra={"step___1": step + 1, "fsm_current_state_name": fsm.current_state.name, "fsm_current_state_data_get__energy___0_": fsm.current_state.data.get('energy', 0)})
-            
+
             # Simulate state changes
             if fsm.current_state.name == "working":
                 fsm.current_state.data["energy"] = max(0, fsm.current_state.data.get("energy", 100) - 20)
@@ -597,7 +671,7 @@ async def demo_fsm_learning():
         else:
             logger.info("Step {}: No valid transitions", extra={"step___1": step + 1})
             break
-    
+
     logger.info("\nLearned transition probabilities: {}", extra={"fsm_learned_transitions": fsm.learned_transitions})
 
 async def demo_chain_of_thought():
@@ -605,12 +679,12 @@ async def demo_chain_of_thought():
     print("\n" + "="*60)
     logger.info("DEMO 3: Chain of Thought Reasoning")
     print("="*60)
-    
+
     # Create CoT components
     cot = ChainOfThought("demo_cot")
     complexity_analyzer = ComplexityAnalyzer()
     template_library = TemplateLibrary()
-    
+
     # Test queries of different complexity
     queries = [
         "What is 2+2?",
@@ -618,43 +692,43 @@ async def demo_chain_of_thought():
         "Compare and contrast different approaches to multi-agent systems",
         "Calculate the complexity of implementing a hierarchical FSM with learning capabilities"
     ]
-    
+
     for query in queries:
         logger.info("\n--- Query: {} ---", extra={"query": query})
-        
+
         # Analyze complexity
         complexity = complexity_analyzer.analyze(query)
         logger.info("Complexity score: {}", extra={"complexity": complexity})
-        
+
         # Select template
         template = template_library.select_template(query)
         logger.info("Selected template: {}", extra={"template": template})
-        
+
         # Execute reasoning
         steps = cot.reason(query)
         logger.info("Reasoning steps: {}", extra={"len_steps_": len(steps)})
-        
+
         for i, step in enumerate(steps[:3]):  # Show first 3 steps
-            logger.info("  Step {}: {}... (confidence: {})", extra={"i_1": i+1, "step_thought_": step.thought[, "step_confidence": step.confidence})
+            logger.info("  Step {}: {}... (confidence: {})", extra={"i_1": i+1, "step_thought_": step.thought[:50], "step_confidence": step.confidence})
 
 async def main():
     """Run all demonstrations"""
     logger.info("Advanced AI Agent Architecture - Simplified Demonstration")
     print("=" * 60)
-    
+
     try:
         # Run all demos
         await demo_basic_hybrid_agent()
         await demo_fsm_learning()
         await demo_chain_of_thought()
-        
+
         print("\n" + "="*60)
         logger.info("All demonstrations completed successfully!")
         print("="*60)
-        
+
     except Exception as e:
         logger.error(f"Error in demonstration: {str(e)}")
         logger.info("Error: {}", extra={"str_e_": str(e)})
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

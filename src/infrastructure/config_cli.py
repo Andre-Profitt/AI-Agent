@@ -1,15 +1,35 @@
+from fix_import_hierarchy import file_path
+from setup_environment import value
+
+from src.collaboration.realtime_collaboration import updates
+from src.config.integrations import is_valid
+from src.config.settings import issues
+from src.core.monitoring import key
+from src.infrastructure.config_cli import api_keys
+from src.infrastructure.config_cli import config_dict
+from src.infrastructure.config_cli import env_vars
+from src.tools_introspection import description
+from src.tools_introspection import name
+
+from src.tools.base_tool import Tool
+
+from src.agents.advanced_agent_fsm import Agent
+# TODO: Fix undefined variables: Any, api_keys, config_dict, description, env_var, env_vars, file_path, is_valid, issue, issues, json, key, logging, name, section, updates, value, var
+
 """
 Configuration CLI Tool for AI Agent
 Provides command-line interface for managing integration configuration,
 validation, and file operations.
 """
 
+from typing import Any
+
 import click
 import json
-from pathlib import Path
-from typing import Dict, Any
+
+
 import logging
-from typing import Optional, Dict, Any, List, Union, Tuple
+
 
 try:
     from .config.integrations import integration_config
@@ -115,7 +135,7 @@ def test() -> Any:
     click.echo("Testing integrations...")
     
     # Test Supabase
-    if await integration_config.supabase.is_configured_safe():
+    if integration_config.supabase.is_configured():
         click.echo("✅ Supabase configured")
     else:
         click.echo("⚠️ Supabase not configured")

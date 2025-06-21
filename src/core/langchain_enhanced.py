@@ -1,3 +1,25 @@
+from agent import tools
+from benchmarks.cot_performance import duration
+from examples.parallel_execution_example import inputs
+from examples.parallel_execution_example import results
+from examples.parallel_execution_example import tool_calls
+from examples.parallel_execution_example import tool_name
+
+from src.core.langchain_enhanced import future
+from src.core.langchain_enhanced import futures
+from src.core.langchain_enhanced import groups
+from src.core.langchain_enhanced import tool_call
+from src.core.langchain_enhanced import tools_info
+from src.core.langgraph_compatibility import tool_args
+from src.core.llamaindex_enhanced import llm
+from src.database.models import tool
+from src.database.models import tool_id
+from src.database.models import tool_type
+from src.tools_introspection import error
+
+from typing import Dict
+from typing import Any
+
 from langchain.memory import ConversationSummaryBufferMemory
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain_community.cache import SQLiteCache
@@ -8,11 +30,25 @@ from langchain_core.messages import ToolCall
 from langchain.callbacks.base import BaseCallbackHandler
 import langchain
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Dict, Any, Optional
+
 import time
 import logging
-import asyncio
-from typing import Optional, Dict, Any, List, Union, Tuple
+
+from langchain_core.language_models import LLM
+
+from typing import List
+
+from src.tools.base_tool import Tool
+
+from src.tools.base_tool import BaseTool
+
+from src.agents.advanced_agent_fsm import Agent
+from src.services.integration_hub import ToolCall
+from src.shared.types.di_types import BaseTool
+# TODO: Fix undefined variables: Any, BaseCallbackHandler, ConversationSummaryBufferMemory, Dict, LLM, LLMChain, List, PromptTemplate, SQLiteCache, StreamingStdOutCallbackHandler, duration, e, error, future, futures, group, groups, inputs, llm, logging, result, results, time, tool_args, tool_call, tool_calls, tool_id, tool_name, tool_type, tools, tools_info
+from src.tools.base_tool import tool
+
+# TODO: Fix undefined variables: BaseCallbackHandler, ConversationSummaryBufferMemory, LLM, LLMChain, PromptTemplate, SQLiteCache, StreamingStdOutCallbackHandler, ThreadPoolExecutor, duration, e, error, future, futures, group, groups, inputs, langchain, llm, result, results, self, tool, tool_args, tool_call, tool_calls, tool_id, tool_name, tool_type, tools, tools_info
 
 logger = logging.getLogger(__name__)
 
@@ -21,38 +57,38 @@ langchain.llm_cache = SQLiteCache(database_path=".langchain.db")
 
 class CustomMetricsCallback(BaseCallbackHandler):
     """Custom callback for tracking metrics"""
-    
+
     def __init__(self) -> None:
         self.token_count = 0
         self.start_time = None
-        
+
     def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs) -> Any:
         """Track LLM start"""
         self.start_time = time.time()
         logger.info("LLM started")
-        
+
     def on_llm_end(self, response, **kwargs) -> Any:
         """Track LLM end and metrics"""
         if self.start_time:
             duration = time.time() - self.start_time
             logger.info("LLM completed in {}s", extra={"duration": duration})
-            
+
     def on_llm_error(self, error: str, **kwargs) -> Any:
         """Track LLM errors"""
         logger.error("LLM error: {}", extra={"error": error})
 
 class ErrorRecoveryCallback(BaseCallbackHandler):
     """Callback for error recovery strategies"""
-    
+
     def __init__(self) -> None:
         self.error_count = 0
         self.last_error_time = None
-        
+
     def on_llm_error(self, error: str, **kwargs) -> Any:
         """Handle LLM errors with recovery strategies"""
         self.error_count += 1
         self.last_error_time = time.time()
-        
+
         if "context length" in error.lower():
             logger.warning("Context length exceeded, reducing context")
             # TODO: Implement context reduction
@@ -64,11 +100,11 @@ class ErrorRecoveryCallback(BaseCallbackHandler):
 
 class ParallelToolExecutor:
     """Execute compatible tools in parallel"""
-    
+
     def __init__(self, tools: List[BaseTool]) -> None:
         self.tools = {tool.name: tool for tool in tools}
         self.executor = ThreadPoolExecutor(max_workers=5)
-        
+
     def _group_compatible_tools(self, tool_calls: List[ToolCall]) -> List[List[ToolCall]]:
         """Group tools by compatibility for parallel execution"""
         # Simple grouping: tools that don't share resources can run in parallel
@@ -77,21 +113,21 @@ class ParallelToolExecutor:
         for tool_call in tool_calls:
             tool_name = tool_call.get('name', 'unknown')
             tool_type = tool_name.split('_')[0]  # Extract tool type
-            
+
             if tool_type not in groups:
                 groups[tool_type] = []
             groups[tool_type].append(tool_call)
-        
+
         return list(groups.values())
-        
+
     async def execute_parallel(
-        self, 
+        self,
         tool_calls: List[ToolCall]
     ) -> Dict[str, Any]:
         """Execute non-conflicting tools in parallel"""
         # Group tools by compatibility
         groups = self._group_compatible_tools(tool_calls)
-        
+
         results = {}
         for group in groups:
             if len(group) == 1:
@@ -103,11 +139,11 @@ class ParallelToolExecutor:
                 futures = []
                 for tool_call in group:
                     future = self.executor.submit(
-                        self._execute_single_sync, 
+                        self._execute_single_sync,
                         tool_call
                     )
                     futures.append((tool_call.get('id', 'unknown'), future))
-                
+
                 # Collect results
                 for tool_id, future in futures:
                     try:
@@ -115,14 +151,14 @@ class ParallelToolExecutor:
                     except Exception as e:
                         logger.error("Tool execution failed for {}: {}", extra={"tool_id": tool_id, "e": e})
                         results[tool_id] = f"Error: {str(e)}"
-        
+
         return results
-    
+
     async def _execute_single(self, tool_call: ToolCall) -> Any:
         """Execute a single tool call"""
         tool_name = tool_call.get('name', 'unknown')
         tool_args = tool_call.get('args', {})
-        
+
         if tool_name in self.tools:
             try:
                 tool = self.tools[tool_name]
@@ -133,12 +169,12 @@ class ParallelToolExecutor:
                 return f"Error: {str(e)}"
         else:
             return f"Tool {tool_name} not found"
-    
+
     def _execute_single_sync(self, tool_call: ToolCall) -> Any:
         """Execute a single tool call synchronously"""
         tool_name = tool_call.get('name', 'unknown')
         tool_args = tool_call.get('args', {})
-        
+
         if tool_name in self.tools:
             try:
                 tool = self.tools[tool_name]
@@ -152,23 +188,23 @@ class ParallelToolExecutor:
 
 class EnhancedLangChainAgent:
     """Optimized LangChain agent with advanced features"""
-    
+
     def __init__(self, llm: LLM, tools: List[BaseTool]) -> None:
         self.llm = llm
         self.tools = tools
         self.tool_executor = ParallelToolExecutor(tools)
-        
+
         # Use summary buffer memory for long conversations
         self.memory = ConversationSummaryBufferMemory(
             llm=self.llm,
             max_token_limit=2000,
             return_messages=True
         )
-        
+
         # Custom prompt optimization
         self.system_prompt = PromptTemplate(
             input_variables=["context", "question", "tools"],
-            template="""You are an expert GAIA agent. 
+            template="""You are an expert GAIA agent.
 
 Context from previous conversation:
 {context}
@@ -187,10 +223,10 @@ Instructions:
 
 Answer:"""
         )
-        
+
         # Create optimized chain
         self.chain = self.create_optimized_chain()
-    
+
     def create_optimized_chain(self) -> Any:
         """Create chain with streaming and callbacks"""
         return LLMChain(
@@ -203,29 +239,29 @@ Answer:"""
                 ErrorRecoveryCallback()
             ]
         )
-    
+
     async def run(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Run the enhanced agent"""
         try:
             # Add tools to context
             tools_info = "\n".join([f"- {tool.name}: {tool.description}" for tool in self.tools])
             inputs["tools"] = tools_info
-            
+
             # Run the chain
             result = await self.chain.arun(inputs)
-            
+
             return {
                 "result": result,
                 "memory_summary": self.get_memory_summary()
             }
-            
+
         except Exception as e:
             logger.error("Enhanced agent error: {}", extra={"e": e})
             return {
                 "error": str(e),
                 "memory_summary": self.get_memory_summary()
             }
-    
+
     def get_memory_summary(self) -> str:
         """Get memory summary for debugging"""
         try:
@@ -233,9 +269,9 @@ Answer:"""
         except:
             return "Memory summary not available"
 
-def initialize_enhanced_agent(llm, tools: List[BaseTool]) -> Any:
+def initialize_enhanced_agent(self, llm, tools: List[BaseTool]) -> Any:
     """Initialize enhanced LangChain agent"""
     return EnhancedLangChainAgent(llm, tools)
 
 # Export for compatibility
-enhanced_agent = initialize_enhanced_agent 
+enhanced_agent = initialize_enhanced_agent

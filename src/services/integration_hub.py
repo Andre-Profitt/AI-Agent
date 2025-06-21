@@ -1,4 +1,11 @@
+from src.tools.base_tool import Tool
+
 """
+
+from datetime import timedelta
+from langchain.llms import OpenAI
+from langchain.tools import BaseTool
+from unittest.mock import call
 Integration Hub - Centralized Component Management
 Fixes all critical integration issues identified in the audit:
 1. Import path mismatches
@@ -12,10 +19,17 @@ Fixes all critical integration issues identified in the audit:
 9. CRITICAL FIXES - NEW
 """
 
+from dataclasses import field
+from typing import List
+from typing import Tuple
+from typing import Optional
+from typing import Any
+from typing import Callable
+
 import asyncio
-import logging
+
 import re
-import math
+
 import time
 from typing import Dict, Any, Optional, List, Tuple, Callable
 from pathlib import Path
@@ -25,7 +39,7 @@ import json
 import uuid
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
-from contextlib import asynccontextmanager
+
 import numpy as np
 from collections import defaultdict
 
@@ -255,7 +269,7 @@ class RateLimitManager:
             
             if wait_time > 0:
                 logger.info("Rate limit reached", extra={
-                    "tool_name": tool_name, 
+                    "tool_name": tool_name,
                     "wait_time": round(wait_time, 2)
                 })
                 await asyncio.sleep(wait_time)
@@ -1018,6 +1032,77 @@ unified_tool_registry = UnifiedToolRegistry()
 integrated_session_manager = IntegratedSessionManager()
 metric_aware_error_handler = MetricAwareErrorHandler()
 
+# Move ToolVersionManager class definition here (before IntegrationHub)
+class ToolVersionManager:
+    """Manage tool versions and migrations"""
+    
+    def __init__(self):
+        self.tool_versions = {}
+        self.migration_paths = {}
+    
+    def register_version(self, tool_name: str, version: str, schema: Dict[str, Any]):
+        """Register a new version of a tool"""
+        if tool_name not in self.tool_versions:
+            self.tool_versions[tool_name] = {}
+        
+        self.tool_versions[tool_name][version] = schema
+        logger.info("Registered version", extra={
+            "tool_name": tool_name, 
+            "version": version
+        })
+    
+    def get_latest_version(self, tool_name: str) -> Optional[str]:
+        """Get latest version of a tool"""
+        versions = self.tool_versions.get(tool_name, {})
+        return versions[-1] if versions else None
+    
+    def migrate_params(self, tool_name: str, params: Dict[str, Any], 
+                      from_version: str, to_version: str) -> Dict[str, Any]:
+        """Migrate parameters between tool versions"""
+        # Implement version-specific migrations
+        migrations = {
+            ('1.0', '2.0'): self._migrate_v1_to_v2,
+            ('2.0', '3.0'): self._migrate_v2_to_v3
+        }
+        
+        migration_func = migrations.get((from_version, to_version))
+        if migration_func:
+            return migration_func(params)
+        return params
+    
+    def _migrate_v1_to_v2(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Example migration function"""
+        # Rename parameters, add defaults, etc.
+        migrated = params.copy()
+        
+        # Example: rename 'query' to 'search_term'
+        if 'query' in migrated:
+            migrated['search_term'] = migrated.pop('query')
+        
+        # Example: add default values
+        if 'max_results' not in migrated:
+            migrated['max_results'] = 10
+        
+        return migrated
+    
+    def _migrate_v2_to_v3(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Example migration function"""
+        # Add new parameters, restructure, etc.
+        migrated = params.copy()
+        
+        # Example: restructure nested parameters
+        if 'filters' in migrated and isinstance(migrated['filters'], dict):
+            migrated['filter_config'] = migrated.pop('filters')
+        
+        return migrated
+    
+    def deprecate_version(self, tool_name: str, version: str):
+        """Mark a version as deprecated"""
+        version_key = f"{tool_name}:{version}"
+        if version_key in self.tool_versions:
+            self.tool_versions[version_key]['deprecated'] = True
+            logger.warning("Deprecated version {} for tool {}", extra={"version": version, "tool_name": tool_name})
+
 class IntegrationHub:
     """Enhanced central hub for all components with unified management"""
     
@@ -1216,7 +1301,6 @@ class IntegrationHub:
         except Exception as e:
             logger.error("Failed to initialize knowledge base: {}", extra={"e": e})
             # Don't fail initialization for knowledge base
-            from src.knowledge_utils import create_local_knowledge_tool
             local_kb = create_local_knowledge_tool()
             self.components['knowledge_base'] = local_kb
     
@@ -1329,11 +1413,11 @@ class IntegrationHub:
         """Get resource pool manager"""
         return self.components.get('resource_manager')
     
-    def get_tool_version_manager(self) -> ToolVersionManager:
+    def get_tool_version_manager(self) -> "ToolVersionManager":
         """Get tool version manager"""
         return self.tool_version_manager
     
-    def get_monitoring_dashboard(self) -> Optional[MonitoringDashboard]:
+    def get_monitoring_dashboard(self) -> "Optional[MonitoringDashboard]":
         """Get monitoring dashboard"""
         return self.components.get('monitoring')
     
@@ -1341,7 +1425,7 @@ class IntegrationHub:
         """Get rate limit manager"""
         return self.rate_limit_manager
     
-    def get_test_framework(self) -> Optional[IntegrationTestFramework]:
+    def get_test_framework(self) -> "Optional[IntegrationTestFramework]":
         """Get integration test framework"""
         return self.components.get('test_framework')
     
@@ -1446,76 +1530,6 @@ class SemanticToolDiscovery:
             return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
         except (ValueError, np.linalg.LinAlgError):
             return 0.0
-
-class ToolVersionManager:
-    """Manage tool versions and migrations"""
-    
-    def __init__(self):
-        self.tool_versions = {}
-        self.migration_paths = {}
-    
-    def register_version(self, tool_name: str, version: str, schema: Dict[str, Any]):
-        """Register a new version of a tool"""
-        if tool_name not in self.tool_versions:
-            self.tool_versions[tool_name] = {}
-        
-        self.tool_versions[tool_name][version] = schema
-        logger.info("Registered version", extra={
-            "tool_name": tool_name, 
-            "version": version
-        })
-    
-    def get_latest_version(self, tool_name: str) -> Optional[str]:
-        """Get latest version of a tool"""
-        versions = self.tool_versions.get(tool_name, {})
-        return versions[-1] if versions else None
-    
-    def migrate_params(self, tool_name: str, params: Dict[str, Any], 
-                      from_version: str, to_version: str) -> Dict[str, Any]:
-        """Migrate parameters between tool versions"""
-        # Implement version-specific migrations
-        migrations = {
-            ('1.0', '2.0'): self._migrate_v1_to_v2,
-            ('2.0', '3.0'): self._migrate_v2_to_v3
-        }
-        
-        migration_func = migrations.get((from_version, to_version))
-        if migration_func:
-            return migration_func(params)
-        return params
-    
-    def _migrate_v1_to_v2(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Example migration function"""
-        # Rename parameters, add defaults, etc.
-        migrated = params.copy()
-        
-        # Example: rename 'query' to 'search_term'
-        if 'query' in migrated:
-            migrated['search_term'] = migrated.pop('query')
-        
-        # Example: add default values
-        if 'max_results' not in migrated:
-            migrated['max_results'] = 10
-        
-        return migrated
-    
-    def _migrate_v2_to_v3(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Example migration function"""
-        # Add new parameters, restructure, etc.
-        migrated = params.copy()
-        
-        # Example: restructure nested parameters
-        if 'filters' in migrated and isinstance(migrated['filters'], dict):
-            migrated['filter_config'] = migrated.pop('filters')
-        
-        return migrated
-    
-    def deprecate_version(self, tool_name: str, version: str):
-        """Mark a version as deprecated"""
-        version_key = f"{tool_name}:{version}"
-        if version_key in self.tool_versions:
-            self.tool_versions[version_key]['deprecated'] = True
-            logger.warning("Deprecated version {} for tool {}", extra={"version": version, "tool_name": tool_name})
 
 class MonitoringDashboard:
     """Unified monitoring for all components"""

@@ -1,4 +1,11 @@
+from src.tools.base_tool import Tool
+
+from src.agents.advanced_agent_fsm import Agent
+
 """
+
+from sqlalchemy import func
+from typing import Callable
 Monitoring decorators for metrics collection
 
 This module provides decorators for automatically collecting metrics
@@ -376,9 +383,9 @@ def resource_metrics(func: Callable) -> Callable:
             memory_delta = final_memory - initial_memory
             cpu_delta = final_cpu - initial_cpu
             
-            logger.debug("Resource usage for {}: "
-                        f"Memory: {}MB, CPU: {}%, "
-                        f"Time: {}s", extra={"func___name__": func.__name__, "memory_delta": memory_delta, "cpu_delta": cpu_delta, "execution_time": execution_time})
+            logger.debug(f"Resource usage for {func.__name__}: "
+                        f"Memory: {memory_delta}MB, CPU: {cpu_delta}%, "
+                        f"Time: {execution_time}s")
             
             return result
             

@@ -1,14 +1,25 @@
+from app import msg
+
+from src.api_server import message
+from src.collaboration.realtime_collaboration import session_id
+from src.database.supabase_manager import message_id
+
 """
+from typing import Optional
+from src.unified_architecture.communication import MessageType
+# TODO: Fix undefined variables: Dict, List, Optional, UUID, m, message, message_id, message_type, msg, session_id
+# TODO: Fix undefined variables: m, message, message_id, message_type, msg, self, session_id
+
 In-memory implementation of the MessageRepository interface.
 """
 
+from typing import Dict
+
 from typing import List, Optional, Dict
 from uuid import UUID
-import asyncio
 
 from src.core.entities.message import Message, MessageType
 from src.core.interfaces.message_repository import MessageRepository
-from typing import Optional, Dict, Any, List, Union, Tuple
 
 class InMemoryMessageRepository(MessageRepository):
     def __init__(self) -> None:
@@ -38,4 +49,4 @@ class InMemoryMessageRepository(MessageRepository):
             "total_messages": len(self._messages),
             "user_messages": len([m for m in self._messages.values() if m.message_type == MessageType.USER]),
             "agent_messages": len([m for m in self._messages.values() if m.message_type == MessageType.AGENT]),
-        } 
+        }

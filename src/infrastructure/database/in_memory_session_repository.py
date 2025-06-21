@@ -1,14 +1,25 @@
+from src.collaboration.realtime_collaboration import session
+from src.collaboration.realtime_collaboration import session_id
+
 """
+from typing import Optional
+from requests import Session
+# TODO: Fix undefined variables: Dict, List, Optional, UUID, s, session, session_id
+from src.database.models import Session
+
+# TODO: Fix undefined variables: s, self, session, session_id
+
+from sqlalchemy.orm import Session
 In-memory implementation of the SessionRepository interface.
 """
 
+from typing import Dict
+
 from typing import List, Optional, Dict
 from uuid import UUID
-import asyncio
 
 from src.core.entities.session import Session
 from src.core.interfaces.session_repository import SessionRepository
-from typing import Optional, Dict, Any, List, Union, Tuple
 
 class InMemorySessionRepository(SessionRepository):
     def __init__(self) -> None:
@@ -34,4 +45,4 @@ class InMemorySessionRepository(SessionRepository):
         return {
             "total_sessions": len(self._sessions),
             "active_sessions": len([s for s in self._sessions.values() if s.is_active]),
-        } 
+        }

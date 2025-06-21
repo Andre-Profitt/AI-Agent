@@ -1,6 +1,18 @@
+from src.tools.base_tool import Tool
+
+from src.tools.base_tool import ToolType
+# TODO: Fix undefined variables: ABC, List, Optional, UUID, abstractmethod
+
 """
+from abc import abstractmethod
+from src.gaia_components.adaptive_tool_system import Tool
+from src.gaia_components.adaptive_tool_system import ToolType
+
+from langchain.tools import Tool
 Tool repository interface defining the contract for tool persistence.
 """
+
+from typing import Optional
 
 from abc import ABC, abstractmethod
 from typing import List, Optional
@@ -34,4 +46,4 @@ class ToolRepository(ABC):
 
     @abstractmethod
     async def get_statistics(self) -> dict:
-        pass 
+        pass

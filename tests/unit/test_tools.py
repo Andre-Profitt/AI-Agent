@@ -1,14 +1,19 @@
+from src.tools.base_tool import Tool
+
 """
+
+from unittest.mock import MagicMock
+from unittest.mock import patch
 Unit tests for tool functions
 """
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from src.tools import (
 import logging
 
 logger = logging.getLogger(__name__)
 
+from src.tools import (
     web_researcher,
     semantic_search_tool,
     python_interpreter,
@@ -88,14 +93,14 @@ class TestPythonInterpreter:
     
     def test_python_interpreter_simple(self):
         """Test simple Python code execution"""
-        code = "result = 2 + 2\nlogger.info("Value", extra={"value": result})"
+        code = 'result = 2 + 2\nlogger.info("Value", extra={"value": result})'
         result = python_interpreter(code)
         
         assert "4" in result
     
     def test_python_interpreter_imports(self):
         """Test Python with imports"""
-        code = "import math\nresult = math.sqrt(16)\nlogger.info("Value", extra={"value": result})"
+        code = 'import math\nresult = math.sqrt(16)\nlogger.info("Value", extra={"value": result})'
         result = python_interpreter(code)
         
         assert "4.0" in result

@@ -1,9 +1,58 @@
+from agent import path
+from agent import tools
+from examples.enhanced_unified_example import execution_time
+from examples.parallel_execution_example import tool_name
+from fix_import_hierarchy import module_name
+from fix_import_hierarchy import module_path
+from setup_environment import value
+from tests.load_test import success
+
+from src.core.monitoring import key
+from src.database.models import metadata
+from src.database.models import tool
+from src.tools.registry import category
+from src.tools.registry import category_map
+from src.tools.registry import current_avg
+from src.tools.registry import full_module_name
+from src.tools.registry import module
+from src.tools.registry import module_dir
+from src.tools.registry import new_avg
+from src.tools.registry import paths
+from src.tools.registry import reliable
+from src.tools.registry import submodule
+from src.tools.registry import tool_meta
+from src.tools_introspection import error
+from src.tools_introspection import name
+from src.utils.logging import get_logger
+
+from src.tools.base_tool import Tool
+# TODO: Fix undefined variables: Any, Callable, Dict, List, Optional, Path, category, category_map, current_avg, dataclass, e, error, execution_time, full_module_name, key, keyword, meta, metadata, modname, module, module_dir, module_name, module_path, name, new_avg, obj, path, paths, reliable, submodule, success, threshold, tool_meta, tool_name, tools, value
+from pydantic import validator
+
+from src.tools.base_tool import tool
+from src.utils.structured_logging import get_logger
+
+
 """
+from typing import Dict
+
+import logging
+from src.shared.types.di_types import BaseTool
+# TODO: Fix undefined variables: category, category_map, current_avg, e, error, execution_time, full_module_name, get_logger, importlib, inspect, key, keyword, meta, metadata, modname, module, module_dir, module_name, module_path, name, new_avg, obj, path, paths, pkgutil, reliable, self, submodule, success, threshold, tool, tool_meta, tool_name, tools, validator, value
+
+from langchain.tools import BaseTool
+logger = logging.getLogger(__name__)
+
 Enhanced tool registry with discovery and validation
 """
 
+from typing import Optional
+from typing import Any
+from typing import List
+from typing import Callable
+
 import inspect
-from typing import Dict, List, Any, Optional, Callable, Type
+
 from dataclasses import dataclass
 import importlib
 import pkgutil
@@ -29,17 +78,17 @@ class ToolMetadata:
 
 class ToolRegistry:
     """Central registry for all tools with enhanced features"""
-    
+
     def __init__(self):
         self._tools: Dict[str, Any] = {}
         self._metadata: Dict[str, ToolMetadata] = {}
         self._categories: Dict[str, List[str]] = {}
         self._validators: List[Callable] = []
-        
+
         # Auto-discovery settings
         self.auto_discover = True
         self.tool_paths = ["src.tools.implementations"]
-    
+
     def register(
         self,
         tool: Any,
@@ -52,17 +101,17 @@ class ToolRegistry:
             if not self._validate_tool(tool):
                 logger.error("Tool validation failed: {}", extra={"tool": tool})
                 return False
-            
+
             # Extract tool info
             tool_name = getattr(tool, 'name', tool.__name__)
-            
+
             # Check for duplicates
             if tool_name in self._tools:
                 logger.warning("Tool {} already registered, updating...", extra={"tool_name": tool_name})
-            
+
             # Register tool
             self._tools[tool_name] = tool
-            
+
             # Create metadata
             tool_meta = ToolMetadata(
                 name=tool_name,
@@ -71,118 +120,118 @@ class ToolRegistry:
                 version=getattr(tool, '__version__', '1.0.0'),
                 author=getattr(tool, '__author__', 'Unknown')
             )
-            
+
             # Update with provided metadata
             if metadata:
                 for key, value in metadata.items():
                     if hasattr(tool_meta, key):
                         setattr(tool_meta, key, value)
-            
+
             self._metadata[tool_name] = tool_meta
-            
+
             # Update categories
             if category not in self._categories:
                 self._categories[category] = []
-            
+
             if tool_name not in self._categories[category]:
                 self._categories[category].append(tool_name)
-            
+
             logger.info("Registered tool: {} in category: {}", extra={"tool_name": tool_name, "category": category})
             return True
-            
+
         except Exception as e:
             logger.error("Failed to register tool: {}", exc_info=True)
             return False
-    
+
     def _validate_tool(self, tool: Any) -> bool:
         """Validate tool meets requirements"""
         # Check if it's a callable or has required methods
         if hasattr(tool, 'run') or hasattr(tool, 'arun'):
             return True
-        
+
         if callable(tool):
             return True
-        
+
         # Check if it's a LangChain tool
         if hasattr(tool, '__class__'):
             if 'Tool' in str(tool.__class__.__mro__):
                 return True
-        
+
         # Run custom validators
         for validator in self._validators:
             if not validator(tool):
                 return False
-        
+
         return False
-    
+
     def add_validator(self, validator: Callable[[Any], bool]):
         """Add custom tool validator"""
         self._validators.append(validator)
-    
+
     def discover_tools(self, path: Optional[str] = None):
         """Auto-discover tools from modules"""
         if not self.auto_discover:
             return
-        
+
         paths = [path] if path else self.tool_paths
-        
+
         for module_path in paths:
             try:
                 # Import the module
                 module = importlib.import_module(module_path)
-                
+
                 # Get module directory
                 if hasattr(module, '__path__'):
                     module_dir = Path(module.__path__[0])
                 else:
                     module_dir = Path(module.__file__).parent
-                
+
                 # Find all Python files
                 for importer, modname, ispkg in pkgutil.iter_modules([str(module_dir)]):
                     if modname.startswith('_'):
                         continue
-                    
-                    full_module_name = f"{}.{}"
-                    
+
+                    full_module_name = f"{module_path}.{modname}"
+
                     try:
                         # Import the module
                         submodule = importlib.import_module(full_module_name)
-                        
+
                         # Find tools in the module
                         for name, obj in inspect.getmembers(submodule):
                             if name.startswith('_'):
                                 continue
-                            
+
                             # Check if it's a tool
                             if self._looks_like_tool(obj):
                                 # Determine category from module name
                                 category = self._get_category_from_module(modname)
                                 self.register(obj, category=category)
-                    
+
                     except Exception as e:
                         logger.warning("Failed to import {}: {}", extra={"e": e, "module_path": module_path, "modname": modname, "full_module_name": full_module_name, "e": e})
-            
+
             except Exception as e:
                 logger.error("Failed to discover tools in {}: {}", extra={"module_path": module_path, "e": e})
-    
+
     def _looks_like_tool(self, obj: Any) -> bool:
         """Check if object looks like a tool"""
         # Check for tool decorators
         if hasattr(obj, '_is_tool'):
             return True
-        
+
         # Check for tool base classes
         if inspect.isclass(obj):
             if issubclass(obj, BaseTool):
                 return True
-        
+
         # Check for tool-like methods
         if hasattr(obj, 'run') or hasattr(obj, 'arun'):
             if hasattr(obj, 'name') and hasattr(obj, 'description'):
                 return True
-        
+
         return False
-    
+
     def _get_category_from_module(self, module_name: str) -> str:
         """Determine category from module name"""
         category_map = {
@@ -196,33 +245,33 @@ class ToolRegistry:
             'database': 'data_tools',
             'api': 'api_tools'
         }
-        
+
         for keyword, category in category_map.items():
             if keyword in module_name.lower():
                 return category
-        
+
         return 'general'
-    
+
     def get_tool(self, name: str) -> Optional[Any]:
         """Get a tool by name"""
         return self._tools.get(name)
-    
+
     def list_tools(self) -> List[str]:
         """List all registered tool names"""
         return list(self._tools.keys())
-    
+
     def list_categories(self) -> List[str]:
         """List all categories"""
         return list(self._categories.keys())
-    
+
     def get_tools_by_category(self, category: str) -> List[str]:
         """Get tools in a specific category"""
         return self._categories.get(category, [])
-    
+
     def get_tool_metadata(self, name: str) -> Optional[ToolMetadata]:
         """Get metadata for a tool"""
         return self._metadata.get(name)
-    
+
     def update_tool_stats(
         self,
         name: str,
@@ -233,10 +282,10 @@ class ToolRegistry:
         """Update tool execution statistics"""
         if name not in self._metadata:
             return
-        
+
         metadata = self._metadata[name]
         metadata.total_executions += 1
-        
+
         # Update average execution time
         if success:
             current_avg = metadata.average_execution_time
@@ -245,7 +294,7 @@ class ToolRegistry:
                 / metadata.total_executions
             )
             metadata.average_execution_time = new_avg
-        
+
         # Update reliability score
         if not success:
             # Decrease reliability score
@@ -257,17 +306,17 @@ class ToolRegistry:
                 1.0,
                 metadata.reliability_score * 1.01
             )
-    
+
     def get_reliable_tools(self, threshold: float = 0.8) -> List[str]:
         """Get tools with reliability above threshold"""
         reliable = []
-        
+
         for name, metadata in self._metadata.items():
             if metadata.reliability_score >= threshold:
                 reliable.append(name)
-        
+
         return reliable
-    
+
     def export_registry(self) -> Dict[str, Any]:
         """Export registry data for persistence"""
         return {
@@ -287,16 +336,16 @@ class ToolRegistry:
             },
             "categories": self._categories
         }
-    
+
     def _get_tool_category(self, tool_name: str) -> str:
         """Get category for a tool"""
         for category, tools in self._categories.items():
             if tool_name in tools:
                 return category
         return "uncategorized"
-    
+
     def import_registry(self, data: Dict[str, Any]):
         """Import registry data"""
         # This would restore tool metadata and categories
         # Tools themselves would need to be re-registered
-        pass 
+        pass

@@ -1,3 +1,36 @@
+from app import app
+from src.config.performance import apply_performance_settings
+
+from setup_environment import logger
+from tests.load_test import args
+from tests.load_test import parser
+
+from src.infrastructure.di.container import get_container
+from src.infrastructure.di.container import setup_container
+from src.main import agent_executor
+from src.main import agent_repo
+from src.main import config_service
+from src.main import execute_tool_use_case
+from src.main import logging_service
+from src.main import manage_agent_use_case
+from src.main import manage_session_use_case
+from src.main import message_repo
+from src.main import process_message_use_case
+from src.main import session_repo
+from src.main import tool_executor
+from src.main import tool_repo
+
+from src.tools.base_tool import Tool
+
+from src.agents.advanced_agent_fsm import Agent
+
+from src.agents.advanced_agent_fsm import AgentFactory
+from typing import Any
+# TODO: Fix undefined variables: Any, CLIInterface, GradioInterface, Optional, Path, agent_executor, agent_repo, app, args, config_service, e, execute_tool_use_case, logger, logging, logging_service, manage_agent_use_case, manage_session_use_case, message_repo, parser, process_message_use_case, session_repo, sys, tool_executor, tool_repo
+from src.infrastructure.di.container import setup_container
+
+# TODO: Fix undefined variables: CLIInterface, GradioInterface, agent_executor, agent_repo, app, argparse, args, config_service, e, execute_tool_use_case, get_container, logger, logging_service, manage_agent_use_case, manage_session_use_case, message_repo, parser, process_message_use_case, self, session_repo, setup_container, tool_executor, tool_repo
+
 """
 Main entry point for the AI Agent application with clean architecture.
 """
@@ -10,6 +43,7 @@ from typing import Optional
 from typing import Optional, Dict, Any, List, Union, Tuple
 from src.shared.types.di_types import (
     ConfigurationService, DatabaseClient, CacheClient, LoggingService
+)
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent))

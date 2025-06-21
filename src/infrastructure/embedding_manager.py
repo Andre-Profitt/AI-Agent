@@ -1,4 +1,10 @@
+from src.agents.advanced_agent_fsm import Agent
+
 """
+
+from typing import Any
+from typing import Dict
+from typing import Optional
 Centralized embedding manager for the AI Agent system.
 """
 
@@ -92,7 +98,7 @@ class EmbeddingManager:
                 return self._fallback_embed(text)
                 
         except Exception as e:
-            logger.error("Embedding failed for text: {}... Error: {}", extra={"text_": text[, "e": e})
+            logger.error(f"Embedding failed for text: {text[:50]}... Error: {e}")
             return [0.0] * self.dimension
     
     def _openai_embed(self, text: str) -> List[float]:

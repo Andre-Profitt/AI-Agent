@@ -1,4 +1,52 @@
+from setup_environment import value
+from tests.load_test import data
+from tests.performance.performance_test import agent_data
+
+from src.adapters.fsm_unified_adapter import capabilities
+from src.collaboration.realtime_collaboration import updates
+from src.core.monitoring import key
+from src.database.models import agent_id
+from src.database.models import metadata
+from src.database.models import status
+from src.database.supabase_manager import cache_key
+from src.gaia_components.enhanced_memory_system import current_time
+from src.unified_architecture.registry import agent_ids
+from src.unified_architecture.registry import agents_to_remove
+from src.unified_architecture.registry import capability_counts
+from src.unified_architecture.registry import capability_matches
+from src.unified_architecture.registry import health_results
+from src.unified_architecture.registry import last_heartbeat
+from src.unified_architecture.registry import matching_agents
+from src.unified_architecture.registry import old_metadata
+from src.unified_architecture.registry import status_counts
+from src.unified_architecture.registry import tag_counts
+from src.unified_architecture.registry import tag_matches
+from src.unified_architecture.registry import time_since_heartbeat
+from src.unified_architecture.task_distribution import max_load
+
+from src.agents.advanced_agent_fsm import AgentCapability
+
+from src.agents.advanced_agent_fsm import AgentStatus
+
+from src.agents.advanced_agent_fsm import Agent
+
+from src.agents.advanced_agent_fsm import AgentMetadata
+from src.unified_architecture.enhanced_platform import AgentCapability
+from src.unified_architecture.enhanced_platform import AgentMetadata
+from src.unified_architecture.enhanced_platform import AgentStatus
+from typing import Any
+from typing import List
+from typing import Optional
+from typing import Set
+# TODO: Fix undefined variables: Any, Dict, List, Optional, Set, agent_data, agent_id, agent_ids, agents_to_remove, aid, cache_key, cap, capabilities, capability, capability_counts, capability_matches, current_time, data, datetime, defaultdict, e, health_results, key, last_heartbeat, logging, matching_agents, max_load, max_offline_time, metadata, min_reliability, old_metadata, status, status_counts, tag, tag_counts, tag_matches, tags, time, time_since_heartbeat, updates, value, x
+from src.core.entities.agent import AgentCapability
+from src.core.entities.agent import AgentMetadata
+
+# TODO: Fix undefined variables: agent_data, agent_id, agent_ids, agents_to_remove, aid, cache_key, cap, capabilities, capability, capability_counts, capability_matches, current_time, data, e, health_results, key, last_heartbeat, matching_agents, max_load, max_offline_time, metadata, min_reliability, old_metadata, self, status, status_counts, tag, tag_counts, tag_matches, tags, time_since_heartbeat, updates, value, x
+
 """
+
+from fastapi import status
 Agent Registry for Multi-Agent System
 
 This module provides dynamic agent registration and discovery:
@@ -88,8 +136,8 @@ class AgentRegistry:
                 
                 self.stats["active_agents"] = len(self.registry)
                 
-                logger.info("Registered agent {} ({}) "
-                           f"with capabilities: {}", extra={"metadata_name": metadata.name, "metadata_agent_id": metadata.agent_id, "_cap_name_for_cap_in_metadata_capabilities": [cap.name for cap in metadata.capabilities]})
+                logger.info(f"Registered agent {metadata.name} ({metadata.agent_id}) "
+                           f"with capabilities: {[cap.name for cap in metadata.capabilities]}")
                 return True
                 
             except Exception as e:

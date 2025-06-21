@@ -1,6 +1,62 @@
 # Workflow Templates & Automation System
 # src/workflow/workflow_automation.py
 
+from agent import graph
+from app import app
+from benchmarks.cot_performance import duration
+from benchmarks.cot_performance import template
+from benchmarks.cot_performance import templates
+from examples.enhanced_unified_example import output
+from examples.enhanced_unified_example import start_time
+from examples.enhanced_unified_example import tasks
+from examples.parallel_execution_example import agents
+from examples.parallel_execution_example import inputs
+from examples.parallel_execution_example import results
+from migrations.env import url
+from setup_environment import value
+from tests.load_test import data
+
+from src.api_server import execution
+from src.api_server import metrics_collector
+from src.collaboration.realtime_collaboration import handler
+from src.core.monitoring import key
+from src.core.optimized_chain_of_thought import step
+from src.core.optimized_chain_of_thought import steps
+from src.database.models import agent_id
+from src.database.models import input_data
+from src.infrastructure.workflow.workflow_engine import workflow_engine
+from src.tools.registry import category
+from src.tools_interactive import approval_id
+from src.workflow.workflow_automation import agent_tasks
+from src.workflow.workflow_automation import aggregation
+from src.workflow.workflow_automation import aggregation_type
+from src.workflow.workflow_automation import approval_type
+from src.workflow.workflow_automation import approved
+from src.workflow.workflow_automation import body_template
+from src.workflow.workflow_automation import branch_config
+from src.workflow.workflow_automation import branch_step
+from src.workflow.workflow_automation import condition
+from src.workflow.workflow_automation import condition_result
+from src.workflow.workflow_automation import content_workflow
+from src.workflow.workflow_automation import data_pipeline
+from src.workflow.workflow_automation import dep_result
+from src.workflow.workflow_automation import errors
+from src.workflow.workflow_automation import execution_id
+from src.workflow.workflow_automation import input_key
+from src.workflow.workflow_automation import input_keys
+from src.workflow.workflow_automation import is_true
+from src.workflow.workflow_automation import iterations
+from src.workflow.workflow_automation import loop_step
+from src.workflow.workflow_automation import loop_step_config
+from src.workflow.workflow_automation import order
+from src.workflow.workflow_automation import outputs
+from src.workflow.workflow_automation import research_report
+from src.workflow.workflow_automation import task_params
+from src.workflow.workflow_automation import temp_path
+from src.workflow.workflow_automation import timeout
+from src.workflow.workflow_automation import transform_config
+from src.workflow.workflow_automation import transform_type
+
 import asyncio
 import json
 import yaml
@@ -16,6 +72,44 @@ import logging
 
 from src.agents.base import BaseAgent
 from src.core.monitoring import MetricsCollector
+
+from src.agents.advanced_agent_fsm import Agent
+
+from src.agents.advanced_agent_fsm import BaseAgent
+# TODO: Fix undefined variables: agent_id, agent_registry, agent_tasks, agents, aggregation, aggregation_type, app, approval_id, approval_type, approved, body_template, branch_config, branch_step, category, condition, condition_result, content_workflow, context, data, data_pipeline, dep, dep_id, dep_result, duration, errors, execution, execution_id, f, graph, handler, i, inp, input_data, input_key, input_keys, inputs, is_true, iterations, key, loop_step, loop_step_config, metrics_collector, order, output, outputs, research_report, result, results, s, start_time, step, step_data, step_id, steps, t, task_params, tasks, temp_path, template, template_id, templates, timeout, transform_config, transform_type, url, value, workflow_engine, x, yaml_content, yaml_path
+from tests.test_gaia_agent import agent
+
+from fastapi import HTTPException
+
+from src.application.agents.base_agent import BaseAgent
+from src.shared.types.di_types import MetricsCollector
+
+
+from dataclasses import field
+from datetime import timedelta
+from fastapi import status
+from typing import Any
+from typing import Callable
+from typing import List
+from typing import Optional
+from dataclasses import dataclass
+from dataclasses import field
+from datetime import datetime
+from datetime import timedelta
+from enum import Enum
+from math import e
+from pathlib import Path
+from typing import Any
+from typing import Callable
+from typing import Dict
+from typing import List
+from typing import Optional
+import json
+import logging
+import uuid
+
+from fastapi import status
+from jinja2 import Template
 
 logger = logging.getLogger(__name__)
 
@@ -356,7 +450,7 @@ class WorkflowEngine:
                     step_id="final_review",
                     name="Final Review",
                     step_type=StepType.CONDITIONAL,
-                    condition: "context.content_type == 'article'",
+                    condition="context.content_type == 'article'",
                     parameters={
                         "true_step": {
                             "agent_id": "editor_agent",

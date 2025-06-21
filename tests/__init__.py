@@ -1,3 +1,5 @@
+from src.agents.advanced_agent_fsm import Agent
+
 """
 Tests for AI Agent
 ==================

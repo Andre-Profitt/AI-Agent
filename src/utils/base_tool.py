@@ -1,36 +1,91 @@
+from agent import lines
+from agent import query
+from agent import tools
+from app import msg
+from benchmarks.cot_performance import df
+from benchmarks.cot_performance import filename
+from examples.enhanced_unified_example import output
+from examples.enhanced_unified_example import task
+from examples.parallel_execution_example import results
+from fix_import_hierarchy import file_path
+from fix_security_issues import content
+from migrations.env import url
+from setup_environment import info
+from tests.load_test import data
+from tests.unit.simple_test import func
+
+from src.agents.enhanced_fsm import source
+from src.application.tools.tool_executor import expression
+from src.core.llamaindex_enhanced import Document
+from src.core.llamaindex_enhanced import reader
+from src.core.optimized_chain_of_thought import idx
+from src.database.models import action
+from src.database.models import text
+from src.database.models import tool
+from src.database.models import vector_store
+from src.database_extended import row
+from src.gaia_components.adaptive_tool_system import attempt
+from src.gaia_components.production_vector_store import query_embedding
+from src.gaia_components.production_vector_store import similarities
+from src.query_classifier import doc
+from src.tools_introspection import code
+from src.utils.base_tool import ext
+from src.utils.base_tool import extension
+from src.utils.base_tool import image
+from src.utils.base_tool import sheet
+from src.utils.base_tool import sleep
+from src.utils.base_tool import wiki
+from src.utils.base_tool import workbook
+from src.utils.knowledge_utils import create_local_knowledge_tool
+from src.utils.semantic_search_tool import document_embeddings
+from src.utils.semantic_search_tool import top_indices
+from src.utils.tavily_search import max_retries
+from src.utils.tools_enhanced import page
+from src.utils.tools_production import ydl_opts
+
+from typing import List
+
 import os
 import logging
 import time
 import random
-from typing import Any, Dict, List, Optional
+
 import io
 from contextlib import redirect_stdout
 import pandas as pd
 import numpy as np
-import tempfile
-import subprocess
-import json
+
 from pathlib import Path
 
 # Resilient imports for optional dependencies
+from src.tools.base_tool import Tool
+
+from src.tools.base_tool import BaseTool
+from src.shared.types.di_types import BaseTool
+# TODO: Fix undefined variables: Document, List, Path, SentenceTransformer, WikipediaAPIWrapper, action, attempt, cell, city, code, content, data, df, doc, document_embeddings, e, expression, ext, extension, f, fallback_error, file, file_path, filename, func, idx, image, info, lines, logging, max_results, max_retries, msg, openpyxl, os, output, page, page_num, paragraph, query, query_embedding, random, reader, redirect_stdout, result, results, row, sheet, sheet_name, similarities, sleep, source, task, text, time, tools, top_indices, top_k, url, vector_store, whisper, wiki, workbook, ydl, ydl_opts
+from pydantic import Field
+
+from src.tools.base_tool import tool
+from src.utils.knowledge_utils import create_local_knowledge_tool
+
+# TODO: Fix undefined variables: BaseModel, Document, Field, Image, PyPDF2, SentenceTransformer, WikipediaAPIWrapper, action, attempt, cell, city, code, content, create_local_knowledge_tool, data, df, doc, document_embeddings, e, expression, ext, extension, f, fallback_error, file, file_path, filename, func, idx, image, info, io, lines, max_results, max_retries, msg, openpyxl, output, page, page_num, paragraph, query, query_embedding, reader, redirect_stdout, result, results, row, self, sheet, sheet_name, similarities, sleep, source, task, text, tool, tools, top_indices, top_k, torch, url, vector_store, whisper, wiki, workbook, ydl, ydl_opts, yt_dlp
+
+from langchain.schema import Document
+from langchain.tools import BaseTool
+from sqlalchemy import func
 try:
     from langchain_tavily import TavilySearch
     TAVILY_AVAILABLE = True
 except ImportError:
     # Graceful degradation - create a noop stub
     class TavilySearch:  # type: ignore
-        def __init__(self, *_, **__): 
+        def __init__(self, *_, **__):
             self.max_results = 3
         def run(self, query: str):
             return f"TavilySearch unavailable - install langchain-tavily. Query: '{query}'"
     TAVILY_AVAILABLE = False
 
-from langchain_core.tools import tool, StructuredTool
 from pydantic import BaseModel, Field
-from langchain.tools import BaseTool
-from langchain.tools import Tool
-import requests
-import re
 
 # PythonREPLTool is optional; fall back to a simple echo tool if absent
 try:
@@ -38,7 +93,7 @@ try:
     PYTHON_REPL_AVAILABLE = True
 except ImportError:
     @tool
-    def PythonREPLTool(code: str) -> str:  # type: ignore
+    def PythonREPLTool(self, code: str) -> str:  # type: ignore
         """Fallback for when langchain-experimental is not installed."""
         return "PythonREPL unavailable - install langchain-experimental"
     PYTHON_REPL_AVAILABLE = False
@@ -53,21 +108,21 @@ except ImportError:
     LLAMAINDEX_AVAILABLE = False
     logging.warning("LlamaIndex not available - vector store features disabled")
 
-from src.database import get_vector_store
+# from src.database import get_vector_store  # Circular import - commented out
 
 # Initialize the embedding model once to avoid reloading on every call
 try:
     from sentence_transformers import SentenceTransformer
     from sklearn.metrics.pairwise import cosine_similarity
     import torch
-    
+
     # GPU Acceleration for embeddings
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     logger.info("🎮 GPU Acceleration: Using device '{}' for embeddings", extra={"device": device})
-    
+
     # Load model with GPU acceleration if available
     embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device=device)
-    
+
     # For high-VRAM systems, use a larger, more accurate model
     if device == 'cuda':
         try:
@@ -78,7 +133,7 @@ try:
             logger.info("✅ High-performance GPU embedding model loaded successfully")
         except Exception as e:
             logger.info("⚠️ Could not load large model, using standard model: {}", extra={"e": e})
-    
+
     SEMANTIC_SEARCH_AVAILABLE = True
     logger.info("✅ Semantic search initialized with device: {}", extra={"device": device})
 except ImportError as e:
@@ -129,7 +184,7 @@ logger = logging.getLogger(__name__)
 # Helper: Exponential Backoff for external API calls
 # -------------------------------------------------------------
 
-def _exponential_backoff(func, max_retries: int = 4):
+def _exponential_backoff(self, func, max_retries: int = 4):
     """Simple exponential backoff wrapper to reduce 429s."""
     for attempt in range(max_retries):
         try:
@@ -194,11 +249,11 @@ def advanced_file_reader(filename: str) -> str:
     """
     if not ADVANCED_FILES_AVAILABLE:
         return "Error: Advanced file format dependencies not available."
-    
+
     try:
         file_path = Path(filename)
         extension = file_path.suffix.lower()
-        
+
         if extension == '.xlsx' or extension == '.xls':
             # Excel files
             workbook = openpyxl.load_workbook(filename, data_only=True)
@@ -210,7 +265,7 @@ def advanced_file_reader(filename: str) -> str:
                     if any(cell is not None for cell in row):
                         content.append('\t'.join(str(cell) if cell is not None else '' for cell in row))
             return '\n'.join(content)
-            
+
         elif extension == '.pdf':
             # PDF files
             with open(filename, 'rb') as file:
@@ -221,7 +276,7 @@ def advanced_file_reader(filename: str) -> str:
                     if text.strip():
                         content.append(f"Page {page_num + 1}:\n{text}")
                 return '\n\n'.join(content)
-                
+
         elif extension == '.docx':
             # Word documents
             doc = Document(filename)
@@ -230,11 +285,11 @@ def advanced_file_reader(filename: str) -> str:
                 if paragraph.text.strip():
                     content.append(paragraph.text)
             return '\n'.join(content)
-            
+
         else:
             # Fall back to regular file reading
             return file_reader(filename)
-            
+
     except Exception as e:
         return f"Error reading file '{filename}': {str(e)}"
 
@@ -252,7 +307,7 @@ def audio_transcriber(filename: str) -> str:
     """
     if not MULTIMEDIA_AVAILABLE:
         return "Error: Multimedia processing dependencies not available."
-    
+
     try:
         # Load and transcribe audio
         result = whisper_model.transcribe(filename)
@@ -264,7 +319,7 @@ class VideoAnalyzerInput(BaseModel):
     url: str = Field(description="YouTube URL or local video file path.")
     action: str = Field(default="download_info", description="Action to perform - 'download_info', 'transcribe', or 'analyze_frames'")
 
-def video_analyzer(url: str, action: str = "download_info") -> str:
+def video_analyzer(self, url: str, action: str = "download_info") -> str:
     """Analyze video content from YouTube or local files."""
     return _video_analyzer_structured(url, action)
 
@@ -283,7 +338,7 @@ def _video_analyzer_structured(url: str, action: str = "download_info") -> str:
     """
     if not MULTIMEDIA_AVAILABLE:
         return "Error: Multimedia processing dependencies not available."
-    
+
     try:
         if action == "download_info":
             # Get video info
@@ -291,7 +346,7 @@ def _video_analyzer_structured(url: str, action: str = "download_info") -> str:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 return f"Video: {info.get('title', 'Unknown')}\nDuration: {info.get('duration', 'Unknown')}s\nViews: {info.get('view_count', 'Unknown')}"
-        
+
         elif action == "transcribe":
             # Download and transcribe
             ydl_opts = {'format': 'bestaudio/best', 'outtmpl': '%(title)s.%(ext)s'}
@@ -299,14 +354,14 @@ def _video_analyzer_structured(url: str, action: str = "download_info") -> str:
                 ydl.download([url])
                 # Note: This is simplified - in practice you'd need to handle the downloaded file
                 return "Video downloaded and ready for transcription"
-        
+
         elif action == "analyze_frames":
             # Frame analysis (simplified)
             return "Frame analysis would extract key frames and analyze visual content"
-        
+
         else:
             return f"Unknown action: {action}"
-            
+
     except Exception as e:
         return f"Error analyzing video: {str(e)}"
 
@@ -325,30 +380,30 @@ def image_analyzer(filename: str, task: str = "describe") -> str:
     """
     if not MULTIMEDIA_AVAILABLE:
         return "Error: Multimedia processing dependencies not available."
-    
+
     try:
         # Load image
         image = Image.open(filename)
-        
+
         if task == "describe":
             # Basic image info
             return f"Image: {image.size[0]}x{image.size[1]} pixels, Mode: {image.mode}"
-        
+
         elif task == "objects":
             # Object detection (simplified)
             return "Object detection would identify objects in the image"
-        
+
         elif task == "text":
             # OCR (simplified)
             return "OCR would extract text from the image"
-        
+
         elif task == "faces":
             # Face detection (simplified)
             return "Face detection would identify and analyze faces in the image"
-        
+
         else:
             return f"Unknown task: {task}"
-            
+
     except Exception as e:
         return f"Error analyzing image: {str(e)}"
 
@@ -367,24 +422,24 @@ def web_researcher(query: str, source: str = "wikipedia") -> str:
     """
     if not WEB_SCRAPING_AVAILABLE:
         return "Error: Web scraping dependencies not available."
-    
+
     try:
         if source == "wikipedia":
             # Wikipedia search
             wiki = WikipediaAPIWrapper()
             return wiki.run(query)
-        
+
         elif source == "news":
             # News search (simplified)
             return f"News search for: {query}"
-        
+
         elif source == "academic":
             # Academic search (simplified)
             return f"Academic search for: {query}"
-        
+
         else:
             return f"Unknown source: {source}"
-            
+
     except Exception as e:
         return f"Error researching: {str(e)}"
 
@@ -392,39 +447,39 @@ def web_researcher(query: str, source: str = "wikipedia") -> str:
 def semantic_search_tool(query: str, filename: str, top_k: int = 3) -> str:
     """
     Perform semantic search on a knowledge base.
-    
+
     Args:
         query (str): Search query
         filename (str): Path to the knowledge base file
         top_k (int): Number of results to return
-        
+
     Returns:
         str: Search results or error message
     """
     if not SEMANTIC_SEARCH_AVAILABLE:
         return "Error: Semantic search dependencies not available."
-    
+
     try:
         if not os.path.exists(filename):
             return f"Error: Knowledge base file not found: {filename}"
-            
+
         # Load knowledge base
         df = pd.read_csv(filename)
-        
+
         # Encode query
         query_embedding = embedding_model.encode(query)
-        
+
         # Encode documents
         document_embeddings = embedding_model.encode(df['text'].tolist())
-        
+
         # Calculate similarities
         similarities = np.dot(document_embeddings, query_embedding) / (
             np.linalg.norm(document_embeddings, axis=1) * np.linalg.norm(query_embedding)
         )
-        
+
         # Get top k results
         top_indices = np.argsort(similarities)[-top_k:][::-1]
-        
+
         # Format results
         results = []
         for idx in top_indices:
@@ -432,9 +487,9 @@ def semantic_search_tool(query: str, filename: str, top_k: int = 3) -> str:
                 'text': df.iloc[idx]['text'],
                 'similarity': float(similarities[idx])
             })
-            
+
         return str(results)
-                
+
     except Exception as e:
         return f"Error performing semantic search: {str(e)}"
 
@@ -456,10 +511,10 @@ def python_interpreter(code: str) -> str:
         with redirect_stdout(output):
             # Execute code
             exec(code)
-        
+
         result = output.getvalue()
         return result if result else "Code executed successfully (no output)"
-        
+
     except Exception as e:
         return f"Error executing code: {str(e)}"
 
@@ -482,11 +537,11 @@ def tavily_search_backoff(query: str, max_results: int = 3) -> str:
     """
     if not TAVILY_AVAILABLE:
         return "Error: Tavily search not available."
-    
+
     def _call():
         search = TavilySearch(max_results=max_results)
         return search.run(query)
-    
+
     try:
         return _exponential_backoff(_call)
     except Exception as e:
@@ -495,7 +550,7 @@ def tavily_search_backoff(query: str, max_results: int = 3) -> str:
 def get_tools() -> List[BaseTool]:
     """Get all available tools."""
     tools = []
-    
+
     # Core tools
     tools.extend([
         file_reader,
@@ -509,11 +564,11 @@ def get_tools() -> List[BaseTool]:
         tavily_search_backoff,
         get_weather
     ])
-    
+
     # Add experimental tools if available
     if PYTHON_REPL_AVAILABLE:
         tools.append(PythonREPLTool)
-    
+
     return tools
 
 @tool
@@ -537,29 +592,29 @@ def get_weather(city: str) -> str:
 
 class SemanticSearchEngine:
     """Semantic search engine for document retrieval."""
-    
+
     def __init__(self, *args, **kwargs):
         pass
-    
+
     def search(self, *args, **kwargs):
         return "Semantic search results"
 
 class WebSearchTool(BaseTool):
     """Tool for searching the web."""
-    
+
     name: str = Field(default="web_search", description="Tool name")
     description: str = Field(default="Search the web for information", description="Tool description")
-    
+
     def _run(self, query: str) -> str:
         """Execute web search."""
         return f"Web search results for: {query}"
 
 class CalculatorTool(BaseTool):
     """Tool for performing calculations."""
-    
+
     name: str = Field(default="calculator", description="Tool name")
     description: str = Field(default="Perform mathematical calculations", description="Tool description")
-    
+
     def _run(self, expression: str) -> str:
         """Execute calculation."""
         try:
@@ -570,27 +625,27 @@ class CalculatorTool(BaseTool):
 
 class CodeAnalysisTool(BaseTool):
     """Tool for analyzing code."""
-    
+
     name: str = Field(default="code_analysis", description="Tool name")
     description: str = Field(default="Analyze code for issues and improvements", description="Tool description")
-    
+
     def _run(self, code: str) -> str:
         """Execute code analysis."""
         return f"Code analysis for: {code[:50]}..."
 
 class DataValidationTool(BaseTool):
     """Tool for validating data."""
-    
+
     name: str = Field(default="data_validation", description="Tool name")
     description: str = Field(default="Validate data for quality and consistency", description="Tool description")
-    
+
     def _run(self, data: str) -> str:
         """Execute data validation."""
         return f"Data validation for: {data[:50]}..."
 
 # Initialize knowledge base tool with fallback
 try:
-    vector_store = get_vector_store()
+    # from src.database import get_vector_store  # Circular import - commented out
     if vector_store:
         # Create knowledge base tool with vector store
         knowledge_base_tool = semantic_search_tool
@@ -605,7 +660,6 @@ except Exception as e:
     logger.error("Failed to initialize Knowledge Base tool: {}", extra={"e": e})
     # Create local knowledge tool as fallback
     try:
-        from src.knowledge_utils import create_local_knowledge_tool
         local_kb = create_local_knowledge_tool()
         knowledge_base_tool = local_kb.search
         logger.info("Knowledge base tool initialized with local fallback after error")
@@ -616,7 +670,7 @@ except Exception as e:
 def get_tools() -> List[BaseTool]:
     """Get all available tools."""
     tools = []
-    
+
     # Core tools
     tools.extend([
         file_reader,
@@ -630,11 +684,11 @@ def get_tools() -> List[BaseTool]:
         tavily_search_backoff,
         get_weather
     ])
-    
+
     # Add experimental tools if available
     if PYTHON_REPL_AVAILABLE:
         tools.append(PythonREPLTool)
-    
+
     # Add custom tool classes
     tools.extend([
         WebSearchTool(),
@@ -642,5 +696,5 @@ def get_tools() -> List[BaseTool]:
         CodeAnalysisTool(),
         DataValidationTool()
     ])
-    
-    return tools 
+
+    return tools

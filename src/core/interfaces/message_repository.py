@@ -1,6 +1,12 @@
 """
+from abc import abstractmethod
+from src.unified_architecture.communication import MessageType
+# TODO: Fix undefined variables: ABC, List, Optional, UUID, abstractmethod
+
 Message repository interface defining the contract for message persistence.
 """
+
+from typing import Optional
 
 from abc import ABC, abstractmethod
 from typing import List, Optional
@@ -34,4 +40,4 @@ class MessageRepository(ABC):
 
     @abstractmethod
     async def get_statistics(self) -> dict:
-        pass 
+        pass

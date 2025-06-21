@@ -145,4 +145,26 @@ logs/
 
 # Temporary files
 tmp/
-temp/ 
+temp/
+
+# Project organization directories
+reports/
+archive/
+scripts/debug/
+scripts/analysis/
+scripts/fixes/
+scripts/cleanup/
+
+# Cleanup and fix artifacts
+*_report.json
+*_report.txt
+*_fixer.py
+*_fixes.py
+CLEANUP_SUMMARY.md
+
+# VS Code
+.vscode/settings.json
+.vscode/snippets/
+
+# Practice files
+practice_*.py 

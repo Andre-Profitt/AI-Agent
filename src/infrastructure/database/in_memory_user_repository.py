@@ -1,14 +1,26 @@
+from tests.load_test import user
+
+from src.database.models import email
+from src.database.models import user_id
+
+import os
 """
+import email
+from typing import Optional
+from src.api.auth import User
+# TODO: Fix undefined variables: Dict, List, Optional, UUID, user, user_id
+# TODO: Fix undefined variables: email, self, user, user_id
+
 In-memory implementation of the UserRepository interface.
 """
 
+from typing import Dict
+
 from typing import List, Optional, Dict
 from uuid import UUID
-import asyncio
 
 from src.core.entities.user import User
 from src.core.interfaces.user_repository import UserRepository
-from typing import Optional, Dict, Any, List, Union, Tuple
 
 class InMemoryUserRepository(UserRepository):
     def __init__(self) -> None:
@@ -43,4 +55,4 @@ class InMemoryUserRepository(UserRepository):
         return {
             "total_users": len(self._users),
             "users_with_email": len(self._users_by_email),
-        } 
+        }

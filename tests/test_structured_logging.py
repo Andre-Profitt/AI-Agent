@@ -2,9 +2,12 @@
 Test structured logging implementation
 """
 
+import logging
+logger = logging.getLogger(__name__)
+
 import pytest
 import ast
-import os
+
 from pathlib import Path
 from unittest.mock import patch
 from src.utils.structured_logging import get_structured_logger, StructuredLogger

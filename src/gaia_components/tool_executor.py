@@ -3,18 +3,24 @@ Production Tool Executor for GAIA System
 Replaces mock implementations with real tool execution capabilities
 """
 
+from typing import Dict, List, Optional, Callable, Any, TYPE_CHECKING
 import asyncio
-import inspect
 import time
 import logging
-from typing import Any, Callable, Dict, List, Optional, Union
+import math
+import json
+import re
+import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
 import aiohttp
-import requests
 import numpy as np
 import pandas as pd
+
+# Avoid circular imports
+if TYPE_CHECKING:
+    from src.tools.base_tool import Tool
 
 logger = logging.getLogger(__name__)
 
@@ -44,18 +50,18 @@ class ProductionToolExecutor:
         self.execution_stats = {}
         
         logger.info(f"Production tool executor initialized with {max_workers} workers")
-    
+        
     async def __aenter__(self):
         """Async context manager entry"""
         self.session = aiohttp.ClientSession()
         return self
-    
+        
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit"""
         if self.session:
             await self.session.close()
         self.thread_pool.shutdown(wait=True)
-    
+        
     def register_tool(self, tool_name: str, tool_instance: Any, 
                      tool_type: str = "custom", metadata: Dict[str, Any] = None):
         """Register actual tool implementations"""
@@ -70,7 +76,7 @@ class ProductionToolExecutor:
         }
         
         logger.info(f"Registered tool: {tool_name} (type: {tool_type})")
-    
+        
     def _create_executor(self, tool_instance) -> Callable:
         """Create appropriate executor based on tool type"""
         if hasattr(tool_instance, 'arun'):  # Async tool
@@ -81,7 +87,7 @@ class ProductionToolExecutor:
             return lambda **kwargs: asyncio.to_thread(tool_instance, **kwargs)
         else:
             raise ValueError(f"Tool {tool_instance} is not callable")
-    
+            
     async def execute(self, tool_name: str, **kwargs) -> ToolExecutionResult:
         """Execute tool with timeout and error handling"""
         if tool_name not in self.tool_registry:
@@ -89,7 +95,7 @@ class ProductionToolExecutor:
                 status=ToolExecutionStatus.NOT_FOUND,
                 error=f"Tool {tool_name} not registered"
             )
-        
+            
         tool_info = self.tool_registry[tool_name]
         executor = tool_info['executor']
         start_time = time.time()
@@ -134,7 +140,7 @@ class ProductionToolExecutor:
                 error=str(e),
                 execution_time=execution_time
             )
-    
+            
     def _record_execution_stats(self, tool_name: str, success: bool, execution_time: float):
         """Record execution statistics"""
         if tool_name not in self.execution_stats:
@@ -147,7 +153,7 @@ class ProductionToolExecutor:
                 'min_time': float('inf'),
                 'max_time': 0.0
             }
-        
+            
         stats = self.execution_stats[tool_name]
         stats['total_calls'] += 1
         stats['total_time'] += execution_time
@@ -156,15 +162,15 @@ class ProductionToolExecutor:
             stats['successful_calls'] += 1
         else:
             stats['failed_calls'] += 1
-        
+            
         stats['avg_time'] = stats['total_time'] / stats['total_calls']
         stats['min_time'] = min(stats['min_time'], execution_time)
         stats['max_time'] = max(stats['max_time'], execution_time)
-    
+        
     def get_execution_stats(self) -> Dict[str, Any]:
         """Get execution statistics for all tools"""
         return self.execution_stats
-    
+        
     def get_tool_info(self, tool_name: str) -> Optional[Dict[str, Any]]:
         """Get information about a registered tool"""
         if tool_name in self.tool_registry:
@@ -180,7 +186,7 @@ class BuiltInTools:
     def __init__(self, executor: ProductionToolExecutor):
         self.executor = executor
         self._register_builtin_tools()
-    
+        
     def _register_builtin_tools(self):
         """Register all built-in tools"""
         # Web search tools
@@ -202,7 +208,7 @@ class BuiltInTools:
         # API tools
         self.executor.register_tool("http_client", self.http_client, "api")
         self.executor.register_tool("json_parser", self.json_parser, "data")
-    
+        
     async def web_search(self, query: str, max_results: int = 5) -> Dict[str, Any]:
         """Web search using DuckDuckGo"""
         try:
@@ -227,7 +233,7 @@ class BuiltInTools:
                                 'url': item.get('FirstURL', ''),
                                 'icon': item.get('Icon', {}).get('URL', '')
                             })
-                    
+                            
                     return {
                         'success': True,
                         'results': results,
@@ -247,11 +253,11 @@ class BuiltInTools:
                 'error': str(e),
                 'query': query
             }
-    
+            
     async def duckduckgo_search(self, query: str, max_results: int = 5) -> Dict[str, Any]:
         """Alternative DuckDuckGo search implementation"""
         return await self.web_search(query, max_results)
-    
+        
     async def calculator(self, expression: str) -> Dict[str, Any]:
         """Safe mathematical expression calculator"""
         try:
@@ -259,14 +265,14 @@ class BuiltInTools:
             safe_dict = {
                 'abs': abs, 'round': round, 'min': min, 'max': max,
                 'sum': sum, 'pow': pow, 'sqrt': lambda x: x ** 0.5,
-                'sin': lambda x: np.sin(x) if 'numpy' in globals() else math.sin(x),
-                'cos': lambda x: np.cos(x) if 'numpy' in globals() else math.cos(x),
-                'tan': lambda x: np.tan(x) if 'numpy' in globals() else math.tan(x),
-                'log': lambda x: np.log(x) if 'numpy' in globals() else math.log(x),
-                'log10': lambda x: np.log10(x) if 'numpy' in globals() else math.log10(x),
-                'exp': lambda x: np.exp(x) if 'numpy' in globals() else math.exp(x),
-                'pi': np.pi if 'numpy' in globals() else math.pi,
-                'e': np.e if 'numpy' in globals() else math.e
+                'sin': math.sin,
+                'cos': math.cos,
+                'tan': math.tan,
+                'log': math.log,
+                'log10': math.log10,
+                'exp': math.exp,
+                'pi': math.pi,
+                'e': math.e
             }
             
             # Try symbolic computation first
@@ -299,12 +305,10 @@ class BuiltInTools:
                 'expression': expression,
                 'error': str(e)
             }
-    
+            
     async def numpy_calculator(self, expression: str, variables: Dict[str, float] = None) -> Dict[str, Any]:
         """NumPy-based calculator with variable support"""
         try:
-            import numpy as np
-            
             # Create namespace with NumPy functions and variables
             namespace = {
                 'np': np,
@@ -317,7 +321,7 @@ class BuiltInTools:
             # Add variables
             if variables:
                 namespace.update(variables)
-            
+                
             # Evaluate expression
             result = eval(expression, {"__builtins__": {}}, namespace)
             
@@ -336,8 +340,8 @@ class BuiltInTools:
                 'error': str(e),
                 'variables': variables or {}
             }
-    
-    async def data_analyzer(self, data: List[Dict] = None, data_url: str = None, 
+            
+    async def data_analyzer(self, data: List[Dict] = None, data_url: str = None,
                           analysis_type: str = "basic") -> Dict[str, Any]:
         """Data analysis tool"""
         try:
@@ -351,13 +355,13 @@ class BuiltInTools:
                             'success': False,
                             'error': f'Failed to fetch data from {data_url}'
                         }
-            
+                        
             if not data:
                 return {
                     'success': False,
                     'error': 'No data provided'
                 }
-            
+                
             # Convert to DataFrame
             df = pd.DataFrame(data)
             
@@ -373,12 +377,12 @@ class BuiltInTools:
                 results['summary'] = df.describe().to_dict()
                 results['null_counts'] = df.isnull().sum().to_dict()
                 results['unique_counts'] = df.nunique().to_dict()
-            
+                
             elif analysis_type == "correlation":
                 numeric_cols = df.select_dtypes(include=[np.number]).columns
                 if len(numeric_cols) > 1:
                     results['correlation'] = df[numeric_cols].corr().to_dict()
-            
+                    
             elif analysis_type == "outliers":
                 numeric_cols = df.select_dtypes(include=[np.number]).columns
                 outliers = {}
@@ -390,7 +394,7 @@ class BuiltInTools:
                                    (df[col] > (Q3 + 1.5 * IQR))).sum()
                     outliers[col] = int(outlier_count)
                 results['outliers'] = outliers
-            
+                
             return results
             
         except Exception as e:
@@ -399,11 +403,10 @@ class BuiltInTools:
                 'error': str(e),
                 'analysis_type': analysis_type
             }
-    
+            
     async def statistical_analyzer(self, data: List[float], analysis_type: str = "descriptive") -> Dict[str, Any]:
         """Statistical analysis tool"""
         try:
-            import numpy as np
             from scipy import stats
             
             data_array = np.array(data)
@@ -424,7 +427,7 @@ class BuiltInTools:
                     'q25': float(np.percentile(data_array, 25)),
                     'q75': float(np.percentile(data_array, 75))
                 })
-            
+                
             elif analysis_type == "normality":
                 # Shapiro-Wilk test for normality
                 statistic, p_value = stats.shapiro(data_array)
@@ -433,7 +436,7 @@ class BuiltInTools:
                     'shapiro_p_value': float(p_value),
                     'is_normal': p_value > 0.05
                 })
-            
+                
             elif analysis_type == "outliers":
                 # Z-score method for outliers
                 z_scores = np.abs(stats.zscore(data_array))
@@ -443,7 +446,7 @@ class BuiltInTools:
                     'outliers': outliers.tolist(),
                     'outlier_indices': np.where(z_scores > 3)[0].tolist()
                 })
-            
+                
             return results
             
         except Exception as e:
@@ -452,23 +455,21 @@ class BuiltInTools:
                 'error': str(e),
                 'analysis_type': analysis_type
             }
-    
+            
     async def file_reader(self, file_path: str, file_type: str = "auto") -> Dict[str, Any]:
         """File reading tool"""
         try:
-            import os
-            
             if not os.path.exists(file_path):
                 return {
                     'success': False,
                     'error': f'File not found: {file_path}'
                 }
-            
+                
             # Auto-detect file type
             if file_type == "auto":
                 _, ext = os.path.splitext(file_path)
                 file_type = ext.lower()[1:]  # Remove the dot
-            
+                
             if file_type in ['txt', 'text']:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
@@ -478,9 +479,8 @@ class BuiltInTools:
                     'file_type': 'text',
                     'size': len(content)
                 }
-            
+                
             elif file_type in ['json']:
-                import json
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = json.load(f)
                 return {
@@ -489,7 +489,7 @@ class BuiltInTools:
                     'file_type': 'json',
                     'size': len(str(content))
                 }
-            
+                
             elif file_type in ['csv']:
                 df = pd.read_csv(file_path)
                 return {
@@ -499,7 +499,7 @@ class BuiltInTools:
                     'shape': df.shape,
                     'columns': list(df.columns)
                 }
-            
+                
             else:
                 return {
                     'success': False,
@@ -513,7 +513,7 @@ class BuiltInTools:
                 'file_path': file_path,
                 'file_type': file_type
             }
-    
+            
     async def text_processor(self, text: str, operation: str = "analyze") -> Dict[str, Any]:
         """Text processing tool"""
         try:
@@ -530,9 +530,8 @@ class BuiltInTools:
                     'line_count': len(text.splitlines()),
                     'average_word_length': sum(len(word) for word in text.split()) / len(text.split()) if text.split() else 0
                 })
-            
+                
             elif operation == "clean":
-                import re
                 # Remove extra whitespace
                 cleaned = re.sub(r'\s+', ' ', text.strip())
                 results.update({
@@ -540,22 +539,21 @@ class BuiltInTools:
                     'original_length': len(text),
                     'cleaned_length': len(cleaned)
                 })
-            
+                
             elif operation == "extract_keywords":
                 # Simple keyword extraction (can be enhanced with NLP libraries)
-                import re
                 words = re.findall(r'\b\w+\b', text.lower())
                 word_freq = {}
                 for word in words:
                     if len(word) > 3:  # Skip short words
                         word_freq[word] = word_freq.get(word, 0) + 1
-                
+                        
                 # Get top keywords
                 keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:10]
                 results.update({
                     'keywords': [{'word': word, 'frequency': freq} for word, freq in keywords]
                 })
-            
+                
             return results
             
         except Exception as e:
@@ -564,9 +562,9 @@ class BuiltInTools:
                 'error': str(e),
                 'operation': operation
             }
-    
-    async def http_client(self, url: str, method: str = "GET", 
-                         headers: Dict[str, str] = None, 
+            
+    async def http_client(self, url: str, method: str = "GET",
+                         headers: Dict[str, str] = None,
                          data: Dict[str, Any] = None) -> Dict[str, Any]:
         """HTTP client tool"""
         try:
@@ -594,11 +592,10 @@ class BuiltInTools:
                 'url': url,
                 'method': method
             }
-    
+            
     async def json_parser(self, json_string: str) -> Dict[str, Any]:
         """JSON parsing tool"""
         try:
-            import json
             parsed = json.loads(json_string)
             
             return {
@@ -627,4 +624,4 @@ def create_production_tool_executor(max_workers: int = 10) -> ProductionToolExec
     """Create a production tool executor with built-in tools"""
     executor = ProductionToolExecutor(max_workers=max_workers)
     builtin_tools = BuiltInTools(executor)
-    return executor 
+    return executor
